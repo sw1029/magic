@@ -65,9 +65,14 @@ subtask 문서는 위 섹션에 더해 아래 메타 필드를 문서 상단에 
 
 * `할당`은 담당자가 아니라 우선순위와 선행관계를 뜻한다.
 * 우선순위는 `P0`, `P1`, `P2`, `P3`를 사용한다.
-* 상태는 `todo`, `ready`, `later`, `backlog`를 기본값으로 사용한다.
+* 상태는 `todo`, `ready`, `in_progress`, `blocked`, `done`, `backlog`를 기본값으로 사용한다.
+* 각 task 문서의 frontmatter가 상태와 의존성의 기준이다.
+* `work-queue.md`는 frontmatter를 요약해서 보여 주는 문서로 유지한다.
 * `ready`는 선행 task가 모두 충족된 경우에만 쓴다.
+* `blocked`는 선행 task가 끝나지 않아 시작할 수 없는 경우에 쓴다.
+* `done`은 완료 기준을 충족한 경우에만 쓴다.
 * P0/P1 task는 dependency 순서대로 정렬한다.
+* 상태와 의존성 불일치는 `scripts/validate-doc-state.mjs`로 검사한다.
 
 ---
 

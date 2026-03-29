@@ -3,7 +3,7 @@
 - id: T05-02
 - parent: E05
 - priority: P1
-- status: ready
+- status: blocked
 - depends_on: T05-01, T06-01
 - blocks: T06-02
 - source_chat: request-answer09, request-answer18

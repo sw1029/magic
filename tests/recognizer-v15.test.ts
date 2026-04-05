@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import { compileSealResult } from "../src/recognizer/compile";
 import { OVERLAY_OPERATOR_TEMPLATES } from "../src/recognizer/operator-templates";
 import { createOverlayReferenceFrame, recognizeOverlayStroke } from "../src/recognizer/operators";
+import {
+  appendTutorialCapture,
+  createEmptyTutorialProfileStore,
+  mergeTutorializedUserProfile
+} from "../src/recognizer/tutorial-profile";
 import { createEmptyUserInputProfile, updateUserInputProfile } from "../src/recognizer/user-profile";
 import { recognizeSession } from "../src/recognizer/recognize";
 import { GLYPH_TEMPLATES } from "../src/recognizer/templates";
-import type { OverlayOperator, OverlayStrokeRecord, Stroke, StrokeSession, UserInputProfile } from "../src/recognizer/types";
+import type { GlyphFamily, OverlayOperator, OverlayStrokeRecord, Stroke, StrokeSession, UserInputProfile } from "../src/recognizer/types";
 
 describe("magic recognizer v1.5", () => {
   it("keeps canonical family fixed while adjusted quality reflects the user profile", () => {
@@ -141,6 +146,181 @@ describe("magic recognizer v1.5", () => {
 
     expect(result.status).toBe("incomplete");
     expect(result.canonicalFamily).toBeUndefined();
+  });
+
+  it("uses tutorial family prototypes to turn an earth-vs-fire near tie into a calibrated recognition", () => {
+    const session = makeSession([
+      makeStroke(
+        [
+          [210, 340],
+          [240, 140],
+          [360, 140],
+          [390, 340],
+          [210, 340]
+        ],
+        0
+      )
+    ]);
+    const baseline = recognizeSession(session, { sealed: true });
+    const personalized = recognizeSession(session, {
+      sealed: true,
+      profile: createTutorializedProfile({
+        sampleCount: 8,
+        tutorialSampleCount: 8,
+        familyPrototypes: {
+          earth: createFamilyPrototype("earth", [
+            { scale: 210, rotate: -0.12, translate: { x: 300, y: 270 }, timeStep: 20 },
+            { scale: 220, rotate: -0.26, translate: { x: 300, y: 270 }, noise: 4, timeStep: 24 }
+          ]),
+          fire: createFamilyPrototype("fire", [
+            { scale: 205, rotate: 0.1, translate: { x: 300, y: 250 }, timeStep: 18 }
+          ])
+        },
+        confusionPairs: [{ left: "earth", right: "fire", weight: 0.18 }],
+        recognitionCalibration: {
+          userPrototypeWeight: 0.14,
+          rerankStrength: 0.14,
+          confidenceBias: 0.03
+        }
+      })
+    });
+    const baselineMargin = (baseline.candidates[0]?.score ?? 0) - (baseline.candidates[1]?.score ?? 0);
+    const personalizedMargin =
+      (personalized.candidates[0]?.score ?? 0) - (personalized.candidates[1]?.score ?? 0);
+
+    expect(baseline.status).toBe("ambiguous");
+    expect(baseline.topCandidate?.family).toBe("earth");
+    expect(baseline.candidates[1]?.family).toBe("fire");
+    expect(personalized.status).toBe("recognized");
+    expect(personalized.canonicalFamily).toBe("earth");
+    expect(personalizedMargin).toBeGreaterThan(baselineMargin);
+    expect(personalized.topCandidate?.notes.some((note) => note.startsWith("calibrated="))).toBe(true);
+  });
+
+  it("does not let earth-biased tutorial prototypes flip a clear fire template", () => {
+    const session = fromGlyphTemplate("fire", {
+      scale: 188,
+      rotate: 0.18,
+      translate: { x: 300, y: 250 },
+      timeStep: 22
+    });
+    const result = recognizeSession(session, {
+      sealed: true,
+      profile: createTutorializedProfile({
+        sampleCount: 10,
+        tutorialSampleCount: 10,
+        familyPrototypes: {
+          earth: createFamilyPrototype("earth", [
+            { scale: 220, rotate: -0.22, translate: { x: 300, y: 270 }, timeStep: 20 },
+            { scale: 214, rotate: -0.08, translate: { x: 300, y: 270 }, noise: 3, timeStep: 24 }
+          ])
+        },
+        confusionPairs: [{ left: "earth", right: "fire", weight: 0.2 }],
+        recognitionCalibration: {
+          userPrototypeWeight: 0.16,
+          rerankStrength: 0.16,
+          confidenceBias: 0.03
+        }
+      })
+    });
+
+    expect(result.status).toBe("recognized");
+    expect(result.topCandidate?.family).toBe("fire");
+    expect(result.canonicalFamily).toBe("fire");
+  });
+
+  it("wires tutorial profile store into the live base recognizer path", () => {
+    const session = makeSession([
+      makeStroke(
+        [
+          [210, 340],
+          [240, 140],
+          [360, 140],
+          [390, 340],
+          [210, 340]
+        ],
+        0
+      )
+    ]);
+    let store = createEmptyTutorialProfileStore();
+
+    for (const capture of [
+      { family: "earth" as const, variation: { scale: 210, rotate: -0.12, translate: { x: 300, y: 270 }, timeStep: 20 } },
+      { family: "earth" as const, variation: { scale: 220, rotate: -0.26, translate: { x: 300, y: 270 }, noise: 4, timeStep: 24 } },
+      { family: "earth" as const, variation: { scale: 214, rotate: -0.08, translate: { x: 300, y: 272 }, noise: 3, timeStep: 22 } },
+      { family: "earth" as const, variation: { scale: 218, rotate: -0.18, translate: { x: 300, y: 274 }, timeStep: 21 } },
+      { family: "fire" as const, variation: { scale: 205, rotate: 0.1, translate: { x: 300, y: 250 }, timeStep: 18 } },
+      { family: "fire" as const, variation: { scale: 208, rotate: 0.16, translate: { x: 300, y: 248 }, noise: 2, timeStep: 19 } }
+    ]) {
+      store = appendTutorialCapture(store, {
+        kind: "family",
+        expectedFamily: capture.family,
+        source: "trace",
+        strokes: fromGlyphTemplate(capture.family, capture.variation).strokes
+      });
+    }
+
+    store = {
+      ...store,
+      calibration: {
+        userPrototypeWeight: 0.14,
+        rerankStrength: 0.14,
+        confidenceBias: 0.03
+      }
+    };
+
+    const baseline = recognizeSession(session, { sealed: true });
+    const personalized = recognizeSession(session, {
+      sealed: true,
+      profile: mergeTutorializedUserProfile(createEmptyUserInputProfile(), store)
+    });
+
+    expect(store.shapeProfile.tutorialSampleCount).toBeGreaterThanOrEqual(6);
+    expect(baseline.status).toBe("ambiguous");
+    expect(personalized.status).toBe("recognized");
+    expect(personalized.canonicalFamily).toBe("earth");
+  });
+
+  it("keeps a clear water template fixed even when the tutorial store is biased toward life", () => {
+    let store = createEmptyTutorialProfileStore();
+
+    for (const capture of [
+      { family: "life" as const, variation: { scale: 182, rotate: -0.08, translate: { x: 300, y: 250 }, timeStep: 20 } },
+      { family: "life" as const, variation: { scale: 176, rotate: 0.12, translate: { x: 302, y: 252 }, noise: 2, timeStep: 18 } },
+      { family: "life" as const, variation: { scale: 188, rotate: -0.16, translate: { x: 298, y: 248 }, timeStep: 22 } },
+      { family: "life" as const, variation: { scale: 180, rotate: 0.04, translate: { x: 300, y: 246 }, noise: 3, timeStep: 21 } }
+    ]) {
+      store = appendTutorialCapture(store, {
+        kind: "family",
+        expectedFamily: capture.family,
+        source: "recall",
+        strokes: fromGlyphTemplate(capture.family, capture.variation).strokes
+      });
+    }
+
+    store = {
+      ...store,
+      calibration: {
+        userPrototypeWeight: 0.16,
+        rerankStrength: 0.16,
+        confidenceBias: 0.03
+      }
+    };
+
+    const session = fromGlyphTemplate("water", {
+      scale: 178,
+      rotate: 0.05,
+      translate: { x: 300, y: 250 },
+      timeStep: 24
+    });
+    const result = recognizeSession(session, {
+      sealed: true,
+      profile: mergeTutorializedUserProfile(createEmptyUserInputProfile(), store)
+    });
+
+    expect(result.status).toBe("recognized");
+    expect(result.canonicalFamily).toBe("water");
+    expect(result.topCandidate?.family).toBe("water");
   });
 
   it("recognizes overlay operators and compiles base + overlay + profile delta", () => {
@@ -353,4 +533,71 @@ function makeStroke(points: Array<[number, number]>, offset: number, step = 16):
       t: offset + index * step
     }))
   };
+}
+
+function createFamilyPrototype(
+  family: GlyphFamily,
+  variations: Array<{
+    scale: number;
+    rotate: number;
+    translate: { x: number; y: number };
+    noise?: number;
+    timeStep?: number;
+  }>
+): {
+  family: GlyphFamily;
+  normalizedClouds: Array<StrokeSession["strokes"][number]["points"]>;
+  averageFeatures: Record<string, number>;
+  sampleCount: number;
+} {
+  const samples = variations.map((variation) => recognizeSession(fromGlyphTemplate(family, variation), { sealed: false }));
+  const averagedFeatures = samples.reduce<Record<string, number>>((accumulator, sample, sampleIndex) => {
+    const featureEntries = Object.entries(sample.features);
+
+    for (const [key, value] of featureEntries) {
+      accumulator[key] = ((accumulator[key] ?? 0) * sampleIndex + value) / (sampleIndex + 1);
+    }
+
+    return accumulator;
+  }, {});
+
+  return {
+    family,
+    normalizedClouds: samples.map((sample) => sample.normalizedStrokes.flat()),
+    averageFeatures: averagedFeatures,
+    sampleCount: samples.length
+  };
+}
+
+function createTutorializedProfile(input: {
+  sampleCount: number;
+  tutorialSampleCount: number;
+  familyPrototypes: Partial<
+    Record<
+      GlyphFamily,
+      {
+        family: GlyphFamily;
+        normalizedClouds: Array<StrokeSession["strokes"][number]["points"]>;
+        averageFeatures: Record<string, number>;
+        sampleCount: number;
+      }
+    >
+  >;
+  confusionPairs: Array<{ left: string; right: string; weight: number }>;
+  recognitionCalibration: {
+    userPrototypeWeight: number;
+    rerankStrength: number;
+    confidenceBias: number;
+  };
+}): UserInputProfile {
+  return {
+    ...createEmptyUserInputProfile(),
+    sampleCount: input.sampleCount,
+    tutorialProfile: {
+      tutorialSampleCount: input.tutorialSampleCount,
+      familyPrototypes: input.familyPrototypes,
+      confusionPairs: input.confusionPairs,
+      recognitionCalibration: input.recognitionCalibration
+    }
+  } as UserInputProfile;
 }

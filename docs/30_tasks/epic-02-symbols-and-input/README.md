@@ -33,6 +33,8 @@
 * [T02-04 튜토리얼 입력 수집 기준 정리](task-04-tutorial-capture-guidelines.md)
 * [T02-05 사용자 shape profile과 prototype bank 설계](task-05-user-shape-profile-and-prototype-bank.md)
 * [T02-06 개인화 rerank와 confidence calibration 정리](task-06-personalized-rerank-and-confidence-calibration.md)
+* [T02-07 operator tutorial context snapshot과 placement-aware personalization](task-07-operator-tutorial-context-and-placement-personalization.md)
+* [T02-08 tutorial vector capture와 ML adaptation contract](task-08-tutorial-vector-capture-and-ml-adaptation-contract.md)
 
 ## 선행 task
 
@@ -49,6 +51,8 @@
 * 같은 모양은 같은 종류라는 입력 기준이 정리된다.
 * 속도와 각도가 결과 차이에 어떻게 들어가는지 정리된다.
 * 튜토리얼 기반 개인화 보조층의 경계와 구조가 정리된다.
+* operator placement-aware personalization의 허용 범위와 stop condition이 정리된다.
+* tutorial vector capture가 tiny ML personalization과 어떻게 연결될지 계약이 정리된다.
 
 ## 지금은 보류하지만 자리 남길 요소
 

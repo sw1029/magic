@@ -45,6 +45,8 @@
 | P1 | ready | [T02-04 튜토리얼 입력 수집 기준 정리](../30_tasks/epic-02-symbols-and-input/task-04-tutorial-capture-guidelines.md) | T02-02 | T02-05 | T02-05 |
 | P1 | blocked | [T02-05 사용자 shape profile과 prototype bank 설계](../30_tasks/epic-02-symbols-and-input/task-05-user-shape-profile-and-prototype-bank.md) | T02-02, T02-04 | T02-06, T07-05 | T02-06 |
 | P1 | blocked | [T02-06 개인화 rerank와 confidence calibration 정리](../30_tasks/epic-02-symbols-and-input/task-06-personalized-rerank-and-confidence-calibration.md) | T02-05, T06-01 | T07-05 | T05-02 |
+| P1 | done | [T02-07 operator tutorial context snapshot과 placement-aware personalization](../30_tasks/epic-02-symbols-and-input/task-07-operator-tutorial-context-and-placement-personalization.md) | T02-05, T02-06 | T07-07 | T05-02 |
+| P1 | blocked | [T02-08 tutorial vector capture와 ML adaptation contract](../30_tasks/epic-02-symbols-and-input/task-08-tutorial-vector-capture-and-ml-adaptation-contract.md) | T02-04, T02-07, T06-01 | T07-09 | T05-02 |
 | P1 | blocked | [T05-02 공방 토글 규칙 정리](../30_tasks/epic-05-prototype-battle-sandbox/task-02-workshop-toggle-rules.md) | T05-01, T06-01 | T06-02 | T05-03 |
 | P1 | blocked | [T05-03 허수아비 검증 시나리오 정리](../30_tasks/epic-05-prototype-battle-sandbox/task-03-sandbox-validation-scenarios.md) | T01-03, T05-01 | - | T06-02 |
 | P1 | blocked | [T06-02 분석 토글과 후속 hook 정리](../30_tasks/epic-06-logging-and-debug-hooks/task-02-analysis-toggle-and-hook-points.md) | T05-02, T06-01 | T07-04 | T02-03 |
@@ -57,8 +59,11 @@
 | P2 | blocked | [T04-03 3D 확장 계약 정의](../30_tasks/epic-04-result-resolution-and-runtime/task-03-3d-extension-contract.md) | T03-01, T04-01 | T07-01 | T07-01 |
 | P2 | backlog | [T07-01 3D 후속 구현 backlog](../30_tasks/epic-07-future-expansion-backlog/task-01-3d-follow-up-backlog.md) | T04-03 | - | T07-02 |
 | P2 | backlog | [T07-02 가벼운 AI backlog](../30_tasks/epic-07-future-expansion-backlog/task-02-lightweight-ai-backlog.md) | T02-03 | - | T07-03 |
-| P2 | backlog | [T07-05 hybrid tutorial/public/synthetic 데이터 전략 backlog](../30_tasks/epic-07-future-expansion-backlog/task-05-hybrid-data-strategy-backlog.md) | T02-06 | T07-06 | T07-06 |
+| P2 | done | [T07-05 hybrid tutorial/public/synthetic 데이터 전략 backlog](../30_tasks/epic-07-future-expansion-backlog/task-05-hybrid-data-strategy-backlog.md) | T02-06 | T07-06 | T07-06 |
 | P2 | backlog | [T07-06 소형 모델 실험안 backlog](../30_tasks/epic-07-future-expansion-backlog/task-06-tiny-model-experiment-backlog.md) | T07-05 | - | - |
+| P2 | backlog | [T07-07 placement-aware operator tiny model backlog](../30_tasks/epic-07-future-expansion-backlog/task-07-placement-aware-operator-tiny-model-backlog.md) | T02-07, T07-05 | - | - |
+| P2 | backlog | [T07-08 tiny ML baseline 설계와 offline 실험안](../30_tasks/epic-07-future-expansion-backlog/task-08-tiny-ml-baseline-and-offline-eval.md) | T07-05 | T07-09 | T07-09 |
+| P2 | backlog | [T07-09 tutorial-aware personalization adapter 설계](../30_tasks/epic-07-future-expansion-backlog/task-09-tutorial-aware-personalization-adapter.md) | T02-08, T07-08 | - | - |
 | P2 | backlog | [T07-03 실험 스테이지 분리 backlog](../30_tasks/epic-07-future-expansion-backlog/task-03-experiment-stage-backlog.md) | T05-03 | - | T07-04 |
 | P2 | backlog | [T07-04 실패 흔적과 추가 반응층 backlog](../30_tasks/epic-07-future-expansion-backlog/task-04-failure-trace-and-extra-layer-backlog.md) | T06-02 | - | - |
 

@@ -3,7 +3,7 @@
 - id: T07-05
 - parent: E07
 - priority: P2
-- status: backlog
+- status: done
 - depends_on: T02-06
 - blocks: T07-06
 - source_chat: request-answer03, request-answer08, request-answer11, request-answer18
@@ -54,8 +54,8 @@
 
 * hybrid 데이터 전략의 우선순위가 backlog 문서로 정리된다.
 * tutorial/public/synthetic의 역할 분리가 명확히 적힌다.
+* external raw cache downloader와 auxiliary NDJSON converter가 구현된다.
 
 ## 지금은 보류하지만 자리 남길 요소
 
-* 실제 외부 데이터 다운로드 파이프라인
 * 데이터 라이선스 검토 세부안

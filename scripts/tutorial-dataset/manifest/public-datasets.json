@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "tutorial-hybrid-download-v1",
+  "datasets": [
+    {
+      "id": "quickdraw-raw",
+      "dataset": "quickdraw",
+      "version": "raw-public-gcs",
+      "kind": "direct",
+      "baseUrl": "https://storage.googleapis.com/quickdraw_dataset/full/raw",
+      "targetDir": "external/quickdraw",
+      "licenseNote": "Quick, Draw! dataset by Google Creative Lab / Google Cloud public dataset.",
+      "usage": {
+        "allowed": [
+          "normalization_regression",
+          "stroke_encoder_pretrain",
+          "denoising_prior",
+          "sequence_representation"
+        ],
+        "forbidden": [
+          "direct_family_classifier_training",
+          "direct_operator_classifier_training",
+          "semantic_label_override"
+        ]
+      },
+      "recommendedLabels": [
+        "circle",
+        "triangle",
+        "line",
+        "square"
+      ]
+    },
+    {
+      "id": "dollar-unistroke-xml",
+      "dataset": "dollar_family",
+      "version": "uist-2007-xml",
+      "kind": "archive",
+      "url": "https://depts.washington.edu/acelab/proj/dollar/xml.zip",
+      "targetDir": "external/dollar/xml",
+      "extract": "zip",
+      "licenseNote": "Official $1 recognizer unistroke gesture logs from University of Washington ACELab.",
+      "usage": {
+        "allowed": [
+          "normalization_regression",
+          "stroke_encoder_pretrain",
+          "denoising_prior",
+          "sequence_representation"
+        ],
+        "forbidden": [
+          "direct_family_classifier_training",
+          "direct_operator_classifier_training",
+          "semantic_label_override"
+        ]
+      }
+    },
+    {
+      "id": "dollar-multistroke-mmg",
+      "dataset": "dollar_family",
+      "version": "gi-2010-mmg",
+      "kind": "archive",
+      "url": "https://depts.washington.edu/acelab/proj/dollar/mmg.zip",
+      "targetDir": "external/dollar/mmg",
+      "extract": "zip",
+      "licenseNote": "Official $N/$P multistroke gesture logs from University of Washington ACELab.",
+      "usage": {
+        "allowed": [
+          "normalization_regression",
+          "stroke_encoder_pretrain",
+          "denoising_prior",
+          "sequence_representation"
+        ],
+        "forbidden": [
+          "direct_family_classifier_training",
+          "direct_operator_classifier_training",
+          "semantic_label_override"
+        ]
+      }
+    },
+    {
+      "id": "crohme-package",
+      "dataset": "crohme",
+      "version": "ICFHR_package",
+      "kind": "archive",
+      "url": "http://www.isical.ac.in/~crohme/ICFHR_package.zip",
+      "targetDir": "external/crohme/ICFHR_package",
+      "extract": "zip",
+      "licenseNote": "Official CROHME website package with competition data and tools.",
+      "usage": {
+        "allowed": [
+          "normalization_regression",
+          "stroke_encoder_pretrain",
+          "denoising_prior",
+          "sequence_representation"
+        ],
+        "forbidden": [
+          "direct_family_classifier_training",
+          "direct_operator_classifier_training",
+          "semantic_label_override"
+        ]
+      }
+    }
+  ]
+}

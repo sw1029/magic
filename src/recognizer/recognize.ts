@@ -11,6 +11,7 @@ import {
 } from "./geometry";
 import { createEmptyQualityVector } from "./user-profile";
 import { calculateAdjustedQuality, calculateQualityVector } from "./quality";
+import { rerankBaseCandidates } from "./rerank";
 import { GLYPH_TEMPLATES } from "./templates";
 import type {
   AxisLine,
@@ -41,9 +42,14 @@ export function recognizeSession(
   const rawQuality = calculateQualityVector(strokes, normalized);
   const { adjustedQuality, qualityAdjustment } = calculateAdjustedQuality(rawQuality, options.profile);
   const features = deriveFeatures({ ...session, strokes }, normalized);
-  const candidates = TEMPLATE_BUNDLES.map((template) =>
-    scoreCandidate(template.family, normalized.normalizedCloud, strokes.length, features, rawQuality)
-  ).sort((left, right) => right.score - left.score);
+  const candidates = rerankBaseCandidates({
+    candidates: TEMPLATE_BUNDLES.map((template) =>
+      scoreCandidate(template.family, normalized.normalizedCloud, strokes.length, features, rawQuality)
+    ).sort((left, right) => right.score - left.score),
+    normalizedCloud: normalized.normalizedCloud,
+    features,
+    profile: options.profile
+  });
 
   const topCandidate = candidates[0];
   const secondCandidate = candidates[1];

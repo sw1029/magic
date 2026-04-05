@@ -11,6 +11,7 @@ import {
   strokeStraightness
 } from "./geometry";
 import { OVERLAY_OPERATOR_TEMPLATES, type OverlayOperatorTemplate } from "./operator-templates";
+import { rerankOverlayCandidates, type OverlayPersonalizationProfile, type OverlayRerankCandidate } from "./rerank";
 import type {
   AxisLine,
   OverlayAnchorZone,
@@ -23,7 +24,8 @@ import type {
   PointSample,
   Stroke,
   StrokeBounds,
-  StrokeSession
+  StrokeSession,
+  TutorialOperatorContext
 } from "./types";
 
 interface OverlayFeatures {
@@ -41,6 +43,12 @@ interface OverlayFeatures {
   verticalAxisScore: number;
   ascendingDiagonalScore: number;
 }
+
+interface OverlayScoredCandidate extends OverlayRecognitionCandidate, OverlayRerankCandidate {}
+
+type OverlayRecognitionInput = OverlayRecognitionContext & {
+  personalizationProfile?: OverlayPersonalizationProfile;
+};
 
 const TEMPLATE_BUNDLES = OVERLAY_OPERATOR_TEMPLATES.map((template) => ({
   ...template,
@@ -108,7 +116,7 @@ export function createOverlayReferenceFrame(input: StrokeSession | Stroke[]): Ov
 
 export function recognizeOverlayStroke(
   stroke: Stroke,
-  context: OverlayRecognitionContext
+  context: OverlayRecognitionInput
 ): OverlayRecognition {
   const bounds = boundingBox(stroke.points);
 
@@ -125,9 +133,13 @@ export function recognizeOverlayStroke(
 
   const normalized = normalizeStrokes([stroke], 64);
   const features = deriveOverlayFeatures(stroke, normalized.normalizedCloud, context.referenceFrame);
-  const candidates = TEMPLATE_BUNDLES.map((template) =>
-    scoreOverlayCandidate(template, normalized.normalizedCloud, features, context)
-  ).sort((left, right) => right.score - left.score);
+  const candidates = rerankOverlayCandidates(
+    TEMPLATE_BUNDLES.map((template) => scoreOverlayCandidate(template, normalized.normalizedCloud, features, context)),
+    {
+      profile: context.personalizationProfile,
+      topK: 3
+    }
+  );
   const topCandidate = candidates[0];
   const voidCutCandidate = candidates.find((candidate) => candidate.operator === "void_cut");
   const martialAxisCandidate = candidates.find((candidate) => candidate.operator === "martial_axis");
@@ -140,10 +152,14 @@ export function recognizeOverlayStroke(
   const martialAxisIsCompetitive =
     Boolean(martialAxisCandidate?.score) &&
     martialAxisCandidate!.score >= 0.62 &&
+    martialAxisCandidate!.shapeConfidence >= 0.56 &&
+    martialAxisCandidate!.scaleScore >= 0.34 &&
     martialAxisCandidate!.score >= (topCandidate?.score ?? 0) - 0.03;
   const voidCutIsCompetitive =
     Boolean(voidCutCandidate?.score) &&
     voidCutCandidate!.score >= 0.72 &&
+    voidCutCandidate!.shapeConfidence >= 0.56 &&
+    voidCutCandidate!.scaleScore >= 0.34 &&
     voidCutCandidate!.score >= (topCandidate?.score ?? 0) - 0.03;
 
   if (martialAxisIsCompetitive && martialAxisCandidate) {
@@ -162,14 +178,19 @@ export function recognizeOverlayStroke(
   } else if (topCandidate?.blockedBy && topCandidate.score >= 0.62) {
     status = "incomplete";
     invalidReason = `martial_axis는 ${topCandidate.blockedBy} 이후에만 활성화됩니다.`;
-  } else if (topCandidate?.completenessHint && topCandidate.score >= 0.52) {
+  } else if (topCandidate?.completenessHint && topCandidate.score >= 0.52 && topCandidate.shapeConfidence >= 0.46) {
     status = "incomplete";
     invalidReason = topCandidate.completenessHint;
-  } else if (topCandidate?.score >= 0.74 && margin >= 0.05) {
+  } else if (
+    topCandidate?.score >= 0.74 &&
+    topCandidate.shapeConfidence >= 0.54 &&
+    topCandidate.scaleScore >= 0.34 &&
+    margin >= 0.05
+  ) {
     status = "recognized";
     operator = topCandidate.operator;
     invalidReason = `${topCandidate.operator} operator가 stack에 추가되었습니다.`;
-  } else if (topCandidate?.score >= 0.56) {
+  } else if (topCandidate?.score >= 0.56 && topCandidate.shapeConfidence >= 0.4) {
     status = "ambiguous";
     invalidReason = "overlay operator 후보가 겹쳐 최종 stack에 추가하지 않습니다.";
   }
@@ -185,6 +206,38 @@ export function recognizeOverlayStroke(
     bounds,
     debugAxis: buildDebugAxis(stroke),
     anchorZoneId: topCandidate?.anchorZoneId
+  };
+}
+
+export function createTutorialOperatorContext(
+  stroke: Stroke,
+  context: OverlayRecognitionContext
+): TutorialOperatorContext {
+  const bounds = boundingBox(stroke.points);
+
+  if (stroke.points.length < 2) {
+    return {
+      stackIndex: context.existingOperators.length,
+      existingOperators: [...context.existingOperators],
+      strokeBounds: bounds
+    };
+  }
+
+  const normalized = normalizeStrokes([stroke], 64);
+  const features = deriveOverlayFeatures(stroke, normalized.normalizedCloud, context.referenceFrame);
+  const placementAnchor = bestAnchorScore(
+    features.anchorScores,
+    context.referenceFrame.anchorZones.map((zone) => zone.id)
+  );
+
+  return {
+    stackIndex: context.existingOperators.length,
+    existingOperators: [...context.existingOperators],
+    strokeBounds: bounds,
+    anchorZoneId: placementAnchor.id,
+    anchorScore: placementAnchor.score,
+    scaleRatio: features.scaleRatio,
+    angleRadians: features.angleRadians
   };
 }
 
@@ -249,12 +302,16 @@ function scoreOverlayCandidate(
   template: (typeof TEMPLATE_BUNDLES)[number],
   normalizedCloud: PointSample[],
   features: OverlayFeatures,
-  context: OverlayRecognitionContext
-): OverlayRecognitionCandidate {
+  context: OverlayRecognitionInput
+): OverlayScoredCandidate {
   const templateDistance = pointCloudDistance(normalizedCloud, template.normalized.normalizedCloud);
   const templateScore = clamp(1 - templateDistance / 0.62, 0, 1);
   const openScore = clamp(1 - features.closure, 0, 1);
   const anchor = bestAnchorScore(features.anchorScores, template.preferredAnchorZones);
+  const placementAnchor = bestAnchorScore(
+    features.anchorScores,
+    context.referenceFrame.anchorZones.map((zone) => zone.id)
+  );
   const scaleScore = rangeScore(features.scaleRatio, template.expectedScaleRange[0], template.expectedScaleRange[1]);
   const notes = [
     `template=${templateScore.toFixed(2)}`,
@@ -262,12 +319,14 @@ function scoreOverlayCandidate(
     `scale=${scaleScore.toFixed(2)}`
   ];
   let score = templateScore;
+  let shapeConfidence = templateScore;
   let completenessHint: string | undefined;
 
   switch (template.operator) {
     case "steel_brace": {
       const cornerScore = closenessScore(features.corners, 3, 1.6);
       score = templateScore * 0.34 + cornerScore * 0.22 + anchor.score * 0.16 + openScore * 0.16 + scaleScore * 0.12;
+      shapeConfidence = templateScore * 0.44 + cornerScore * 0.32 + openScore * 0.24;
       notes.push(`corners=${cornerScore.toFixed(2)}`, `open=${openScore.toFixed(2)}`);
       if (cornerScore < 0.56 && score >= 0.48) {
         completenessHint = "steel_brace는 세 번 꺾이는 열린 brace 실루엣이 필요합니다.";
@@ -277,6 +336,7 @@ function scoreOverlayCandidate(
     case "electric_fork": {
       const cornerScore = closenessScore(features.corners, 4, 1.8);
       score = templateScore * 0.34 + cornerScore * 0.26 + anchor.score * 0.18 + openScore * 0.12 + scaleScore * 0.1;
+      shapeConfidence = templateScore * 0.36 + cornerScore * 0.4 + openScore * 0.24;
       notes.push(`corners=${cornerScore.toFixed(2)}`, `open=${openScore.toFixed(2)}`);
       if (cornerScore < 0.58 && score >= 0.48) {
         completenessHint = "electric_fork는 분기된 fork 형태의 꺾임이 더 분명해야 합니다.";
@@ -291,6 +351,7 @@ function scoreOverlayCandidate(
         horizontalScore * 0.24 +
         anchor.score * 0.16 +
         scaleScore * 0.12;
+      shapeConfidence = templateScore * 0.18 + features.straightness * 0.46 + horizontalScore * 0.36;
       notes.push(`straight=${features.straightness.toFixed(2)}`, `horizontal=${horizontalScore.toFixed(2)}`);
       if (scaleScore < 0.46 && features.straightness >= 0.72) {
         completenessHint = "ice_bar는 기준선보다 조금 더 긴 수평 bar가 필요합니다.";
@@ -305,6 +366,7 @@ function scoreOverlayCandidate(
         features.closure * 0.24 +
         anchor.score * 0.2 +
         compactScore * 0.14;
+      shapeConfidence = templateScore * 0.18 + features.circularity * 0.4 + features.closure * 0.42;
       notes.push(`circular=${features.circularity.toFixed(2)}`, `closure=${features.closure.toFixed(2)}`);
       if (features.circularity >= 0.55 && features.closure < 0.56) {
         completenessHint = "soul_dot는 더 닫힌 점형 루프여야 합니다.";
@@ -323,6 +385,7 @@ function scoreOverlayCandidate(
         diagonalScore * 0.26 +
         anchor.score * 0.18 +
         scaleScore * 0.14;
+      shapeConfidence = templateScore * 0.18 + features.straightness * 0.44 + diagonalScore * 0.38;
       notes.push(`straight=${features.straightness.toFixed(2)}`, `diagonal=${diagonalScore.toFixed(2)}`);
       if (scaleScore < 0.46 && diagonalScore >= 0.7) {
         completenessHint = "void_cut는 base silhouette를 가로지르는 충분한 길이의 대각 절개여야 합니다.";
@@ -339,14 +402,27 @@ function scoreOverlayCandidate(
         anchor.score * 0.08 +
         scaleScore * 0.08 +
         openScore * 0.06;
+      shapeConfidence = templateScore * 0.34 + cornerScore * 0.34 + crossScore * 0.32;
       notes.push(`corners=${cornerScore.toFixed(2)}`, `cross=${crossScore.toFixed(2)}`);
       if (!context.existingOperators.includes("void_cut")) {
         return {
           operator: template.operator,
           score: clamp(score, 0, 1),
+          baseScore: clamp(score, 0, 1),
           templateDistance,
-          notes,
+          shapeConfidence: clamp(shapeConfidence, 0, 1),
+          notes: [...notes, `shape=${clamp(shapeConfidence, 0, 1).toFixed(2)}`],
           anchorZoneId: anchor.id,
+          placementAnchorZoneId: placementAnchor.id,
+          anchorScore: anchor.score,
+          scaleScore,
+          angleRadians: features.angleRadians,
+          scaleRatio: features.scaleRatio,
+          straightness: features.straightness,
+          corners: features.corners,
+          closure: features.closure,
+          stackIndex: context.existingOperators.length,
+          existingOperators: [...context.existingOperators],
           blockedBy: "void_cut",
           completenessHint: "martial_axis는 void_cut 이후에만 해석할 수 있습니다."
         };
@@ -363,9 +439,21 @@ function scoreOverlayCandidate(
   return {
     operator: template.operator,
     score: clamp(score, 0, 1),
+    baseScore: clamp(score, 0, 1),
     templateDistance,
-    notes,
+    shapeConfidence: clamp(shapeConfidence, 0, 1),
+    notes: [...notes, `shape=${clamp(shapeConfidence, 0, 1).toFixed(2)}`],
     anchorZoneId: anchor.id,
+    placementAnchorZoneId: placementAnchor.id,
+    anchorScore: anchor.score,
+    scaleScore,
+    angleRadians: features.angleRadians,
+    scaleRatio: features.scaleRatio,
+    straightness: features.straightness,
+    corners: features.corners,
+    closure: features.closure,
+    stackIndex: context.existingOperators.length,
+    existingOperators: [...context.existingOperators],
     completenessHint
   };
 }

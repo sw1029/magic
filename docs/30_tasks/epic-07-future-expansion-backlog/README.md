@@ -31,6 +31,9 @@
 * [T07-04 실패 흔적과 추가 반응층 backlog](task-04-failure-trace-and-extra-layer-backlog.md)
 * [T07-05 hybrid tutorial/public/synthetic 데이터 전략 backlog](task-05-hybrid-data-strategy-backlog.md)
 * [T07-06 소형 모델 실험안 backlog](task-06-tiny-model-experiment-backlog.md)
+* [T07-07 placement-aware operator tiny model backlog](task-07-placement-aware-operator-tiny-model-backlog.md)
+* [T07-08 tiny ML baseline 설계와 offline 실험안](task-08-tiny-ml-baseline-and-offline-eval.md)
+* [T07-09 tutorial-aware personalization adapter 설계](task-09-tutorial-aware-personalization-adapter.md)
 
 ## 선행 task
 
@@ -47,6 +50,8 @@
 * 지금 보류한 확장 요소가 각 backlog task로 분리된다.
 * 향후 확장이 현재 구조와 어떻게 이어지는지 문서상 보인다.
 * lightweight personalization과 tiny model 실험의 범위가 backlog 수준으로 정리된다.
+* placement-aware operator personalization 이후의 tiny model 확장 범위가 backlog로 정리된다.
+* public/synthetic/tutorial을 함께 쓰는 첫 tiny ML baseline과 user personalization 후속 설계가 backlog로 정리된다.
 
 ## 지금은 보류하지만 자리 남길 요소
 

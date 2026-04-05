@@ -10,6 +10,8 @@
 * [`prototype-prompt-pack.md`](prototype-prompt-pack.md): 위 실행 계획을 실제 작업으로 옮길 때 쓰는 프롬프트 묶음
 * [`tutorial-personalization-plan.md`](tutorial-personalization-plan.md): 튜토리얼 기반 개인화 인식 보조층 확장 실행 설계
 * [`tutorial-personalization-prompt-pack.md`](tutorial-personalization-prompt-pack.md): 위 개인화 설계를 실제 작업으로 옮길 때 쓰는 프롬프트 묶음
+* [`tiny-ml-baseline-plan.md`](tiny-ml-baseline-plan.md): public/synthetic/tutorial을 함께 쓰는 첫 tiny ML baseline과 유저 개인화 결합 설계
+* [`tiny-ml-baseline-prompt-pack.md`](tiny-ml-baseline-prompt-pack.md): 위 tiny ML baseline 설계를 실제 작업으로 옮길 때 쓰는 프롬프트 묶음
 * [`hci-ux-demo-plan.md`](hci-ux-demo-plan.md): 클라이언트 HCI 검토를 위한 Web UI 데모 확장 계획과 현재 구현 반영 상태
 * [`hci-ux-demo-prompt-pack.md`](hci-ux-demo-prompt-pack.md): 위 HCI 데모 확장을 실제 작업으로 옮길 때 쓰는 프롬프트 묶음
 * [`doc-conventions.md`](doc-conventions.md): 문서 템플릿과 링크 규칙
@@ -27,11 +29,13 @@
 2. [`work-queue.md`](work-queue.md)
 3. [`prototype-implementation-plan.md`](prototype-implementation-plan.md)
 4. [`tutorial-personalization-plan.md`](tutorial-personalization-plan.md)
-5. [`hci-ux-demo-plan.md`](hci-ux-demo-plan.md)
-6. [`prototype-prompt-pack.md`](prototype-prompt-pack.md)
-7. [`tutorial-personalization-prompt-pack.md`](tutorial-personalization-prompt-pack.md)
-8. [`hci-ux-demo-prompt-pack.md`](hci-ux-demo-prompt-pack.md)
-9. [`doc-conventions.md`](doc-conventions.md)
-10. [`../../scripts/validate-doc-state.mjs`](../../scripts/validate-doc-state.mjs)
+5. [`tiny-ml-baseline-plan.md`](tiny-ml-baseline-plan.md)
+6. [`hci-ux-demo-plan.md`](hci-ux-demo-plan.md)
+7. [`prototype-prompt-pack.md`](prototype-prompt-pack.md)
+8. [`tutorial-personalization-prompt-pack.md`](tutorial-personalization-prompt-pack.md)
+9. [`tiny-ml-baseline-prompt-pack.md`](tiny-ml-baseline-prompt-pack.md)
+10. [`hci-ux-demo-prompt-pack.md`](hci-ux-demo-prompt-pack.md)
+11. [`doc-conventions.md`](doc-conventions.md)
+12. [`../../scripts/validate-doc-state.mjs`](../../scripts/validate-doc-state.mjs)
 
 이 디렉토리는 “무엇을 어떤 순서로 진행할 것인가”를 설명합니다. 개별 작업 정의는 [`../30_tasks/README.md`](../30_tasks/README.md) 아래에서 봅니다.

@@ -1,5 +1,17 @@
 import { compileSealResult } from "./recognizer/compile";
-import { OVERLAY_OPERATOR_TEMPLATES, createOverlayReferenceFrame, recognizeOverlayStroke } from "./recognizer/overlay";
+import {
+  OVERLAY_OPERATOR_TEMPLATES,
+  createOverlayReferenceFrame,
+  createTutorialOperatorContext,
+  recognizeOverlayStroke
+} from "./recognizer/overlay";
+import {
+  appendTutorialCapture,
+  createTutorialOverlayPersonalizationProfile,
+  createEmptyTutorialProfileStore,
+  hydrateTutorialProfileStore,
+  mergeTutorializedUserProfile
+} from "./recognizer/tutorial-profile";
 import {
   QUALITY_VECTOR_KEYS,
   createEmptyUserInputProfile,
@@ -20,6 +32,7 @@ import { recognizeSession } from "./recognizer/recognize";
 import type {
   AxisLine,
   CompiledSealResult,
+  GlyphFamily,
   OverlayAnchorZoneId,
   OverlayOperator,
   OverlayRecognition,
@@ -31,8 +44,14 @@ import type {
   RitualPhase,
   Stroke,
   StrokeSession,
+  TutorialCapture,
+  TutorialBaseSnapshot,
+  TutorialCaptureSource,
+  TutorialOperatorContext,
+  TutorialProfileStore,
   UserInputProfile,
-  UserInputProfileDelta
+  UserInputProfileDelta,
+  UserShapeProfile
 } from "./recognizer/types";
 import type {
   DemoViewState,
@@ -50,6 +69,7 @@ import type {
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 620;
 const PROFILE_STORAGE_KEY = "magic-recognizer-v1_5-profile";
+const TUTORIAL_PROFILE_STORAGE_KEY = "magic-recognizer-v1_5-tutorial-profile";
 const RECENT_SEAL_LIMIT = 6;
 const SCENARIO_APPEAL: Record<
   GuidedDemoScenarioId,
@@ -92,6 +112,42 @@ interface CanvasRenderState {
   overlayRecords: OverlayStrokeRecord[];
   compiledResult: CompiledSealResult | null;
   analysisOverlay: boolean;
+}
+
+type TutorialCaptureRequest =
+  | {
+      kind: "family";
+      expectedFamily: GlyphFamily;
+      source: TutorialCaptureSource;
+      strokes?: Stroke[];
+      id?: string;
+      timestamp?: number;
+    }
+  | {
+      kind: "operator";
+      expectedOperator: OverlayOperator;
+      source: TutorialCaptureSource;
+      strokes?: Stroke[];
+      id?: string;
+      timestamp?: number;
+    };
+
+interface TutorialOnboardingHook {
+  getStore(): TutorialProfileStore;
+  getProfile(): UserShapeProfile;
+  listCaptures(): TutorialCapture[];
+  recordCapture(request: TutorialCaptureRequest): TutorialCapture | null;
+  captureBaseFamily(expectedFamily: GlyphFamily, source: TutorialCaptureSource): TutorialCapture | null;
+  captureOverlayOperator(expectedOperator: OverlayOperator, source: TutorialCaptureSource): TutorialCapture | null;
+  clear(): void;
+}
+
+interface TutorialHookHost extends HTMLDivElement {
+  __magicTutorialOnboardingHook__?: TutorialOnboardingHook;
+}
+
+interface TutorialHookWindow extends Window {
+  __magicTutorialOnboardingHook__?: TutorialOnboardingHook;
 }
 
 export function mountApp(root: HTMLDivElement): void {
@@ -418,17 +474,40 @@ export function mountApp(root: HTMLDivElement): void {
   let overlayAuthoringStarted = false;
   let demoView = resolvePresetView(createDemoViewState("clean"), "clean");
   let userProfile = loadUserInputProfile();
+  let tutorialProfileStore = loadTutorialProfileStore();
   let latestProfileDelta: UserInputProfileDelta | undefined;
   let baseSession = createEmptySession();
   let overlaySession = createEmptySession();
   let currentStroke: Stroke | null = null;
-  let previewResult = recognizeSession(baseSession, { sealed: false, profile: userProfile });
+  const currentRecognitionProfile = (): UserInputProfile =>
+    mergeTutorializedUserProfile(userProfile, tutorialProfileStore);
+  const currentOverlayPersonalizationProfile = () =>
+    createTutorialOverlayPersonalizationProfile(tutorialProfileStore);
+  let previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
   let baseSealResult: RecognitionResult | null = null;
   let currentOverlayPreview: OverlayRecognition | null = null;
   let overlayRecords: OverlayStrokeRecord[] = [];
   let compiledResult: CompiledSealResult | null = null;
   let logs: RecognitionLogEntry[] = [];
   let recentSealSnapshots: RecentSealSnapshot[] = [];
+  const setTutorialProfileStore = (nextStore: TutorialProfileStore): void => {
+    tutorialProfileStore = nextStore;
+    syncTutorialHookMetadata(root, nextStore);
+    saveTutorialProfileStore(nextStore);
+    root.dispatchEvent(new CustomEvent("magic:tutorial-profile-updated", { detail: structuredClone(nextStore) }));
+  };
+  const tutorialOnboardingHook = createTutorialOnboardingHook({
+    getBaseStrokes: () => structuredClone(baseSession.strokes),
+    getOverlayStrokes: () => structuredClone(overlaySession.strokes),
+    getBaseSession: () => structuredClone(baseSession),
+    getOverlayRecords: () => structuredClone(overlayRecords),
+    canCaptureOperator: () => Boolean(baseSealResult?.canonicalFamily),
+    getStore: () => tutorialProfileStore,
+    setStore: setTutorialProfileStore
+  });
+
+  exposeTutorialOnboardingHook(root, tutorialOnboardingHook);
+  syncTutorialHookMetadata(root, tutorialProfileStore);
 
   canvas.addEventListener("pointerdown", (event) => {
     if (phase === "final") {
@@ -473,11 +552,16 @@ export function mountApp(root: HTMLDivElement): void {
     canvas.setPointerCapture(event.pointerId);
 
     if (phase === "base") {
-      previewResult = recognizeSession(baseSession, { sealed: false, profile: userProfile });
+      previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
     } else {
       currentOverlayPreview = recognizeOverlayStroke(
         currentStroke,
-        createOverlayContext(baseSession, overlayRecords, overlaySession)
+        createOverlayContext(
+          baseSession,
+          overlayRecords,
+          overlaySession,
+          currentOverlayPersonalizationProfile()
+        )
       );
     }
 
@@ -503,11 +587,16 @@ export function mountApp(root: HTMLDivElement): void {
     });
 
     if (phase === "base") {
-      previewResult = recognizeSession(baseSession, { sealed: false, profile: userProfile });
+      previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
     } else {
       currentOverlayPreview = recognizeOverlayStroke(
         currentStroke,
-        createOverlayContext(baseSession, overlayRecords, overlaySession)
+        createOverlayContext(
+          baseSession,
+          overlayRecords,
+          overlaySession,
+          currentOverlayPersonalizationProfile()
+        )
       );
     }
 
@@ -534,12 +623,17 @@ export function mountApp(root: HTMLDivElement): void {
 
     if (phase === "base") {
       baseSession.endedAt = Date.now();
-      previewResult = recognizeSession(baseSession, { sealed: false, profile: userProfile });
+      previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
     } else {
       overlaySession.endedAt = Date.now();
       const recognition = recognizeOverlayStroke(
         finishedStroke,
-        createOverlayContext(baseSession, overlayRecords, overlaySession)
+        createOverlayContext(
+          baseSession,
+          overlayRecords,
+          overlaySession,
+          currentOverlayPersonalizationProfile()
+        )
       );
       currentOverlayPreview = recognition;
       overlayRecords = [...overlayRecords, { stroke: structuredClone(finishedStroke), recognition }];
@@ -586,7 +680,7 @@ export function mountApp(root: HTMLDivElement): void {
       overlayRecords = [];
       currentOverlayPreview = null;
       compiledResult = null;
-      previewResult = recognizeSession(baseSession, { sealed: false, profile: userProfile });
+      previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
       render();
       return;
     }
@@ -709,7 +803,7 @@ export function mountApp(root: HTMLDivElement): void {
       return;
     }
 
-    const sealed = recognizeSession(baseSession, { sealed: true, profile: userProfile });
+    const sealed = recognizeSession(baseSession, { sealed: true, profile: currentRecognitionProfile() });
     const snapshotId = crypto.randomUUID();
     const timestamp = Date.now();
     previewResult = sealed;
@@ -814,7 +908,7 @@ export function mountApp(root: HTMLDivElement): void {
     baseSession = createEmptySession();
     overlaySession = createEmptySession();
     currentStroke = null;
-    previewResult = recognizeSession(baseSession, { sealed: false, profile: userProfile });
+    previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
     baseSealResult = null;
     currentOverlayPreview = null;
     overlayRecords = [];
@@ -1162,18 +1256,30 @@ function resolvePresetView(state: DemoViewState, preset: DemoViewPreset): DemoVi
 function createOverlayContext(
   baseSession: StrokeSession,
   overlayRecords: OverlayStrokeRecord[],
-  overlaySession?: StrokeSession
+  overlaySession?: StrokeSession,
+  personalizationProfile?: ReturnType<typeof createTutorialOverlayPersonalizationProfile>
 ): {
   referenceFrame: ReturnType<typeof createOverlayReferenceFrame>;
   existingOperators: OverlayOperator[];
   overlaySession?: StrokeSession;
+  personalizationProfile?: ReturnType<typeof createTutorialOverlayPersonalizationProfile>;
 } {
   return {
     referenceFrame: createOverlayReferenceFrame(baseSession),
     existingOperators: overlayRecords
       .map((record) => record.recognition.operator)
       .filter((operator): operator is OverlayOperator => Boolean(operator)),
-    overlaySession
+    overlaySession,
+    personalizationProfile
+  };
+}
+
+function createTutorialBaseSnapshot(referenceFrame: OverlayReferenceFrame): TutorialBaseSnapshot {
+  return {
+    centroid: { ...referenceFrame.centroid },
+    bounds: { ...referenceFrame.bounds },
+    diagonal: referenceFrame.diagonal,
+    axisAngleRadians: referenceFrame.axisAngleRadians
   };
 }
 
@@ -1227,12 +1333,125 @@ function loadUserInputProfile(): UserInputProfile {
   }
 }
 
+function loadTutorialProfileStore(): TutorialProfileStore {
+  const fallback = createEmptyTutorialProfileStore();
+
+  try {
+    const raw = window.localStorage.getItem(TUTORIAL_PROFILE_STORAGE_KEY);
+
+    if (!raw) {
+      return fallback;
+    }
+
+    return hydrateTutorialProfileStore(JSON.parse(raw) as Partial<TutorialProfileStore>);
+  } catch {
+    return fallback;
+  }
+}
+
 function saveUserInputProfile(profile: UserInputProfile): void {
   try {
     window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
   } catch {
     // Ignore storage failures and keep the in-memory profile alive.
   }
+}
+
+function saveTutorialProfileStore(store: TutorialProfileStore): void {
+  try {
+    window.localStorage.setItem(TUTORIAL_PROFILE_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // Ignore storage failures and keep the in-memory tutorial profile alive.
+  }
+}
+
+function createTutorialOnboardingHook(options: {
+  getBaseStrokes(): Stroke[];
+  getOverlayStrokes(): Stroke[];
+  getBaseSession(): StrokeSession;
+  getOverlayRecords(): OverlayStrokeRecord[];
+  canCaptureOperator(): boolean;
+  getStore(): TutorialProfileStore;
+  setStore(store: TutorialProfileStore): void;
+}): TutorialOnboardingHook {
+  const recordCapture = (request: TutorialCaptureRequest): TutorialCapture | null => {
+    const strokes =
+      request.strokes && request.strokes.length > 0
+        ? request.strokes
+        : request.kind === "family"
+          ? options.getBaseStrokes()
+          : options.getOverlayStrokes();
+
+    if (strokes.length === 0) {
+      return null;
+    }
+
+    let baseSnapshot: TutorialBaseSnapshot | undefined;
+    let operatorContext: TutorialOperatorContext | undefined;
+
+    if (request.kind === "operator") {
+      if (!options.canCaptureOperator()) {
+        return null;
+      }
+
+      const baseSession = options.getBaseSession();
+
+      if (baseSession.strokes.length === 0) {
+        return null;
+      }
+
+      const referenceFrame = createOverlayReferenceFrame(baseSession);
+      const existingOperators = options
+        .getOverlayRecords()
+        .map((record) => record.recognition.operator)
+        .filter((operator): operator is OverlayOperator => Boolean(operator));
+      const stroke = strokes[strokes.length - 1];
+
+      baseSnapshot = createTutorialBaseSnapshot(referenceFrame);
+      operatorContext = createTutorialOperatorContext(stroke, {
+        referenceFrame,
+        existingOperators
+      });
+    }
+
+    const nextStore = appendTutorialCapture(options.getStore(), {
+      ...request,
+      strokes,
+      baseSnapshot,
+      operatorContext
+    });
+
+    options.setStore(nextStore);
+    return structuredClone(nextStore.captures[nextStore.captures.length - 1] ?? null);
+  };
+
+  return {
+    getStore: () => structuredClone(options.getStore()),
+    getProfile: () => structuredClone(options.getStore().shapeProfile),
+    listCaptures: () => structuredClone(options.getStore().captures),
+    recordCapture,
+    captureBaseFamily: (expectedFamily, source) => recordCapture({ kind: "family", expectedFamily, source }),
+    captureOverlayOperator: (expectedOperator, source) =>
+      recordCapture({ kind: "operator", expectedOperator, source }),
+    clear: () => {
+      options.setStore(createEmptyTutorialProfileStore());
+    }
+  };
+}
+
+function exposeTutorialOnboardingHook(root: HTMLDivElement, hook: TutorialOnboardingHook): void {
+  const host = root as TutorialHookHost;
+  const tutorialWindow = window as TutorialHookWindow;
+
+  host.__magicTutorialOnboardingHook__ = hook;
+  tutorialWindow.__magicTutorialOnboardingHook__ = hook;
+  root.dataset.tutorialOnboardingReady = "true";
+  root.dispatchEvent(new CustomEvent("magic:tutorial-hook-ready", { detail: hook }));
+}
+
+function syncTutorialHookMetadata(root: HTMLDivElement, store: TutorialProfileStore): void {
+  root.dataset.tutorialSampleCount = String(store.shapeProfile.tutorialSampleCount);
+  root.dataset.tutorialUpdatedAt = String(store.updatedAt);
 }
 
 function pointFromEvent(canvas: HTMLCanvasElement, event: PointerEvent): { x: number; y: number } {

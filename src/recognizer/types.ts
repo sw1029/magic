@@ -6,6 +6,8 @@ export type OverlayOperator =
   | "soul_dot"
   | "void_cut"
   | "martial_axis";
+export type TutorialTargetKind = "family" | "operator";
+export type TutorialCaptureSource = "trace" | "recall" | "variation";
 export type OverlayAnchorZoneId =
   | "upper_left"
   | "upper"
@@ -126,6 +128,84 @@ export interface RecognitionResult {
   closureLine?: AxisLine;
 }
 
+export interface TutorialCapture {
+  id: string;
+  kind: TutorialTargetKind;
+  expectedFamily?: GlyphFamily;
+  expectedOperator?: OverlayOperator;
+  strokes: Stroke[];
+  source: TutorialCaptureSource;
+  timestamp: number;
+  baseSnapshot?: TutorialBaseSnapshot;
+  operatorContext?: TutorialOperatorContext;
+}
+
+export interface TutorialBaseSnapshot {
+  centroid: { x: number; y: number };
+  bounds: StrokeBounds;
+  diagonal: number;
+  axisAngleRadians: number;
+}
+
+export interface TutorialOperatorContext {
+  stackIndex: number;
+  existingOperators: OverlayOperator[];
+  strokeBounds: StrokeBounds;
+  anchorZoneId?: OverlayAnchorZoneId;
+  anchorScore?: number;
+  scaleRatio?: number;
+  angleRadians?: number;
+}
+
+export interface FamilyPrototype {
+  family: GlyphFamily;
+  normalizedClouds: PointSample[][];
+  averageFeatures: Partial<RecognitionFeatures>;
+  sampleCount: number;
+}
+
+export interface OperatorPrototype {
+  operator: OverlayOperator;
+  normalizedClouds: PointSample[][];
+  sampleCount: number;
+  averageAngleRadians?: number;
+  averageScaleRatio?: number;
+  averageAnchorZoneId?: OverlayAnchorZoneId;
+  averageStraightness?: number;
+  averageCorners?: number;
+  averageClosure?: number;
+  averageStackIndex?: number;
+  existingOperatorBiases?: Partial<Record<OverlayOperator, number>>;
+}
+
+export interface TutorialConfusionPair {
+  left: string;
+  right: string;
+  weight: number;
+}
+
+export interface UserShapeProfile {
+  tutorialSampleCount: number;
+  familyPrototypes: Partial<Record<GlyphFamily, FamilyPrototype>>;
+  operatorPrototypes: Partial<Record<OverlayOperator, OperatorPrototype>>;
+  confusionPairs: TutorialConfusionPair[];
+  updatedAt: number;
+}
+
+export interface RecognitionCalibration {
+  userPrototypeWeight: number;
+  rerankStrength: number;
+  confidenceBias: number;
+}
+
+export interface TutorialProfileStore {
+  version: "v1.5";
+  captures: TutorialCapture[];
+  shapeProfile: UserShapeProfile;
+  calibration: RecognitionCalibration;
+  updatedAt: number;
+}
+
 export interface UserInputProfile {
   version: "v1.5";
   sampleCount: number;
@@ -134,6 +214,16 @@ export interface UserInputProfile {
   averagePathLength: number;
   familyCounts: Record<GlyphFamily, number>;
   updatedAt: number;
+  tutorialProfile?: UserShapeProfile & {
+    recognitionCalibration?: RecognitionCalibration;
+    calibration?: RecognitionCalibration;
+  };
+  shapeProfile?: UserShapeProfile & {
+    recognitionCalibration?: RecognitionCalibration;
+    calibration?: RecognitionCalibration;
+  };
+  recognitionCalibration?: RecognitionCalibration;
+  calibration?: RecognitionCalibration;
 }
 
 export interface UserInputProfileDelta {

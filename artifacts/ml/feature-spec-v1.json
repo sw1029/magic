@@ -1,0 +1,1153 @@
+{
+  "artifactType": "feature_spec",
+  "modelType": "feature_spec_manifest",
+  "version": "v1",
+  "schemaVersion": "tiny-ml-feature-spec-v1",
+  "datasetSchemaVersion": "tutorial-hybrid-v1",
+  "featureOrder": {
+    "base_candidate_row_v1": [
+      "candidateFamilyId",
+      "candidatePairId",
+      "candidateRank",
+      "heuristicScore",
+      "templateDistance",
+      "topScoreGap",
+      "top1MinusTop2Margin",
+      "strokeCount",
+      "pointCount",
+      "durationMs",
+      "pathLength",
+      "closureGap",
+      "dominantCorners",
+      "endpointClusters",
+      "circularity",
+      "fillRatio",
+      "parallelism",
+      "rawAngleRadians",
+      "qualityClosure",
+      "qualitySmoothness",
+      "qualityStability",
+      "qualityRotationBias"
+    ],
+    "operator_candidate_row_v1": [
+      "operatorId",
+      "hardPairId",
+      "candidateRank",
+      "heuristicScore",
+      "baseScore",
+      "templateDistance",
+      "shapeConfidence",
+      "topScoreGap",
+      "blockedByFlag",
+      "blockedByOperator",
+      "anchorZoneId",
+      "placementAnchorZoneId",
+      "anchorScore",
+      "scaleScore",
+      "gateStrength",
+      "angleRadians",
+      "scaleRatio",
+      "straightness",
+      "corners",
+      "closure",
+      "stackIndex",
+      "existingOperatorsCount",
+      "existingOperatorsMask",
+      "hasVoidCutInStack"
+    ]
+  },
+  "featureNormalization": {
+    "base_candidate_row_v1": {
+      "candidateFamilyId": {
+        "type": "one_hot",
+        "values": [
+          "wind",
+          "earth",
+          "fire",
+          "water",
+          "life"
+        ]
+      },
+      "candidatePairId": {
+        "type": "one_hot",
+        "values": [
+          "earth__fire",
+          "water__life",
+          "recognized__ambiguous",
+          "other"
+        ]
+      },
+      "candidateRank": {
+        "type": "integer_clip",
+        "min": 0,
+        "max": 2
+      },
+      "heuristicScore": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "templateDistance": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1.25
+      },
+      "topScoreGap": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "top1MinusTop2Margin": {
+        "type": "clamp",
+        "min": -1,
+        "max": 1
+      },
+      "strokeCount": {
+        "type": "integer_clip",
+        "min": 0,
+        "max": 8
+      },
+      "pointCount": {
+        "type": "log1p_clip",
+        "max": 256
+      },
+      "durationMs": {
+        "type": "log1p_clip",
+        "max": 4000
+      },
+      "pathLength": {
+        "type": "log1p_clip",
+        "max": 4096
+      },
+      "closureGap": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1.5
+      },
+      "dominantCorners": {
+        "type": "integer_clip",
+        "min": 0,
+        "max": 8
+      },
+      "endpointClusters": {
+        "type": "integer_clip",
+        "min": 0,
+        "max": 8
+      },
+      "circularity": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "fillRatio": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "parallelism": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "rawAngleRadians": {
+        "type": "clamp",
+        "min": -1.5707963267948966,
+        "max": 1.5707963267948966
+      },
+      "qualityClosure": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "qualitySmoothness": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "qualityStability": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "qualityRotationBias": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      }
+    },
+    "operator_candidate_row_v1": {
+      "operatorId": {
+        "type": "one_hot",
+        "values": [
+          "steel_brace",
+          "electric_fork",
+          "ice_bar",
+          "soul_dot",
+          "void_cut",
+          "martial_axis"
+        ]
+      },
+      "hardPairId": {
+        "type": "one_hot",
+        "values": [
+          "void_cut__electric_fork",
+          "ice_bar__partial_stroke",
+          "steel_brace__open_box_like",
+          "martial_axis__blocked_by_void_cut",
+          "other"
+        ]
+      },
+      "candidateRank": {
+        "type": "integer_clip",
+        "min": 0,
+        "max": 2
+      },
+      "heuristicScore": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "baseScore": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "templateDistance": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1.25
+      },
+      "shapeConfidence": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "topScoreGap": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "blockedByFlag": {
+        "type": "binary"
+      },
+      "blockedByOperator": {
+        "type": "one_hot",
+        "values": [
+          "none",
+          "void_cut"
+        ]
+      },
+      "anchorZoneId": {
+        "type": "one_hot",
+        "values": [
+          "upper_left",
+          "upper",
+          "upper_right",
+          "left",
+          "core",
+          "right",
+          "lower_left",
+          "lower",
+          "lower_right"
+        ]
+      },
+      "placementAnchorZoneId": {
+        "type": "one_hot",
+        "values": [
+          "upper_left",
+          "upper",
+          "upper_right",
+          "left",
+          "core",
+          "right",
+          "lower_left",
+          "lower",
+          "lower_right"
+        ]
+      },
+      "anchorScore": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "scaleScore": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "gateStrength": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "angleRadians": {
+        "type": "clamp",
+        "min": -1.5707963267948966,
+        "max": 1.5707963267948966
+      },
+      "scaleRatio": {
+        "type": "clamp",
+        "min": 0,
+        "max": 2
+      },
+      "straightness": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "corners": {
+        "type": "integer_clip",
+        "min": 0,
+        "max": 8
+      },
+      "closure": {
+        "type": "clamp",
+        "min": 0,
+        "max": 1
+      },
+      "stackIndex": {
+        "type": "integer_clip",
+        "min": 0,
+        "max": 8
+      },
+      "existingOperatorsCount": {
+        "type": "integer_clip",
+        "min": 0,
+        "max": 8
+      },
+      "existingOperatorsMask": {
+        "type": "multi_hot",
+        "values": [
+          "steel_brace",
+          "electric_fork",
+          "ice_bar",
+          "soul_dot",
+          "void_cut",
+          "martial_axis"
+        ]
+      },
+      "hasVoidCutInStack": {
+        "type": "binary"
+      }
+    }
+  },
+  "labelSpace": {
+    "baseFamily": [
+      "wind",
+      "earth",
+      "fire",
+      "water",
+      "life"
+    ],
+    "operator": [
+      "steel_brace",
+      "electric_fork",
+      "ice_bar",
+      "soul_dot",
+      "void_cut",
+      "martial_axis"
+    ],
+    "anchorZoneId": [
+      "upper_left",
+      "upper",
+      "upper_right",
+      "left",
+      "core",
+      "right",
+      "lower_left",
+      "lower",
+      "lower_right"
+    ],
+    "tutorialSource": [
+      "trace",
+      "recall",
+      "variation"
+    ]
+  },
+  "supportedPairs": {
+    "base": [
+      "earth__fire",
+      "water__life",
+      "recognized__ambiguous",
+      "other"
+    ],
+    "operator": [
+      "void_cut__electric_fork",
+      "ice_bar__partial_stroke",
+      "steel_brace__open_box_like",
+      "martial_axis__blocked_by_void_cut",
+      "other"
+    ]
+  },
+  "trainingManifest": {
+    "splitManifestArtifact": "artifacts/ml/dataset-split-v1.json",
+    "phases": [
+      {
+        "phase": "public_auxiliary_pretrain",
+        "roles": [
+          "public_auxiliary"
+        ],
+        "splits": [
+          "pretrain"
+        ],
+        "outputs": [
+          "stroke_encoder_embedding",
+          "normalization_prior",
+          "sequence_representation"
+        ],
+        "directSemanticSupervision": false,
+        "reweightPolicy": {
+          "reason": "Quick Draw raw count dominates current public auxiliary inventory and must not drown out dollar_family/CROHME priors.",
+          "appliesToRole": "public_auxiliary",
+          "appliesToDataset": "quickdraw",
+          "publicAuxiliaryContributionCap": 0.35,
+          "syntheticSupervisedContributionFloor": 0.65,
+          "quickdrawMaxShareWithinPublicAuxiliary": 0.6,
+          "quickdrawMaxShareAcrossCombinedOfflineBudget": 0.21,
+          "quickdrawMaxSamplesPerLabelPerPretrainSplit": 6000,
+          "quickdrawRecommendedLabels": [
+            "circle",
+            "triangle",
+            "line",
+            "square"
+          ],
+          "reweightStrategy": [
+            "cap Quick Draw per label before pretrain feature extraction",
+            "rebalance public auxiliary by source after the cap",
+            "reuse public outputs only as frozen normalization/embedding features",
+            "never feed public labels into direct family/operator supervision losses"
+          ]
+        }
+      },
+      {
+        "phase": "base_family_supervised",
+        "primaryRoles": [
+          "synthetic_primary"
+        ],
+        "optionalRoles": [
+          "tutorial_primary"
+        ],
+        "splits": {
+          "synthetic_primary": [
+            "train",
+            "eval",
+            "hard_negative_eval"
+          ],
+          "tutorial_primary": [
+            "adaptation",
+            "acceptance_eval"
+          ]
+        },
+        "rowSpec": "base_candidate_row_v1",
+        "outputs": [
+          "rerank_delta",
+          "recognized_confidence",
+          "ambiguity_probability"
+        ],
+        "publicFeatureReuse": "frozen_normalization_or_embedding_only"
+      },
+      {
+        "phase": "operator_supervised",
+        "primaryRoles": [
+          "synthetic_primary"
+        ],
+        "optionalRoles": [
+          "tutorial_primary"
+        ],
+        "splits": {
+          "synthetic_primary": [
+            "train",
+            "eval",
+            "hard_negative_eval"
+          ],
+          "tutorial_primary": [
+            "adaptation",
+            "acceptance_eval"
+          ]
+        },
+        "rowSpec": "operator_candidate_row_v1",
+        "outputs": [
+          "pairwise_rerank_delta",
+          "operator_confidence",
+          "false_positive_suppression"
+        ],
+        "publicFeatureReuse": "frozen_normalization_or_embedding_only"
+      }
+    ]
+  },
+  "gatePolicy": {
+    "canonicalSemanticAuthority": "rules_first",
+    "baseFamily": {
+      "directCanonicalPredictionForbidden": true,
+      "allowedOutputs": [
+        "rerank_delta",
+        "recognized_confidence",
+        "ambiguity_probability"
+      ],
+      "acceptance": {
+        "familyFlipIncrease": 0
+      }
+    },
+    "operator": {
+      "directCanonicalPredictionForbidden": true,
+      "blockedByHardStop": true,
+      "weakGateUsesCap": {
+        "sourceFeatures": [
+          "anchorScore",
+          "scaleScore",
+          "gateStrength"
+        ],
+        "offAnchorRescueForbidden": true,
+        "wrongScaleRescueForbidden": true
+      },
+      "allowedOutputs": [
+        "pairwise_rerank_delta",
+        "operator_confidence",
+        "false_positive_suppression"
+      ]
+    },
+    "public_auxiliary": {
+      "directFamilyClassifierTraining": "forbidden",
+      "directOperatorClassifierTraining": "forbidden",
+      "semanticLabelOverride": "forbidden"
+    }
+  },
+  "featureRows": {
+    "base_candidate_row_v1": {
+      "id": "base_candidate_row_v1",
+      "rowUnit": "one row per heuristic family candidate inside the rerank window",
+      "rowSelection": {
+        "topK": 3,
+        "maxTopScoreGap": 0.18,
+        "candidateSource": "recognize.ts family candidates"
+      },
+      "supervision": {
+        "allowedRoles": [
+          "synthetic_primary",
+          "tutorial_primary"
+        ],
+        "forbiddenRoles": [
+          "public_auxiliary"
+        ],
+        "publicReuseMode": "frozen_normalization_or_embedding_only"
+      },
+      "optionalAugmentations": [
+        "public_normalization_prior_v1",
+        "public_stroke_encoder_embedding_v1"
+      ],
+      "targets": [
+        {
+          "name": "targetIsCanonicalCandidate",
+          "type": "boolean",
+          "description": "1 when this candidate matches the canonical family"
+        },
+        {
+          "name": "targetRerankDelta",
+          "type": "numeric",
+          "description": "candidate score delta learned by the rerank model",
+          "range": [
+            -1,
+            1
+          ]
+        },
+        {
+          "name": "targetRecognizedConfidence",
+          "type": "numeric",
+          "description": "calibrated recognized confidence for the top candidate",
+          "range": [
+            0,
+            1
+          ]
+        },
+        {
+          "name": "targetAmbiguityProbability",
+          "type": "numeric",
+          "description": "ambiguity probability for close candidate windows",
+          "range": [
+            0,
+            1
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "candidateFamilyId",
+          "type": "categorical",
+          "description": "candidate family id in the heuristic top-k window",
+          "normalization": {
+            "type": "one_hot",
+            "values": [
+              "wind",
+              "earth",
+              "fire",
+              "water",
+              "life"
+            ]
+          }
+        },
+        {
+          "name": "candidatePairId",
+          "type": "categorical",
+          "description": "top confusion pair id for the current candidate window",
+          "normalization": {
+            "type": "one_hot",
+            "values": [
+              "earth__fire",
+              "water__life",
+              "recognized__ambiguous",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "candidateRank",
+          "type": "numeric",
+          "description": "candidate rank within the heuristic window",
+          "normalization": {
+            "type": "integer_clip",
+            "min": 0,
+            "max": 2
+          }
+        },
+        {
+          "name": "heuristicScore",
+          "type": "numeric",
+          "description": "raw heuristic candidate score",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "templateDistance",
+          "type": "numeric",
+          "description": "distance to the family template cloud",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1.25
+          }
+        },
+        {
+          "name": "topScoreGap",
+          "type": "numeric",
+          "description": "top-1 score minus this candidate score",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "top1MinusTop2Margin",
+          "type": "numeric",
+          "description": "top-1 minus top-2 score margin for the sample",
+          "normalization": {
+            "type": "clamp",
+            "min": -1,
+            "max": 1
+          }
+        },
+        {
+          "name": "strokeCount",
+          "type": "numeric",
+          "description": "number of strokes in the input",
+          "normalization": {
+            "type": "integer_clip",
+            "min": 0,
+            "max": 8
+          }
+        },
+        {
+          "name": "pointCount",
+          "type": "numeric",
+          "description": "number of sampled points in the input",
+          "normalization": {
+            "type": "log1p_clip",
+            "max": 256
+          }
+        },
+        {
+          "name": "durationMs",
+          "type": "numeric",
+          "description": "elapsed drawing duration in milliseconds",
+          "normalization": {
+            "type": "log1p_clip",
+            "max": 4000
+          }
+        },
+        {
+          "name": "pathLength",
+          "type": "numeric",
+          "description": "total stroke path length",
+          "normalization": {
+            "type": "log1p_clip",
+            "max": 4096
+          }
+        },
+        {
+          "name": "closureGap",
+          "type": "numeric",
+          "description": "normalized closure gap feature",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1.5
+          }
+        },
+        {
+          "name": "dominantCorners",
+          "type": "numeric",
+          "description": "corner count derived from simplified dominant points",
+          "normalization": {
+            "type": "integer_clip",
+            "min": 0,
+            "max": 8
+          }
+        },
+        {
+          "name": "endpointClusters",
+          "type": "numeric",
+          "description": "clustered endpoint count",
+          "normalization": {
+            "type": "integer_clip",
+            "min": 0,
+            "max": 8
+          }
+        },
+        {
+          "name": "circularity",
+          "type": "numeric",
+          "description": "loop circularity estimate",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "fillRatio",
+          "type": "numeric",
+          "description": "fill ratio for dominant points",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "parallelism",
+          "type": "numeric",
+          "description": "parallel stroke estimate",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "rawAngleRadians",
+          "type": "numeric",
+          "description": "principal raw angle in normalized space",
+          "normalization": {
+            "type": "clamp",
+            "min": -1.5707963267948966,
+            "max": 1.5707963267948966
+          }
+        },
+        {
+          "name": "qualityClosure",
+          "type": "numeric",
+          "description": "closure quality scalar",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "qualitySmoothness",
+          "type": "numeric",
+          "description": "smoothness quality scalar",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "qualityStability",
+          "type": "numeric",
+          "description": "stability quality scalar",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "qualityRotationBias",
+          "type": "numeric",
+          "description": "rotation bias quality scalar",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        }
+      ],
+      "supportedPairs": [
+        "earth__fire",
+        "water__life",
+        "recognized__ambiguous",
+        "other"
+      ]
+    },
+    "operator_candidate_row_v1": {
+      "id": "operator_candidate_row_v1",
+      "rowUnit": "one row per heuristic operator candidate inside the rerank window",
+      "rowSelection": {
+        "topK": 3,
+        "hardPairWindow": 2,
+        "minPairGate": 0.3,
+        "candidateSource": "operators.ts overlay candidates"
+      },
+      "supervision": {
+        "allowedRoles": [
+          "synthetic_primary",
+          "tutorial_primary"
+        ],
+        "forbiddenRoles": [
+          "public_auxiliary"
+        ],
+        "publicReuseMode": "frozen_normalization_or_embedding_only"
+      },
+      "optionalAugmentations": [
+        "public_normalization_prior_v1",
+        "public_stroke_encoder_embedding_v1"
+      ],
+      "targets": [
+        {
+          "name": "targetPairwiseDelta",
+          "type": "numeric",
+          "description": "pairwise rerank delta for hard-negative conflicts",
+          "range": [
+            -1,
+            1
+          ]
+        },
+        {
+          "name": "targetOperatorConfidence",
+          "type": "numeric",
+          "description": "calibrated operator confidence for the top candidate",
+          "range": [
+            0,
+            1
+          ]
+        },
+        {
+          "name": "targetFalsePositiveSuppression",
+          "type": "numeric",
+          "description": "suppression score for off-anchor, wrong-scale, or blocked candidates",
+          "range": [
+            0,
+            1
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "operatorId",
+          "type": "categorical",
+          "description": "overlay operator id for the candidate row",
+          "normalization": {
+            "type": "one_hot",
+            "values": [
+              "steel_brace",
+              "electric_fork",
+              "ice_bar",
+              "soul_dot",
+              "void_cut",
+              "martial_axis"
+            ]
+          }
+        },
+        {
+          "name": "hardPairId",
+          "type": "categorical",
+          "description": "hard-negative pair id for the candidate row",
+          "normalization": {
+            "type": "one_hot",
+            "values": [
+              "void_cut__electric_fork",
+              "ice_bar__partial_stroke",
+              "steel_brace__open_box_like",
+              "martial_axis__blocked_by_void_cut",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "candidateRank",
+          "type": "numeric",
+          "description": "candidate rank within the heuristic operator window",
+          "normalization": {
+            "type": "integer_clip",
+            "min": 0,
+            "max": 2
+          }
+        },
+        {
+          "name": "heuristicScore",
+          "type": "numeric",
+          "description": "final heuristic candidate score before ML delta",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "baseScore",
+          "type": "numeric",
+          "description": "base operator score before rerank",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "templateDistance",
+          "type": "numeric",
+          "description": "distance to the operator template cloud",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1.25
+          }
+        },
+        {
+          "name": "shapeConfidence",
+          "type": "numeric",
+          "description": "shape-only confidence scalar",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "topScoreGap",
+          "type": "numeric",
+          "description": "top-1 operator score minus this candidate score",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "blockedByFlag",
+          "type": "boolean",
+          "description": "1 when rule gates block this operator regardless of ML output",
+          "normalization": {
+            "type": "binary"
+          }
+        },
+        {
+          "name": "blockedByOperator",
+          "type": "categorical",
+          "description": "blocking operator required by the rule gate",
+          "normalization": {
+            "type": "one_hot",
+            "values": [
+              "none",
+              "void_cut"
+            ]
+          }
+        },
+        {
+          "name": "anchorZoneId",
+          "type": "categorical",
+          "description": "best anchor zone for the candidate's preferred anchor bundle",
+          "normalization": {
+            "type": "one_hot",
+            "values": [
+              "upper_left",
+              "upper",
+              "upper_right",
+              "left",
+              "core",
+              "right",
+              "lower_left",
+              "lower",
+              "lower_right"
+            ]
+          }
+        },
+        {
+          "name": "placementAnchorZoneId",
+          "type": "categorical",
+          "description": "best anchor zone across the full overlay frame for placement-aware rerank",
+          "normalization": {
+            "type": "one_hot",
+            "values": [
+              "upper_left",
+              "upper",
+              "upper_right",
+              "left",
+              "core",
+              "right",
+              "lower_left",
+              "lower",
+              "lower_right"
+            ]
+          }
+        },
+        {
+          "name": "anchorScore",
+          "type": "numeric",
+          "description": "anchor placement score",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "scaleScore",
+          "type": "numeric",
+          "description": "scale gate score",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "gateStrength",
+          "type": "numeric",
+          "description": "min(anchorScore, scaleScore) for weak-gate delta caps",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "angleRadians",
+          "type": "numeric",
+          "description": "operator line angle in normalized space",
+          "normalization": {
+            "type": "clamp",
+            "min": -1.5707963267948966,
+            "max": 1.5707963267948966
+          }
+        },
+        {
+          "name": "scaleRatio",
+          "type": "numeric",
+          "description": "operator stroke diagonal relative to the base frame diagonal",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 2
+          }
+        },
+        {
+          "name": "straightness",
+          "type": "numeric",
+          "description": "stroke straightness score",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "corners",
+          "type": "numeric",
+          "description": "simplified corner count",
+          "normalization": {
+            "type": "integer_clip",
+            "min": 0,
+            "max": 8
+          }
+        },
+        {
+          "name": "closure",
+          "type": "numeric",
+          "description": "operator closure score",
+          "normalization": {
+            "type": "clamp",
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "name": "stackIndex",
+          "type": "numeric",
+          "description": "operator insertion index within the overlay stack",
+          "normalization": {
+            "type": "integer_clip",
+            "min": 0,
+            "max": 8
+          }
+        },
+        {
+          "name": "existingOperatorsCount",
+          "type": "numeric",
+          "description": "number of existing operators in the stack",
+          "normalization": {
+            "type": "integer_clip",
+            "min": 0,
+            "max": 8
+          }
+        },
+        {
+          "name": "existingOperatorsMask",
+          "type": "categorical_multi",
+          "description": "multi-hot representation of existing operators in the stack",
+          "normalization": {
+            "type": "multi_hot",
+            "values": [
+              "steel_brace",
+              "electric_fork",
+              "ice_bar",
+              "soul_dot",
+              "void_cut",
+              "martial_axis"
+            ]
+          }
+        },
+        {
+          "name": "hasVoidCutInStack",
+          "type": "boolean",
+          "description": "1 when void_cut already exists in the current stack",
+          "normalization": {
+            "type": "binary"
+          }
+        }
+      ],
+      "supportedPairs": [
+        "void_cut__electric_fork",
+        "ice_bar__partial_stroke",
+        "steel_brace__open_box_like",
+        "martial_axis__blocked_by_void_cut",
+        "other"
+      ]
+    }
+  },
+  "auxiliaryAugmentationContract": {
+    "role": "public_auxiliary",
+    "outputs": [
+      "stroke_encoder_embedding",
+      "normalization_prior",
+      "sequence_representation"
+    ],
+    "injectionMode": "frozen_feature_only",
+    "directSemanticSupervision": false
+  }
+}

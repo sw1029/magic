@@ -379,14 +379,27 @@ export function mountApp(root: HTMLDivElement): void {
           <section id="support-card" class="card">
             <div class="split-head">
               <div>
-                <p class="panel-label">보조 판독 상태</p>
-                <h3 id="support-title">시험 계산 준비 전</h3>
+                <p class="panel-label">핵심 비교</p>
+                <h3 id="support-title">현재 판정과 시험 계산</h3>
               </div>
               <span id="support-status" class="status-chip status-waiting">대기</span>
             </div>
-            <p id="support-copy" class="card-copy">보조 판독과 입력 습관 반영은 최종 판정을 바꾸지 않고 시험 계산으로만 보여 줍니다.</p>
+            <p id="support-copy" class="card-copy">보조 판독과 연습 전/후 비교를 한 카드에서 설명합니다.</p>
             <div id="support-badges" class="promise-inline"></div>
             <div id="support-metrics" class="summary-grid"></div>
+            <div class="insight-tabs">
+              <button id="insight-assist-tab" class="chip-button active" type="button">현재 vs 보조 판독</button>
+              <button id="insight-practice-tab" class="chip-button" type="button">연습 전/후</button>
+            </div>
+            <div id="insight-assist-panel" class="insight-panel">
+              <div id="personalization-compare" class="personalization-grid"></div>
+              <div id="personalization-effects" class="metric-list"></div>
+            </div>
+            <div id="insight-practice-panel" class="insight-panel" hidden>
+              <div id="tutorial-compare-grid" class="personalization-grid tutorial-compare-grid"></div>
+              <div id="tutorial-compare-effects" class="metric-list"></div>
+              <div id="tutorial-compare-metrics" class="summary-grid"></div>
+            </div>
           </section>
           <section id="tutorial-card" class="card">
             <div class="split-head">
@@ -409,51 +422,29 @@ export function mountApp(root: HTMLDivElement): void {
               <button id="tutorial-clear-button">연습 지우기</button>
             </div>
           </section>
-          <section id="personalization-card" class="card">
-            <div class="split-head">
-              <div>
-                <p class="panel-label">입력 습관 반영 비교</p>
-                <h3 id="personalization-title">현재 판정과 시험 계산</h3>
-              </div>
-            </div>
-            <p id="personalization-copy" class="card-copy">실제 판정, 보조 판독, 입력 습관 반영 시험 계산을 한 화면에서 비교합니다.</p>
-            <div id="personalization-compare" class="personalization-grid"></div>
-            <div id="personalization-effects" class="metric-list"></div>
-          </section>
-          <section id="tutorial-compare-card" class="card">
-            <div class="split-head">
-              <div>
-                <p class="panel-label">연습 전 / 후 비교</p>
-                <h3 id="tutorial-compare-title">같은 입력 다시 보기</h3>
-              </div>
-              <span id="tutorial-compare-status" class="status-chip status-waiting">대기</span>
-            </div>
-            <p id="tutorial-compare-copy" class="card-copy">
-              같은 입력을 연습 전, 보조 판독 시험 계산, 연습 후로 나눠 비교합니다.
-            </p>
-            <div id="tutorial-compare-grid" class="personalization-grid tutorial-compare-grid"></div>
-            <div id="tutorial-compare-effects" class="metric-list"></div>
-            <div id="tutorial-compare-metrics" class="summary-grid"></div>
-          </section>
           <section id="principles-card" class="card">
             <div class="split-head">
               <div>
-                <p class="panel-label">이번 화면에 반영된 UX 원칙</p>
-                <h3>시연 포인트</h3>
+                <p class="panel-label">보는 기준</p>
+                <h3 id="reading-guide-title">설명 기준과 모범 선례</h3>
               </div>
             </div>
+            <p id="reading-guide-copy" class="card-copy">
+              화면에서 무엇을 기준으로 읽는지와, 안정적으로 보이는 예시를 함께 보여 줍니다.
+            </p>
             <div id="principles-list" class="principles-list"></div>
-          </section>
-          <section id="exemplar-card" class="card">
-            <div class="split-head">
-              <div>
-                <p class="panel-label">모범 선례 패턴칩</p>
-                <h3 id="exemplar-title">안정적으로 읽히는 기준</h3>
+            <div id="reading-guide-exemplar" class="reading-guide-exemplar">
+              <div class="split-head">
+                <div>
+                  <p class="panel-label">모범 선례 패턴칩</p>
+                  <h3 id="exemplar-title">안정적으로 읽히는 기준</h3>
+                </div>
               </div>
+              <p id="exemplar-copy" class="card-copy">내부 규칙 문자열을 바로 시각화한 작은 모범 선례입니다.</p>
+              <div id="exemplar-grid" class="exemplar-grid"></div>
             </div>
-            <p id="exemplar-copy" class="card-copy">내부 규칙 문자열을 바로 시각화한 작은 모범 선례입니다.</p>
-            <div id="exemplar-grid" class="exemplar-grid"></div>
           </section>
+          <section id="exemplar-card" class="card" hidden aria-hidden="true"></section>
           <section id="quality-card" class="card">
             <div class="split-head">
               <div>
@@ -578,6 +569,10 @@ export function mountApp(root: HTMLDivElement): void {
   const supportCopy = select<HTMLParagraphElement>(root, "#support-copy");
   const supportBadges = select<HTMLDivElement>(root, "#support-badges");
   const supportMetrics = select<HTMLDivElement>(root, "#support-metrics");
+  const insightAssistTab = select<HTMLButtonElement>(root, "#insight-assist-tab");
+  const insightPracticeTab = select<HTMLButtonElement>(root, "#insight-practice-tab");
+  const insightAssistPanel = select<HTMLDivElement>(root, "#insight-assist-panel");
+  const insightPracticePanel = select<HTMLDivElement>(root, "#insight-practice-panel");
   const tutorialCard = select<HTMLElement>(root, "#tutorial-card");
   const tutorialTitle = select<HTMLElement>(root, "#tutorial-title");
   const tutorialStatus = select<HTMLElement>(root, "#tutorial-status");
@@ -589,19 +584,15 @@ export function mountApp(root: HTMLDivElement): void {
   const tutorialCaptureButton = select<HTMLButtonElement>(root, "#tutorial-capture-button");
   const tutorialResultButton = select<HTMLButtonElement>(root, "#tutorial-result-button");
   const tutorialClearButton = select<HTMLButtonElement>(root, "#tutorial-clear-button");
-  const personalizationCard = select<HTMLElement>(root, "#personalization-card");
-  const personalizationTitle = select<HTMLElement>(root, "#personalization-title");
-  const personalizationCopy = select<HTMLParagraphElement>(root, "#personalization-copy");
   const personalizationCompare = select<HTMLDivElement>(root, "#personalization-compare");
   const personalizationEffects = select<HTMLDivElement>(root, "#personalization-effects");
-  const tutorialCompareCard = select<HTMLElement>(root, "#tutorial-compare-card");
-  const tutorialCompareTitle = select<HTMLElement>(root, "#tutorial-compare-title");
-  const tutorialCompareStatus = select<HTMLElement>(root, "#tutorial-compare-status");
-  const tutorialCompareCopy = select<HTMLParagraphElement>(root, "#tutorial-compare-copy");
   const tutorialCompareGrid = select<HTMLDivElement>(root, "#tutorial-compare-grid");
   const tutorialCompareEffects = select<HTMLDivElement>(root, "#tutorial-compare-effects");
   const tutorialCompareMetrics = select<HTMLDivElement>(root, "#tutorial-compare-metrics");
   const principlesCard = select<HTMLElement>(root, "#principles-card");
+  const readingGuideTitle = select<HTMLElement>(root, "#reading-guide-title");
+  const readingGuideCopy = select<HTMLParagraphElement>(root, "#reading-guide-copy");
+  const readingGuideExemplar = select<HTMLDivElement>(root, "#reading-guide-exemplar");
   const principlesList = select<HTMLDivElement>(root, "#principles-list");
   const exemplarCard = select<HTMLElement>(root, "#exemplar-card");
   const exemplarTitle = select<HTMLElement>(root, "#exemplar-title");
@@ -649,6 +640,7 @@ export function mountApp(root: HTMLDivElement): void {
   let tutorialCompletedStepIds: string[] = [];
   let tutorialBeforeSnapshot: TutorialComparisonSnapshot | null = null;
   let tutorialAfterSnapshot: TutorialComparisonSnapshot | null = null;
+  let insightTab: "assist" | "practice" = "assist";
   const setTutorialProfileStore = (nextStore: TutorialProfileStore): void => {
     tutorialProfileStore = nextStore;
     syncTutorialHookMetadata(root, nextStore);
@@ -971,6 +963,7 @@ export function mountApp(root: HTMLDivElement): void {
 
     tutorialFlowActive = true;
     tutorialAfterSnapshot = null;
+    insightTab = "assist";
     render();
   });
 
@@ -1012,6 +1005,7 @@ export function mountApp(root: HTMLDivElement): void {
 
     tutorialAfterSnapshot = replayTutorialComparisonSnapshot(tutorialBeforeSnapshot);
     tutorialFlowActive = true;
+    insightTab = "practice";
     render();
   });
 
@@ -1022,6 +1016,17 @@ export function mountApp(root: HTMLDivElement): void {
     tutorialCompletedStepIds = [];
     tutorialBeforeSnapshot = null;
     tutorialAfterSnapshot = null;
+    insightTab = "assist";
+    render();
+  });
+
+  insightAssistTab.addEventListener("click", () => {
+    insightTab = "assist";
+    render();
+  });
+
+  insightPracticeTab.addEventListener("click", () => {
+    insightTab = "practice";
     render();
   });
 
@@ -1262,17 +1267,16 @@ export function mountApp(root: HTMLDivElement): void {
     supportStripBadges.innerHTML = personalizationModel.stripBadges;
     syncScenarioButtons(scenarioChipButtons, demoView.selectedScenarioId);
 
+    const showExtendedPanels = demoView.viewPreset === "workshop";
     outcomeCard.hidden = !demoView.compareMode;
     whyCard.hidden = !demoView.explainResult;
     qualityCard.hidden = !demoView.showQualitySplit;
-    recentSealsCard.hidden = !demoView.showRecentSeals;
+    recentSealsCard.hidden = !demoView.showRecentSeals || !showExtendedPanels;
     supportCard.hidden = !demoView.showPersonalizationPanel;
     tutorialCard.hidden = !demoView.showTutorialFlowPanel;
-    personalizationCard.hidden = !demoView.showPersonalizationPanel;
-    tutorialCompareCard.hidden = !demoView.showTutorialFlowPanel;
-    principlesCard.hidden = !demoView.showPersonalizationPanel;
-    exemplarCard.hidden = !demoView.showExemplarPanel;
-    profileCard.hidden = !demoView.showProfilePanel;
+    principlesCard.hidden = !demoView.showPersonalizationPanel && !demoView.showExemplarPanel;
+    exemplarCard.hidden = true;
+    profileCard.hidden = !demoView.showProfilePanel || !showExtendedPanels;
     logCard.hidden = !demoView.showLogViewer;
 
     phaseTitle.textContent = phaseTitleFor(phase, baseSealed, overlayAuthoringStarted);
@@ -1411,12 +1415,16 @@ export function mountApp(root: HTMLDivElement): void {
         : "품질 반영을 끈 상태에서는 모양 판정과 기본 결과감만 설명합니다.";
     whyList.innerHTML = renderWhyPanel(baseDisplay, compare, demoView.qualityInfluence, overlayLive, compilePreview);
 
-    supportTitle.textContent = personalizationModel.cardTitle;
-    supportStatus.textContent = personalizationModel.cardStatusLabel;
-    supportStatus.className = `status-chip status-${personalizationModel.cardStatusTone}`;
-    supportCopy.textContent = personalizationModel.cardCopy;
+    supportTitle.textContent = insightTab === "assist" ? "현재 판정과 시험 계산" : tutorialModel.compareTitle;
+    supportStatus.textContent = insightTab === "assist" ? personalizationModel.cardStatusLabel : tutorialModel.compareStatusLabel;
+    supportStatus.className = `status-chip status-${insightTab === "assist" ? personalizationModel.cardStatusTone : tutorialModel.compareStatusTone}`;
+    supportCopy.textContent = insightTab === "assist" ? personalizationModel.compareCopy : tutorialModel.compareCopy;
     supportBadges.innerHTML = personalizationModel.cardBadges;
     supportMetrics.innerHTML = personalizationModel.metricRows;
+    insightAssistTab.className = ["chip-button", insightTab === "assist" ? "active" : ""].filter(Boolean).join(" ");
+    insightPracticeTab.className = ["chip-button", insightTab === "practice" ? "active" : ""].filter(Boolean).join(" ");
+    insightAssistPanel.hidden = insightTab !== "assist";
+    insightPracticePanel.hidden = insightTab !== "practice";
     tutorialTitle.textContent = tutorialModel.title;
     tutorialStatus.textContent = tutorialModel.statusLabel;
     tutorialStatus.className = `status-chip status-${tutorialModel.statusTone}`;
@@ -1428,18 +1436,15 @@ export function mountApp(root: HTMLDivElement): void {
     tutorialCaptureButton.disabled = tutorialModel.captureDisabled;
     tutorialResultButton.disabled = tutorialModel.resultDisabled;
     tutorialClearButton.disabled = tutorialModel.clearDisabled;
-    personalizationTitle.textContent = personalizationModel.compareTitle;
-    personalizationCopy.textContent = personalizationModel.compareCopy;
     personalizationCompare.innerHTML = personalizationModel.compareLanes;
     personalizationEffects.innerHTML = personalizationModel.effectRows;
-    tutorialCompareTitle.textContent = tutorialModel.compareTitle;
-    tutorialCompareStatus.textContent = tutorialModel.compareStatusLabel;
-    tutorialCompareStatus.className = `status-chip status-${tutorialModel.compareStatusTone}`;
-    tutorialCompareCopy.textContent = tutorialModel.compareCopy;
     tutorialCompareGrid.innerHTML = tutorialModel.compareGrid;
     tutorialCompareEffects.innerHTML = tutorialModel.compareEffects;
     tutorialCompareMetrics.innerHTML = tutorialModel.compareMetrics;
+    readingGuideTitle.textContent = "설명 기준과 모범 선례";
+    readingGuideCopy.textContent = "같은 모양은 같은 종류로 유지한 채, 화면에서 무엇을 기준으로 읽는지와 안정적인 예시를 함께 보여 줍니다.";
     principlesList.innerHTML = renderHciPrinciples();
+    readingGuideExemplar.hidden = !demoView.showExemplarPanel;
     exemplarTitle.textContent = personalizationModel.exemplarTitle;
     exemplarCopy.textContent = personalizationModel.exemplarCopy;
     exemplarGrid.innerHTML = personalizationModel.exemplarGrid;
@@ -2539,6 +2544,15 @@ function buildTutorialFlowModel(args: {
         <p class="mini-label">지금 따라 그릴 기준</p>
         <h4>${currentStep.title}</h4>
         <p>${currentStep.instruction}</p>
+        <section class="tutorial-shape-guide">
+          <p class="mini-label">무슨 모양을 그리면 되나요?</p>
+          <strong>${currentStep.shapeSummary}</strong>
+          <div class="tutorial-shape-pills">
+            ${currentStep.shapeChecklist
+              .map((item) => `<span class="tutorial-shape-pill">${item}</span>`)
+              .join("")}
+          </div>
+        </section>
         <div class="promise-inline">${stepBadges}</div>
         <p class="tutorial-step-note">${stepState.copy}</p>
       </div>
@@ -2846,11 +2860,8 @@ function buildPersonalizationDemoModel(
     ].join(""),
     metricRows: renderSummaryRows([
       ["연습 입력 누적", `${tutorialSamples}회`],
-      ["기본 모양 연습", `${familySamples}회`],
-      ["추가 효과 연습", `${operatorSamples}회`],
       ["반영 단계", personalizationStageLabel(stage)],
-      ["보조 판독 준비", shadowReady ? "연결됨" : "준비 중"],
-      ["입력 습관 반영", stage === "none" ? "아직 없음" : "시험 계산 중"]
+      ["보조 판독 준비", shadowReady ? "연결됨" : "준비 중"]
     ]),
     compareTitle: "실제 판정 / 보조 판독 / 입력 습관 반영",
     compareCopy: "실제 판정은 그대로 두고, 보조 판독과 입력 습관 반영이 후보를 어떻게 다시 읽는지만 비교합니다.",

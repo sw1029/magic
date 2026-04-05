@@ -1,0 +1,3296 @@
+{
+  "artifactType": "base_rerank_model",
+  "modelType": "gradient_boosting_candidate_rerank",
+  "version": "v1",
+  "schemaVersion": "tiny-ml-base-rerank-v1",
+  "datasetSchemaVersion": "tutorial-hybrid-v1",
+  "rowSpec": "base_candidate_row_v1",
+  "featureOrder": [
+    "candidateFamilyId",
+    "candidatePairId",
+    "candidateRank",
+    "heuristicScore",
+    "templateDistance",
+    "topScoreGap",
+    "top1MinusTop2Margin",
+    "strokeCount",
+    "pointCount",
+    "durationMs",
+    "pathLength",
+    "closureGap",
+    "dominantCorners",
+    "endpointClusters",
+    "circularity",
+    "fillRatio",
+    "parallelism",
+    "rawAngleRadians",
+    "qualityClosure",
+    "qualitySmoothness",
+    "qualityStability",
+    "qualityRotationBias"
+  ],
+  "featureNormalization": {
+    "candidateFamilyId": {
+      "type": "one_hot",
+      "values": [
+        "wind",
+        "earth",
+        "fire",
+        "water",
+        "life"
+      ]
+    },
+    "candidatePairId": {
+      "type": "one_hot",
+      "values": [
+        "earth__fire",
+        "water__life",
+        "recognized__ambiguous",
+        "other"
+      ]
+    },
+    "candidateRank": {
+      "type": "integer_clip",
+      "min": 0,
+      "max": 2
+    },
+    "heuristicScore": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "templateDistance": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1.25
+    },
+    "topScoreGap": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "top1MinusTop2Margin": {
+      "type": "clamp",
+      "min": -1,
+      "max": 1
+    },
+    "strokeCount": {
+      "type": "integer_clip",
+      "min": 0,
+      "max": 8
+    },
+    "pointCount": {
+      "type": "log1p_clip",
+      "max": 256
+    },
+    "durationMs": {
+      "type": "log1p_clip",
+      "max": 4000
+    },
+    "pathLength": {
+      "type": "log1p_clip",
+      "max": 4096
+    },
+    "closureGap": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1.5
+    },
+    "dominantCorners": {
+      "type": "integer_clip",
+      "min": 0,
+      "max": 8
+    },
+    "endpointClusters": {
+      "type": "integer_clip",
+      "min": 0,
+      "max": 8
+    },
+    "circularity": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "fillRatio": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "parallelism": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "rawAngleRadians": {
+      "type": "clamp",
+      "min": -1.5707963267948966,
+      "max": 1.5707963267948966
+    },
+    "qualityClosure": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "qualitySmoothness": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "qualityStability": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "qualityRotationBias": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    }
+  },
+  "expandedFeatureNames": [
+    "candidateFamilyId=wind",
+    "candidateFamilyId=earth",
+    "candidateFamilyId=fire",
+    "candidateFamilyId=water",
+    "candidateFamilyId=life",
+    "candidatePairId=earth__fire",
+    "candidatePairId=water__life",
+    "candidatePairId=recognized__ambiguous",
+    "candidatePairId=other",
+    "candidateRank",
+    "heuristicScore",
+    "templateDistance",
+    "topScoreGap",
+    "top1MinusTop2Margin",
+    "strokeCount",
+    "pointCount",
+    "durationMs",
+    "pathLength",
+    "closureGap",
+    "dominantCorners",
+    "endpointClusters",
+    "circularity",
+    "fillRatio",
+    "parallelism",
+    "rawAngleRadians",
+    "qualityClosure",
+    "qualitySmoothness",
+    "qualityStability",
+    "qualityRotationBias"
+  ],
+  "labelSpace": [
+    "wind",
+    "earth",
+    "fire",
+    "water",
+    "life"
+  ],
+  "supportedPairs": [
+    "earth__fire",
+    "water__life",
+    "recognized__ambiguous",
+    "other"
+  ],
+  "trainingManifest": {
+    "splitManifestArtifact": "artifacts/ml/dataset-split-v1.json",
+    "phases": [
+      {
+        "phase": "public_auxiliary_pretrain",
+        "roles": [
+          "public_auxiliary"
+        ],
+        "splits": [
+          "pretrain"
+        ],
+        "outputs": [
+          "stroke_encoder_embedding",
+          "normalization_prior",
+          "sequence_representation"
+        ],
+        "directSemanticSupervision": false,
+        "reweightPolicy": {
+          "reason": "Quick Draw raw count dominates current public auxiliary inventory and must not drown out dollar_family/CROHME priors.",
+          "appliesToRole": "public_auxiliary",
+          "appliesToDataset": "quickdraw",
+          "publicAuxiliaryContributionCap": 0.35,
+          "syntheticSupervisedContributionFloor": 0.65,
+          "quickdrawMaxShareWithinPublicAuxiliary": 0.6,
+          "quickdrawMaxShareAcrossCombinedOfflineBudget": 0.21,
+          "quickdrawMaxSamplesPerLabelPerPretrainSplit": 6000,
+          "quickdrawRecommendedLabels": [
+            "circle",
+            "triangle",
+            "line",
+            "square"
+          ],
+          "reweightStrategy": [
+            "cap Quick Draw per label before pretrain feature extraction",
+            "rebalance public auxiliary by source after the cap",
+            "reuse public outputs only as frozen normalization/embedding features",
+            "never feed public labels into direct family/operator supervision losses"
+          ]
+        }
+      },
+      {
+        "phase": "base_family_supervised",
+        "primaryRoles": [
+          "synthetic_primary"
+        ],
+        "optionalRoles": [
+          "tutorial_primary"
+        ],
+        "splits": {
+          "synthetic_primary": [
+            "train",
+            "eval",
+            "hard_negative_eval"
+          ],
+          "tutorial_primary": [
+            "adaptation",
+            "acceptance_eval"
+          ]
+        },
+        "rowSpec": "base_candidate_row_v1",
+        "outputs": [
+          "rerank_delta",
+          "recognized_confidence",
+          "ambiguity_probability"
+        ],
+        "publicFeatureReuse": "frozen_normalization_or_embedding_only"
+      },
+      {
+        "phase": "operator_supervised",
+        "primaryRoles": [
+          "synthetic_primary"
+        ],
+        "optionalRoles": [
+          "tutorial_primary"
+        ],
+        "splits": {
+          "synthetic_primary": [
+            "train",
+            "eval",
+            "hard_negative_eval"
+          ],
+          "tutorial_primary": [
+            "adaptation",
+            "acceptance_eval"
+          ]
+        },
+        "rowSpec": "operator_candidate_row_v1",
+        "outputs": [
+          "pairwise_rerank_delta",
+          "operator_confidence",
+          "false_positive_suppression"
+        ],
+        "publicFeatureReuse": "frozen_normalization_or_embedding_only"
+      }
+    ]
+  },
+  "gatePolicy": {
+    "directCanonicalPredictionForbidden": true,
+    "allowedOutputs": [
+      "rerank_delta",
+      "recognized_confidence",
+      "ambiguity_probability"
+    ],
+    "acceptance": {
+      "familyFlipIncrease": 0
+    }
+  },
+  "trainingDatasets": [
+    {
+      "name": "bootstrap-train",
+      "preset": "bootstrap",
+      "split": "train",
+      "countPerLabel": 240,
+      "seed": 1011,
+      "path": "/tmp/magic-base-family-baseline-oxdcxrqj/synthetic-bootstrap-train.ndjson"
+    },
+    {
+      "name": "tutorial-like-train",
+      "preset": "tutorial-like",
+      "split": "train",
+      "countPerLabel": 180,
+      "seed": 1012,
+      "path": "/tmp/magic-base-family-baseline-oxdcxrqj/synthetic-tutorial-like-train.ndjson"
+    },
+    {
+      "name": "hard-negative-train",
+      "preset": "hard-negative",
+      "split": "train",
+      "countPerLabel": 140,
+      "seed": 1013,
+      "path": "/tmp/magic-base-family-baseline-oxdcxrqj/synthetic-hard-negative-train.ndjson"
+    },
+    {
+      "name": "bootstrap-eval",
+      "preset": "bootstrap",
+      "split": "eval",
+      "countPerLabel": 96,
+      "seed": 2011,
+      "path": "/tmp/magic-base-family-baseline-oxdcxrqj/synthetic-bootstrap-eval.ndjson"
+    },
+    {
+      "name": "tutorial-like-eval",
+      "preset": "tutorial-like",
+      "split": "eval",
+      "countPerLabel": 84,
+      "seed": 2012,
+      "path": "/tmp/magic-base-family-baseline-oxdcxrqj/synthetic-tutorial-like-eval.ndjson"
+    },
+    {
+      "name": "hard-negative-eval",
+      "preset": "hard-negative",
+      "split": "hard_negative_eval",
+      "countPerLabel": 132,
+      "seed": 3011,
+      "path": "/tmp/magic-base-family-baseline-oxdcxrqj/synthetic-hard-negative-eval.ndjson"
+    }
+  ],
+  "models": {
+    "main": {
+      "name": "gradient_boosting",
+      "model": {
+        "family": "GradientBoostingClassifier",
+        "classes": [
+          0,
+          1
+        ],
+        "nFeatures": 29,
+        "learningRate": 0.06,
+        "nEstimators": 56,
+        "maxDepth": 2,
+        "minSamplesLeaf": 10,
+        "subsample": 0.9,
+        "initProbability": 0.529372,
+        "treeParams": {
+          "estimators": [
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.094233,
+                0.05334,
+                -2.0,
+                -2.0,
+                0.766306,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.002368,
+                0.377883,
+                1.713128,
+                -1.518166,
+                -0.449551,
+                -1.888808,
+                1.889029
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.094233,
+                0.05334,
+                -2.0,
+                -2.0,
+                0.119857,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.002025,
+                0.354052,
+                1.62273,
+                -1.407901,
+                -0.418469,
+                -1.951981,
+                -0.611365
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.094244,
+                0.05334,
+                -2.0,
+                -2.0,
+                0.766306,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.004852,
+                0.334165,
+                1.546399,
+                -1.361721,
+                -0.395541,
+                -1.660806,
+                1.823423
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.094233,
+                0.051972,
+                -2.0,
+                -2.0,
+                0.119857,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.001068,
+                0.314341,
+                1.486973,
+                -1.102676,
+                -0.373895,
+                -1.76949,
+                -0.528167
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092921,
+                0.05598,
+                -2.0,
+                -2.0,
+                0.766306,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000458,
+                0.294995,
+                1.400671,
+                -1.680542,
+                -0.345987,
+                -1.494626,
+                1.755156
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.095863,
+                0.054112,
+                -2.0,
+                -2.0,
+                0.119857,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001433,
+                0.270589,
+                1.329505,
+                -1.335703,
+                -0.335107,
+                -1.63268,
+                -0.463532
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092921,
+                0.05598,
+                -2.0,
+                -2.0,
+                0.76729,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.004064,
+                0.265386,
+                1.314647,
+                -1.454198,
+                -0.307078,
+                -1.372759,
+                1.686139
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.095863,
+                0.05334,
+                -2.0,
+                -2.0,
+                0.762213,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000791,
+                0.242056,
+                1.253129,
+                -1.047042,
+                -0.299636,
+                -1.359332,
+                1.547164
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.095863,
+                0.05598,
+                -2.0,
+                -2.0,
+                0.129386,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.002047,
+                0.230341,
+                1.203632,
+                -1.312178,
+                -0.2788,
+                -1.477551,
+                -0.324893
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092921,
+                0.05598,
+                -2.0,
+                -2.0,
+                0.092822,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.001677,
+                0.221791,
+                1.191849,
+                -1.343062,
+                -0.258555,
+                -1.430788,
+                -0.314668
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.094233,
+                0.051972,
+                -2.0,
+                -2.0,
+                0.119636,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000247,
+                0.205721,
+                1.176647,
+                -0.970804,
+                -0.245271,
+                -1.380323,
+                -0.27555
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                10,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.09293,
+                0.686951,
+                -2.0,
+                -2.0,
+                0.766306,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000749,
+                0.194787,
+                0.089152,
+                1.346773,
+                -0.227379,
+                -1.149603,
+                1.594583
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.094233,
+                0.051428,
+                -2.0,
+                -2.0,
+                0.762213,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.00019,
+                0.182005,
+                1.118408,
+                -0.839941,
+                -0.215435,
+                -1.123482,
+                1.481495
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                10,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092242,
+                0.68749,
+                -2.0,
+                -2.0,
+                0.08645,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001086,
+                0.173028,
+                0.048721,
+                1.304644,
+                -0.201683,
+                -1.30341,
+                -0.169769
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.095835,
+                0.05334,
+                -2.0,
+                -2.0,
+                0.762213,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001739,
+                0.156701,
+                1.02257,
+                -0.944897,
+                -0.195926,
+                -1.083461,
+                1.436063
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                10,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092242,
+                0.68749,
+                -2.0,
+                -2.0,
+                0.063263,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001336,
+                0.152997,
+                0.006498,
+                1.2644,
+                -0.179357,
+                -1.279074,
+                -0.178777
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092242,
+                0.05219,
+                -2.0,
+                -2.0,
+                0.766306,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000441,
+                0.146388,
+                1.030303,
+                -0.86499,
+                -0.170261,
+                -1.005765,
+                1.459708
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                7,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.101241,
+                0.5,
+                -2.0,
+                -2.0,
+                0.757178,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.001609,
+                0.12174,
+                1.227566,
+                -0.046967,
+                -0.176781,
+                -1.065797,
+                1.479937
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.095863,
+                0.049987,
+                -2.0,
+                -2.0,
+                0.119857,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000515,
+                0.126624,
+                0.981178,
+                -0.710986,
+                -0.153666,
+                -1.194682,
+                -0.050888
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092921,
+                0.055725,
+                -2.0,
+                -2.0,
+                0.09694,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000993,
+                0.121202,
+                0.925057,
+                -1.170255,
+                -0.14101,
+                -1.175729,
+                0.027225
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                7,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.101241,
+                0.5,
+                -2.0,
+                -2.0,
+                0.757178,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.001707,
+                0.103537,
+                1.178023,
+                -0.034077,
+                -0.149044,
+                -0.991198,
+                1.448319
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                7,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.101236,
+                0.5,
+                -2.0,
+                -2.0,
+                0.757178,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.001285,
+                0.097916,
+                1.160078,
+                -0.033636,
+                -0.142697,
+                -0.984724,
+                1.410386
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                21,
+                -2,
+                -2,
+                16,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.101241,
+                0.000297,
+                -2.0,
+                -2.0,
+                4.375737,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000835,
+                0.091811,
+                0.066165,
+                1.173584,
+                -0.135116,
+                -1.012454,
+                0.500068
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                7,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.104639,
+                0.5,
+                -2.0,
+                -2.0,
+                0.742929,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000347,
+                0.082061,
+                1.148053,
+                -0.129651,
+                -0.133444,
+                -0.991537,
+                1.600955
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                13,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092242,
+                0.028965,
+                -2.0,
+                -2.0,
+                0.096907,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001234,
+                0.089248,
+                -1.844009,
+                0.810292,
+                -0.105233,
+                -1.100095,
+                0.14032
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                21,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.105913,
+                0.000297,
+                -2.0,
+                -2.0,
+                0.738473,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000437,
+                0.072152,
+                -0.062913,
+                1.164093,
+                -0.123112,
+                -0.988244,
+                1.980713
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                18,
+                -2,
+                -2,
+                1,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.101241,
+                0.873518,
+                -2.0,
+                -2.0,
+                0.5,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000213,
+                0.073048,
+                0.956662,
+                -0.159155,
+                -0.109661,
+                -1.079934,
+                -0.297736
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                12,
+                1,
+                -2,
+                -2,
+                24,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.050242,
+                0.5,
+                -2.0,
+                -2.0,
+                1.182238,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000577,
+                0.052563,
+                0.274944,
+                2.5421,
+                -0.139021,
+                -1.211035,
+                1.687027
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                26,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.095863,
+                0.660099,
+                -2.0,
+                -2.0,
+                0.119857,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001474,
+                0.072174,
+                -0.140223,
+                1.026185,
+                -0.091564,
+                -1.072256,
+                0.077509
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                12,
+                1,
+                -2,
+                -2,
+                24,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.050102,
+                0.5,
+                -2.0,
+                -2.0,
+                1.182238,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000318,
+                0.049389,
+                0.254082,
+                2.45005,
+                -0.126331,
+                -1.190296,
+                1.634551
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                26,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.037732,
+                0.023979,
+                -2.0,
+                -2.0,
+                0.743575,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000735,
+                0.113628,
+                1.119464,
+                1.188136,
+                -0.050863,
+                -0.934622,
+                0.398347
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                13,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092242,
+                0.028012,
+                -2.0,
+                -2.0,
+                0.051607,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000707,
+                0.068437,
+                -1.845301,
+                0.747737,
+                -0.080509,
+                -1.105678,
+                0.054854
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                12,
+                1,
+                -2,
+                -2,
+                24,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.050242,
+                0.5,
+                -2.0,
+                -2.0,
+                1.197069,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000224,
+                0.042914,
+                0.215075,
+                2.368391,
+                -0.111312,
+                -1.167523,
+                1.540104
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                26,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.037719,
+                0.023979,
+                -2.0,
+                -2.0,
+                0.740781,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001406,
+                0.101692,
+                1.104079,
+                1.153219,
+                -0.046932,
+                -0.939003,
+                0.395543
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                21,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.106943,
+                0.000297,
+                -2.0,
+                -2.0,
+                0.737978,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.00022,
+                0.049342,
+                -0.198056,
+                1.104259,
+                -0.085845,
+                -0.91207,
+                1.842391
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                26,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.037734,
+                0.023979,
+                -2.0,
+                -2.0,
+                0.73983,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000868,
+                0.093208,
+                1.09388,
+                1.153587,
+                -0.042943,
+                -0.890104,
+                0.340988
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.037732,
+                0.023979,
+                -2.0,
+                -2.0,
+                0.002802,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.001588,
+                0.088131,
+                1.087019,
+                1.144681,
+                -0.037165,
+                -0.911953,
+                0.315535
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                12,
+                1,
+                -2,
+                -2,
+                24,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.050242,
+                0.5,
+                -2.0,
+                -2.0,
+                1.182238,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000877,
+                0.036055,
+                0.168491,
+                2.329493,
+                -0.089407,
+                -1.155222,
+                1.501306
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                26,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.037732,
+                0.023979,
+                -2.0,
+                -2.0,
+                0.73983,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000702,
+                0.082007,
+                1.079364,
+                1.137624,
+                -0.037406,
+                -0.857705,
+                0.34453
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                7,
+                -2,
+                -2,
+                18,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.03691,
+                0.5,
+                -2.0,
+                -2.0,
+                0.893256,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001399,
+                0.077788,
+                1.082543,
+                1.128637,
+                -0.035907,
+                -0.024298,
+                -1.213377
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                26,
+                -2,
+                -2,
+                1,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092172,
+                0.651636,
+                -2.0,
+                -2.0,
+                0.5,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000751,
+                0.047095,
+                -0.324044,
+                0.980241,
+                -0.054354,
+                -0.859303,
+                0.416212
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                12,
+                1,
+                -2,
+                -2,
+                24,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.050242,
+                0.5,
+                -2.0,
+                -2.0,
+                1.182238,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000668,
+                0.029755,
+                0.122654,
+                2.222175,
+                -0.079534,
+                -1.115129,
+                1.375389
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                21,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.106941,
+                0.000297,
+                -2.0,
+                -2.0,
+                0.737739,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.001094,
+                0.036944,
+                -0.206149,
+                1.041383,
+                -0.0627,
+                -0.833933,
+                1.794074
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                12,
+                -2,
+                -2,
+                18,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.03691,
+                0.043664,
+                -2.0,
+                -2.0,
+                0.873693,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001538,
+                0.06902,
+                1.074615,
+                1.254706,
+                -0.031693,
+                -0.003957,
+                -1.118361
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                21,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.107491,
+                0.000489,
+                -2.0,
+                -2.0,
+                0.737739,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000181,
+                0.032685,
+                -0.25447,
+                1.029945,
+                -0.059277,
+                -0.8255,
+                1.761756
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                21,
+                -2,
+                -2,
+                21,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.037732,
+                0.000539,
+                -2.0,
+                -2.0,
+                0.02424,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000614,
+                0.063471,
+                1.080684,
+                1.062245,
+                -0.027413,
+                -0.78906,
+                0.325658
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                18,
+                -2,
+                -2,
+                1,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.106943,
+                0.873693,
+                -2.0,
+                -2.0,
+                0.5,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.000465,
+                0.031401,
+                0.763345,
+                -0.359361,
+                -0.054692,
+                -1.018232,
+                0.025645
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                21,
+                -2,
+                -2,
+                26,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.037732,
+                0.268381,
+                -2.0,
+                -2.0,
+                0.741296,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                1.9e-05,
+                0.058652,
+                1.068149,
+                1.04531,
+                -0.026122,
+                -0.757231,
+                0.323066
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                12,
+                1,
+                -2,
+                -2,
+                24,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.051438,
+                0.5,
+                -2.0,
+                -2.0,
+                1.182238,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.001139,
+                0.024496,
+                0.08883,
+                2.176312,
+                -0.061905,
+                -1.097152,
+                1.555667
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                10,
+                18,
+                -2,
+                -2,
+                13,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.736921,
+                0.893764,
+                -2.0,
+                -2.0,
+                0.084997,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000847,
+                -0.025845,
+                -0.002844,
+                -1.1621,
+                0.056052,
+                -1.086534,
+                1.102495
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                13,
+                -2,
+                -2,
+                1,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092242,
+                0.032092,
+                -2.0,
+                -2.0,
+                0.5,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                0.00048,
+                0.035203,
+                -1.523621,
+                0.650472,
+                -0.039273,
+                -0.794309,
+                0.448834
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                12,
+                1,
+                -2,
+                -2,
+                24,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.050242,
+                0.5,
+                -2.0,
+                -2.0,
+                1.182238,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.001979,
+                0.020144,
+                0.06754,
+                2.017137,
+                -0.058351,
+                -1.090372,
+                1.464894
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                13,
+                -2,
+                -2,
+                1,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.092785,
+                0.02953,
+                -2.0,
+                -2.0,
+                0.5,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000185,
+                0.031362,
+                -1.656077,
+                0.605213,
+                -0.036656,
+                -0.792573,
+                0.474301
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                12,
+                1,
+                -2,
+                -2,
+                24,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.050102,
+                0.5,
+                -2.0,
+                -2.0,
+                1.182238,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000327,
+                0.021053,
+                0.090966,
+                1.899807,
+                -0.055219,
+                -1.061162,
+                1.444333
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                10,
+                18,
+                -2,
+                -2,
+                11,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.737228,
+                0.867678,
+                -2.0,
+                -2.0,
+                0.13345,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                -0.000533,
+                -0.02264,
+                0.002229,
+                -1.01123,
+                0.05066,
+                0.900914,
+                2.211806
+              ]
+            },
+            {
+              "childrenLeft": [
+                1,
+                2,
+                -1,
+                -1,
+                5,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                4,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                10,
+                -2,
+                -2,
+                10,
+                -2,
+                -2
+              ],
+              "threshold": [
+                0.107491,
+                0.675123,
+                -2.0,
+                -2.0,
+                0.737739,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                4.1e-05,
+                0.024427,
+                0.916497,
+                0.013853,
+                -0.04451,
+                -0.783063,
+                1.546523
+              ]
+            }
+          ]
+        }
+      },
+      "candidateMetrics": {
+        "train": {
+          "rowCount": 5250,
+          "accuracy": 0.960762,
+          "logLoss": 0.120987,
+          "positiveRate": 0.454857,
+          "averagePositiveProbability": 0.910799,
+          "averageNegativeProbability": 0.107401
+        },
+        "eval": {
+          "rowCount": 1678,
+          "accuracy": 0.968415,
+          "logLoss": 0.109981,
+          "positiveRate": 0.45888,
+          "averagePositiveProbability": 0.915371,
+          "averageNegativeProbability": 0.09758
+        },
+        "hard_negative_eval": {
+          "rowCount": 1259,
+          "accuracy": 0.938046,
+          "logLoss": 0.173825,
+          "positiveRate": 0.44162,
+          "averagePositiveProbability": 0.862547,
+          "averageNegativeProbability": 0.121024
+        }
+      },
+      "deltaTransform": {
+        "delta_scale": 0.0,
+        "support_gap": 0.0,
+        "boost_margin": 0.1,
+        "top_cap": 0.02,
+        "runner_cap": 0.04,
+        "third_cap": 0.03,
+        "negative_cap": 0.05,
+        "known_pair_multiplier": 1.0,
+        "recognized_pair_multiplier": 0.75,
+        "other_pair_multiplier": 0.0
+      },
+      "offlineEval": {
+        "eval": {
+          "sampleCount": 900,
+          "heuristicAccuracy": 0.638889,
+          "accuracy": 0.638889,
+          "accuracyGain": 0.0,
+          "familyFlipIncrease": 0,
+          "rescuedErrors": 0,
+          "pairAccuracy": {
+            "earth__fire": 0.934783,
+            "other": 1.0,
+            "recognized__ambiguous": 0.00641
+          }
+        },
+        "hard_negative_eval": {
+          "sampleCount": 660,
+          "heuristicAccuracy": 0.616667,
+          "accuracy": 0.616667,
+          "accuracyGain": 0.0,
+          "familyFlipIncrease": 0,
+          "rescuedErrors": 0,
+          "pairAccuracy": {
+            "earth__fire": 0.888889,
+            "other": 1.0,
+            "recognized__ambiguous": 0.067194
+          }
+        },
+        "acceptance": {
+          "familyFlipIncrease": 0,
+          "passed": true,
+          "evaluatedAt": "2026-04-05T15:10:40.532323Z"
+        }
+      }
+    },
+    "parity": {
+      "name": "logistic_regression",
+      "model": {
+        "family": "LogisticRegression",
+        "classes": [
+          0,
+          1
+        ],
+        "featureNames": [
+          "candidateFamilyId=wind",
+          "candidateFamilyId=earth",
+          "candidateFamilyId=fire",
+          "candidateFamilyId=water",
+          "candidateFamilyId=life",
+          "candidatePairId=earth__fire",
+          "candidatePairId=water__life",
+          "candidatePairId=recognized__ambiguous",
+          "candidatePairId=other",
+          "candidateRank",
+          "heuristicScore",
+          "templateDistance",
+          "topScoreGap",
+          "top1MinusTop2Margin",
+          "strokeCount",
+          "pointCount",
+          "durationMs",
+          "pathLength",
+          "closureGap",
+          "dominantCorners",
+          "endpointClusters",
+          "circularity",
+          "fillRatio",
+          "parallelism",
+          "rawAngleRadians",
+          "qualityClosure",
+          "qualitySmoothness",
+          "qualityStability",
+          "qualityRotationBias"
+        ],
+        "intercept": [
+          -2.0008
+        ],
+        "weights": [
+          -7.221321,
+          1.270311,
+          -1.056988,
+          0.913668,
+          4.093529,
+          -0.256311,
+          0.0,
+          -2.569794,
+          0.825304,
+          -4.209661,
+          6.675132,
+          -13.04949,
+          -8.776485,
+          -1.032312,
+          7.823722,
+          -0.308119,
+          -0.570406,
+          -4.244434,
+          -2.715956,
+          -2.0008,
+          -2.0008,
+          4.834355,
+          0.0,
+          0.665512,
+          -0.607829,
+          -0.706404,
+          10.328219,
+          0.890247,
+          0.330031
+        ]
+      },
+      "candidateMetrics": {
+        "train": {
+          "rowCount": 5250,
+          "accuracy": 0.976381,
+          "logLoss": 0.082451,
+          "positiveRate": 0.454857,
+          "averagePositiveProbability": 0.950725,
+          "averageNegativeProbability": 0.072074
+        },
+        "eval": {
+          "rowCount": 1678,
+          "accuracy": 0.98093,
+          "logLoss": 0.072744,
+          "positiveRate": 0.45888,
+          "averagePositiveProbability": 0.952589,
+          "averageNegativeProbability": 0.063959
+        },
+        "hard_negative_eval": {
+          "rowCount": 1259,
+          "accuracy": 0.954726,
+          "logLoss": 0.129752,
+          "positiveRate": 0.44162,
+          "averagePositiveProbability": 0.91597,
+          "averageNegativeProbability": 0.084008
+        }
+      },
+      "deltaTransform": {
+        "delta_scale": 0.0,
+        "support_gap": 0.0,
+        "boost_margin": 0.1,
+        "top_cap": 0.02,
+        "runner_cap": 0.04,
+        "third_cap": 0.03,
+        "negative_cap": 0.05,
+        "known_pair_multiplier": 1.0,
+        "recognized_pair_multiplier": 0.75,
+        "other_pair_multiplier": 0.0
+      },
+      "offlineEval": {
+        "eval": {
+          "sampleCount": 900,
+          "heuristicAccuracy": 0.638889,
+          "accuracy": 0.638889,
+          "accuracyGain": 0.0,
+          "familyFlipIncrease": 0,
+          "rescuedErrors": 0,
+          "pairAccuracy": {
+            "earth__fire": 0.934783,
+            "other": 1.0,
+            "recognized__ambiguous": 0.00641
+          }
+        },
+        "hard_negative_eval": {
+          "sampleCount": 660,
+          "heuristicAccuracy": 0.616667,
+          "accuracy": 0.616667,
+          "accuracyGain": 0.0,
+          "familyFlipIncrease": 0,
+          "rescuedErrors": 0,
+          "pairAccuracy": {
+            "earth__fire": 0.888889,
+            "other": 1.0,
+            "recognized__ambiguous": 0.067194
+          }
+        },
+        "acceptance": {
+          "familyFlipIncrease": 0,
+          "passed": true,
+          "evaluatedAt": "2026-04-05T15:11:31.151025Z"
+        }
+      }
+    }
+  },
+  "evaluation": {
+    "heuristic": {
+      "eval": 0.638889,
+      "hard_negative_eval": 0.616667
+    },
+    "gradientBoosting": {
+      "eval": {
+        "sampleCount": 900,
+        "heuristicAccuracy": 0.638889,
+        "accuracy": 0.638889,
+        "accuracyGain": 0.0,
+        "familyFlipIncrease": 0,
+        "rescuedErrors": 0,
+        "pairAccuracy": {
+          "earth__fire": 0.934783,
+          "other": 1.0,
+          "recognized__ambiguous": 0.00641
+        }
+      },
+      "hard_negative_eval": {
+        "sampleCount": 660,
+        "heuristicAccuracy": 0.616667,
+        "accuracy": 0.616667,
+        "accuracyGain": 0.0,
+        "familyFlipIncrease": 0,
+        "rescuedErrors": 0,
+        "pairAccuracy": {
+          "earth__fire": 0.888889,
+          "other": 1.0,
+          "recognized__ambiguous": 0.067194
+        }
+      },
+      "acceptance": {
+        "familyFlipIncrease": 0,
+        "passed": true,
+        "evaluatedAt": "2026-04-05T15:10:40.532323Z"
+      }
+    },
+    "logisticRegression": {
+      "eval": {
+        "sampleCount": 900,
+        "heuristicAccuracy": 0.638889,
+        "accuracy": 0.638889,
+        "accuracyGain": 0.0,
+        "familyFlipIncrease": 0,
+        "rescuedErrors": 0,
+        "pairAccuracy": {
+          "earth__fire": 0.934783,
+          "other": 1.0,
+          "recognized__ambiguous": 0.00641
+        }
+      },
+      "hard_negative_eval": {
+        "sampleCount": 660,
+        "heuristicAccuracy": 0.616667,
+        "accuracy": 0.616667,
+        "accuracyGain": 0.0,
+        "familyFlipIncrease": 0,
+        "rescuedErrors": 0,
+        "pairAccuracy": {
+          "earth__fire": 0.888889,
+          "other": 1.0,
+          "recognized__ambiguous": 0.067194
+        }
+      },
+      "acceptance": {
+        "familyFlipIncrease": 0,
+        "passed": true,
+        "evaluatedAt": "2026-04-05T15:11:31.151025Z"
+      }
+    }
+  },
+  "createdAt": "2026-04-05T15:12:21.893038Z"
+}

@@ -1,0 +1,418 @@
+{
+  "artifactType": "dataset_split_manifest",
+  "version": "v1",
+  "schemaVersion": "tiny-ml-dataset-split-v1",
+  "datasetSchemaVersion": "tutorial-hybrid-v1",
+  "roles": {
+    "public_auxiliary": {
+      "role": "public_auxiliary",
+      "description": "encoder pretrain, normalization prior, denoising prior",
+      "priorities": [
+        "public_auxiliary"
+      ],
+      "splits": [
+        "pretrain"
+      ],
+      "usage": {
+        "allowed": [
+          "normalization_regression",
+          "stroke_encoder_pretrain",
+          "denoising_prior",
+          "sequence_representation"
+        ],
+        "forbidden": [
+          "direct_family_classifier_training",
+          "direct_operator_classifier_training",
+          "semantic_label_override"
+        ]
+      },
+      "directSemanticSupervision": false
+    },
+    "synthetic_primary": {
+      "role": "synthetic_primary",
+      "description": "domain supervision mainline for base family/operator rerank and confidence calibration",
+      "priorities": [
+        "synthetic_bootstrap",
+        "synthetic_tutorial_like",
+        "synthetic_hard_negative",
+        "synthetic_placement_shift"
+      ],
+      "splits": [
+        "train",
+        "eval",
+        "hard_negative_eval"
+      ],
+      "usage": {
+        "allowed": [
+          "prototype_bootstrap",
+          "operator_bootstrap",
+          "hard_negative_bootstrap",
+          "normalization_regression",
+          "rerank_supervision",
+          "confidence_calibration",
+          "hard_negative_eval"
+        ],
+        "forbidden": []
+      },
+      "directSemanticSupervision": true
+    },
+    "tutorial_primary": {
+      "role": "tutorial_primary",
+      "description": "user adaptation, prototype bank, personalized rerank calibration, acceptance evaluation",
+      "priorities": [
+        "tutorial_primary"
+      ],
+      "splits": [
+        "adaptation",
+        "acceptance_eval"
+      ],
+      "usage": {
+        "allowed": [
+          "user_adaptation",
+          "prototype_bank",
+          "rerank_calibration",
+          "acceptance_eval"
+        ],
+        "forbidden": []
+      },
+      "directSemanticSupervision": true
+    }
+  },
+  "splitPolicy": {
+    "public_auxiliary": {
+      "requiredSplits": [
+        "pretrain"
+      ],
+      "directSemanticSupervision": false,
+      "notes": [
+        "public auxiliary stays in auxiliary-only pretrain lanes",
+        "direct family/operator supervision remains forbidden"
+      ]
+    },
+    "synthetic_primary": {
+      "requiredSplits": [
+        "train",
+        "eval",
+        "hard_negative_eval"
+      ],
+      "defaultPresets": [
+        {
+          "preset": "bootstrap",
+          "defaultSplit": "train",
+          "priority": "synthetic_bootstrap"
+        },
+        {
+          "preset": "tutorial-like",
+          "defaultSplit": "train",
+          "priority": "synthetic_tutorial_like"
+        },
+        {
+          "preset": "hard-negative",
+          "defaultSplit": "hard_negative_eval",
+          "priority": "synthetic_hard_negative"
+        },
+        {
+          "preset": "placement-shift",
+          "defaultSplit": "train",
+          "priority": "synthetic_placement_shift"
+        }
+      ],
+      "directSemanticSupervision": true
+    },
+    "tutorial_primary": {
+      "requiredSplits": [
+        "adaptation",
+        "acceptance_eval"
+      ],
+      "activation": "next-phase vector tutorial capture",
+      "directSemanticSupervision": true
+    }
+  },
+  "publicSources": [
+    {
+      "id": "quickdraw-raw",
+      "dataset": "quickdraw",
+      "layerRole": "public_auxiliary",
+      "recommendedSplit": "pretrain",
+      "usage": {
+        "allowed": [
+          "normalization_regression",
+          "stroke_encoder_pretrain",
+          "denoising_prior",
+          "sequence_representation"
+        ],
+        "forbidden": [
+          "direct_family_classifier_training",
+          "direct_operator_classifier_training",
+          "semantic_label_override"
+        ]
+      },
+      "recommendedLabels": [
+        "circle",
+        "triangle",
+        "line",
+        "square"
+      ],
+      "targetDir": "external/quickdraw"
+    },
+    {
+      "id": "dollar-unistroke-xml",
+      "dataset": "dollar_family",
+      "layerRole": "public_auxiliary",
+      "recommendedSplit": "pretrain",
+      "usage": {
+        "allowed": [
+          "normalization_regression",
+          "stroke_encoder_pretrain",
+          "denoising_prior",
+          "sequence_representation"
+        ],
+        "forbidden": [
+          "direct_family_classifier_training",
+          "direct_operator_classifier_training",
+          "semantic_label_override"
+        ]
+      },
+      "recommendedLabels": [],
+      "targetDir": "external/dollar/xml"
+    },
+    {
+      "id": "dollar-multistroke-mmg",
+      "dataset": "dollar_family",
+      "layerRole": "public_auxiliary",
+      "recommendedSplit": "pretrain",
+      "usage": {
+        "allowed": [
+          "normalization_regression",
+          "stroke_encoder_pretrain",
+          "denoising_prior",
+          "sequence_representation"
+        ],
+        "forbidden": [
+          "direct_family_classifier_training",
+          "direct_operator_classifier_training",
+          "semantic_label_override"
+        ]
+      },
+      "recommendedLabels": [],
+      "targetDir": "external/dollar/mmg"
+    },
+    {
+      "id": "crohme-package",
+      "dataset": "crohme",
+      "layerRole": "public_auxiliary",
+      "recommendedSplit": "pretrain",
+      "usage": {
+        "allowed": [
+          "normalization_regression",
+          "stroke_encoder_pretrain",
+          "denoising_prior",
+          "sequence_representation"
+        ],
+        "forbidden": [
+          "direct_family_classifier_training",
+          "direct_operator_classifier_training",
+          "semantic_label_override"
+        ]
+      },
+      "recommendedLabels": [],
+      "targetDir": "external/crohme/ICFHR_package"
+    }
+  ],
+  "syntheticSources": [
+    {
+      "preset": "bootstrap",
+      "layerRole": "synthetic_primary",
+      "priority": "synthetic_bootstrap",
+      "defaultSplit": "train",
+      "targetKinds": [
+        "family",
+        "operator"
+      ]
+    },
+    {
+      "preset": "tutorial-like",
+      "layerRole": "synthetic_primary",
+      "priority": "synthetic_tutorial_like",
+      "defaultSplit": "train",
+      "targetKinds": [
+        "family",
+        "operator"
+      ]
+    },
+    {
+      "preset": "hard-negative",
+      "layerRole": "synthetic_primary",
+      "priority": "synthetic_hard_negative",
+      "defaultSplit": "hard_negative_eval",
+      "targetKinds": [
+        "family",
+        "operator"
+      ]
+    },
+    {
+      "preset": "placement-shift",
+      "layerRole": "synthetic_primary",
+      "priority": "synthetic_placement_shift",
+      "defaultSplit": "train",
+      "targetKinds": [
+        "operator"
+      ]
+    }
+  ],
+  "tutorialSources": [
+    {
+      "source": "trace",
+      "layerRole": "tutorial_primary"
+    },
+    {
+      "source": "recall",
+      "layerRole": "tutorial_primary"
+    },
+    {
+      "source": "variation",
+      "layerRole": "tutorial_primary"
+    }
+  ],
+  "labelSummary": {
+    "families": [
+      "wind",
+      "earth",
+      "fire",
+      "water",
+      "life"
+    ],
+    "operators": [
+      "steel_brace",
+      "electric_fork",
+      "ice_bar",
+      "soul_dot",
+      "void_cut",
+      "martial_axis"
+    ]
+  },
+  "trainingManifest": {
+    "splitManifestArtifact": "artifacts/ml/dataset-split-v1.json",
+    "phases": [
+      {
+        "phase": "public_auxiliary_pretrain",
+        "roles": [
+          "public_auxiliary"
+        ],
+        "splits": [
+          "pretrain"
+        ],
+        "outputs": [
+          "stroke_encoder_embedding",
+          "normalization_prior",
+          "sequence_representation"
+        ],
+        "directSemanticSupervision": false,
+        "reweightPolicy": {
+          "reason": "Quick Draw raw count dominates current public auxiliary inventory and must not drown out dollar_family/CROHME priors.",
+          "appliesToRole": "public_auxiliary",
+          "appliesToDataset": "quickdraw",
+          "publicAuxiliaryContributionCap": 0.35,
+          "syntheticSupervisedContributionFloor": 0.65,
+          "quickdrawMaxShareWithinPublicAuxiliary": 0.6,
+          "quickdrawMaxShareAcrossCombinedOfflineBudget": 0.21,
+          "quickdrawMaxSamplesPerLabelPerPretrainSplit": 6000,
+          "quickdrawRecommendedLabels": [
+            "circle",
+            "triangle",
+            "line",
+            "square"
+          ],
+          "reweightStrategy": [
+            "cap Quick Draw per label before pretrain feature extraction",
+            "rebalance public auxiliary by source after the cap",
+            "reuse public outputs only as frozen normalization/embedding features",
+            "never feed public labels into direct family/operator supervision losses"
+          ]
+        }
+      },
+      {
+        "phase": "base_family_supervised",
+        "primaryRoles": [
+          "synthetic_primary"
+        ],
+        "optionalRoles": [
+          "tutorial_primary"
+        ],
+        "splits": {
+          "synthetic_primary": [
+            "train",
+            "eval",
+            "hard_negative_eval"
+          ],
+          "tutorial_primary": [
+            "adaptation",
+            "acceptance_eval"
+          ]
+        },
+        "rowSpec": "base_candidate_row_v1",
+        "outputs": [
+          "rerank_delta",
+          "recognized_confidence",
+          "ambiguity_probability"
+        ],
+        "publicFeatureReuse": "frozen_normalization_or_embedding_only"
+      },
+      {
+        "phase": "operator_supervised",
+        "primaryRoles": [
+          "synthetic_primary"
+        ],
+        "optionalRoles": [
+          "tutorial_primary"
+        ],
+        "splits": {
+          "synthetic_primary": [
+            "train",
+            "eval",
+            "hard_negative_eval"
+          ],
+          "tutorial_primary": [
+            "adaptation",
+            "acceptance_eval"
+          ]
+        },
+        "rowSpec": "operator_candidate_row_v1",
+        "outputs": [
+          "pairwise_rerank_delta",
+          "operator_confidence",
+          "false_positive_suppression"
+        ],
+        "publicFeatureReuse": "frozen_normalization_or_embedding_only"
+      }
+    ]
+  },
+  "reweightPolicy": {
+    "reason": "Quick Draw raw count dominates current public auxiliary inventory and must not drown out dollar_family/CROHME priors.",
+    "appliesToRole": "public_auxiliary",
+    "appliesToDataset": "quickdraw",
+    "publicAuxiliaryContributionCap": 0.35,
+    "syntheticSupervisedContributionFloor": 0.65,
+    "quickdrawMaxShareWithinPublicAuxiliary": 0.6,
+    "quickdrawMaxShareAcrossCombinedOfflineBudget": 0.21,
+    "quickdrawMaxSamplesPerLabelPerPretrainSplit": 6000,
+    "quickdrawRecommendedLabels": [
+      "circle",
+      "triangle",
+      "line",
+      "square"
+    ],
+    "reweightStrategy": [
+      "cap Quick Draw per label before pretrain feature extraction",
+      "rebalance public auxiliary by source after the cap",
+      "reuse public outputs only as frozen normalization/embedding features",
+      "never feed public labels into direct family/operator supervision losses"
+    ]
+  },
+  "invariants": [
+    "public auxiliary never becomes direct family supervision",
+    "public auxiliary never becomes direct operator supervision",
+    "synthetic primary carries canonical base/operator rerank supervision",
+    "tutorial primary activates user adaptation and acceptance evaluation only when tutorial vector capture exists"
+  ]
+}

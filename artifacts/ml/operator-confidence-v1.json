@@ -1,0 +1,530 @@
+{
+  "artifactType": "operator_confidence_baseline",
+  "modelType": "operator_confidence_logistic",
+  "version": "v1",
+  "schemaVersion": "tiny-ml-operator-confidence-v1",
+  "featureOrder": [
+    "operatorId",
+    "hardPairId",
+    "candidateRank",
+    "heuristicScore",
+    "baseScore",
+    "templateDistance",
+    "shapeConfidence",
+    "topScoreGap",
+    "blockedByFlag",
+    "blockedByOperator",
+    "anchorZoneId",
+    "placement",
+    "anchorScore",
+    "scaleScore",
+    "gateStrength",
+    "angleRadians",
+    "scaleRatio",
+    "straightness",
+    "corners",
+    "closure",
+    "stackIndex",
+    "existingOperatorsCount",
+    "existingOperatorsMask",
+    "hasVoidCutInStack"
+  ],
+  "featureNormalization": {
+    "operatorId": {
+      "type": "one_hot",
+      "values": [
+        "steel_brace",
+        "electric_fork",
+        "ice_bar",
+        "soul_dot",
+        "void_cut",
+        "martial_axis"
+      ]
+    },
+    "hardPairId": {
+      "type": "one_hot",
+      "values": [
+        "void_cut__electric_fork",
+        "ice_bar__partial_stroke",
+        "steel_brace__open_box_like",
+        "martial_axis__blocked_by_void_cut",
+        "other"
+      ]
+    },
+    "candidateRank": {
+      "type": "integer_clip",
+      "min": 0,
+      "max": 2
+    },
+    "heuristicScore": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "baseScore": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "templateDistance": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1.25
+    },
+    "shapeConfidence": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "topScoreGap": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "blockedByFlag": {
+      "type": "binary"
+    },
+    "blockedByOperator": {
+      "type": "one_hot",
+      "values": [
+        "none",
+        "void_cut"
+      ]
+    },
+    "anchorZoneId": {
+      "type": "one_hot",
+      "values": [
+        "upper_left",
+        "upper",
+        "upper_right",
+        "left",
+        "core",
+        "right",
+        "lower_left",
+        "lower",
+        "lower_right"
+      ]
+    },
+    "placementAnchorZoneId": {
+      "type": "one_hot",
+      "values": [
+        "upper_left",
+        "upper",
+        "upper_right",
+        "left",
+        "core",
+        "right",
+        "lower_left",
+        "lower",
+        "lower_right"
+      ]
+    },
+    "anchorScore": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "scaleScore": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "gateStrength": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "angleRadians": {
+      "type": "clamp",
+      "min": -1.5707963267948966,
+      "max": 1.5707963267948966
+    },
+    "scaleRatio": {
+      "type": "clamp",
+      "min": 0,
+      "max": 2
+    },
+    "straightness": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "corners": {
+      "type": "integer_clip",
+      "min": 0,
+      "max": 8
+    },
+    "closure": {
+      "type": "clamp",
+      "min": 0,
+      "max": 1
+    },
+    "stackIndex": {
+      "type": "integer_clip",
+      "min": 0,
+      "max": 8
+    },
+    "existingOperatorsCount": {
+      "type": "integer_clip",
+      "min": 0,
+      "max": 8
+    },
+    "existingOperatorsMask": {
+      "type": "multi_hot",
+      "values": [
+        "steel_brace",
+        "electric_fork",
+        "ice_bar",
+        "soul_dot",
+        "void_cut",
+        "martial_axis"
+      ]
+    },
+    "hasVoidCutInStack": {
+      "type": "binary"
+    },
+    "placement": {
+      "type": "one_hot",
+      "values": [
+        "upper_left",
+        "upper",
+        "upper_right",
+        "left",
+        "core",
+        "right",
+        "lower_left",
+        "lower",
+        "lower_right"
+      ]
+    }
+  },
+  "featureSources": {
+    "placement": "placementAnchorZoneId"
+  },
+  "labelSpace": {
+    "baseFamily": [
+      "wind",
+      "earth",
+      "fire",
+      "water",
+      "life"
+    ],
+    "operator": [
+      "steel_brace",
+      "electric_fork",
+      "ice_bar",
+      "soul_dot",
+      "void_cut",
+      "martial_axis"
+    ],
+    "anchorZoneId": [
+      "upper_left",
+      "upper",
+      "upper_right",
+      "left",
+      "core",
+      "right",
+      "lower_left",
+      "lower",
+      "lower_right"
+    ],
+    "tutorialSource": [
+      "trace",
+      "recall",
+      "variation"
+    ]
+  },
+  "supportedPairs": [
+    "void_cut__electric_fork",
+    "ice_bar__partial_stroke",
+    "steel_brace__open_box_like",
+    "martial_axis__blocked_by_void_cut",
+    "other"
+  ],
+  "trainingManifest": {
+    "splitManifestArtifact": "artifacts/ml/dataset-split-v1.json",
+    "phases": [
+      {
+        "phase": "public_auxiliary_pretrain",
+        "roles": [
+          "public_auxiliary"
+        ],
+        "splits": [
+          "pretrain"
+        ],
+        "outputs": [
+          "stroke_encoder_embedding",
+          "normalization_prior",
+          "sequence_representation"
+        ],
+        "directSemanticSupervision": false,
+        "reweightPolicy": {
+          "reason": "Quick Draw raw count dominates current public auxiliary inventory and must not drown out dollar_family/CROHME priors.",
+          "appliesToRole": "public_auxiliary",
+          "appliesToDataset": "quickdraw",
+          "publicAuxiliaryContributionCap": 0.35,
+          "syntheticSupervisedContributionFloor": 0.65,
+          "quickdrawMaxShareWithinPublicAuxiliary": 0.6,
+          "quickdrawMaxShareAcrossCombinedOfflineBudget": 0.21,
+          "quickdrawMaxSamplesPerLabelPerPretrainSplit": 6000,
+          "quickdrawRecommendedLabels": [
+            "circle",
+            "triangle",
+            "line",
+            "square"
+          ],
+          "reweightStrategy": [
+            "cap Quick Draw per label before pretrain feature extraction",
+            "rebalance public auxiliary by source after the cap",
+            "reuse public outputs only as frozen normalization/embedding features",
+            "never feed public labels into direct family/operator supervision losses"
+          ]
+        }
+      },
+      {
+        "phase": "base_family_supervised",
+        "primaryRoles": [
+          "synthetic_primary"
+        ],
+        "optionalRoles": [
+          "tutorial_primary"
+        ],
+        "splits": {
+          "synthetic_primary": [
+            "train",
+            "eval",
+            "hard_negative_eval"
+          ],
+          "tutorial_primary": [
+            "adaptation",
+            "acceptance_eval"
+          ]
+        },
+        "rowSpec": "base_candidate_row_v1",
+        "outputs": [
+          "rerank_delta",
+          "recognized_confidence",
+          "ambiguity_probability"
+        ],
+        "publicFeatureReuse": "frozen_normalization_or_embedding_only"
+      },
+      {
+        "phase": "operator_supervised",
+        "primaryRoles": [
+          "synthetic_primary"
+        ],
+        "optionalRoles": [
+          "tutorial_primary"
+        ],
+        "splits": {
+          "synthetic_primary": [
+            "train",
+            "eval",
+            "hard_negative_eval"
+          ],
+          "tutorial_primary": [
+            "adaptation",
+            "acceptance_eval"
+          ]
+        },
+        "rowSpec": "operator_candidate_row_v1",
+        "outputs": [
+          "pairwise_rerank_delta",
+          "operator_confidence",
+          "false_positive_suppression"
+        ],
+        "publicFeatureReuse": "frozen_normalization_or_embedding_only"
+      }
+    ]
+  },
+  "gatePolicy": {
+    "directCanonicalPredictionForbidden": true,
+    "blockedByHardStop": true,
+    "weakGateUsesCap": {
+      "sourceFeatures": [
+        "anchorScore",
+        "scaleScore",
+        "gateStrength"
+      ],
+      "offAnchorRescueForbidden": true,
+      "wrongScaleRescueForbidden": true
+    },
+    "allowedOutputs": [
+      "pairwise_rerank_delta",
+      "operator_confidence",
+      "false_positive_suppression"
+    ]
+  },
+  "weights": {
+    "library": "scikit-learn",
+    "className": "LogisticRegression",
+    "expandedFeatureNames": [
+      "operatorId=steel_brace",
+      "operatorId=electric_fork",
+      "operatorId=ice_bar",
+      "operatorId=soul_dot",
+      "operatorId=void_cut",
+      "operatorId=martial_axis",
+      "hardPairId=void_cut__electric_fork",
+      "hardPairId=ice_bar__partial_stroke",
+      "hardPairId=steel_brace__open_box_like",
+      "hardPairId=martial_axis__blocked_by_void_cut",
+      "hardPairId=other",
+      "candidateRank",
+      "heuristicScore",
+      "baseScore",
+      "templateDistance",
+      "shapeConfidence",
+      "topScoreGap",
+      "blockedByFlag",
+      "blockedByOperator=none",
+      "blockedByOperator=void_cut",
+      "anchorZoneId=upper_left",
+      "anchorZoneId=upper",
+      "anchorZoneId=upper_right",
+      "anchorZoneId=left",
+      "anchorZoneId=core",
+      "anchorZoneId=right",
+      "anchorZoneId=lower_left",
+      "anchorZoneId=lower",
+      "anchorZoneId=lower_right",
+      "placement=upper_left",
+      "placement=upper",
+      "placement=upper_right",
+      "placement=left",
+      "placement=core",
+      "placement=right",
+      "placement=lower_left",
+      "placement=lower",
+      "placement=lower_right",
+      "anchorScore",
+      "scaleScore",
+      "gateStrength",
+      "angleRadians",
+      "scaleRatio",
+      "straightness",
+      "corners",
+      "closure",
+      "stackIndex",
+      "existingOperatorsCount",
+      "existingOperatorsMask=steel_brace",
+      "existingOperatorsMask=electric_fork",
+      "existingOperatorsMask=ice_bar",
+      "existingOperatorsMask=soul_dot",
+      "existingOperatorsMask=void_cut",
+      "existingOperatorsMask=martial_axis",
+      "hasVoidCutInStack"
+    ],
+    "intercept": -2.460062,
+    "coefficients": [
+      -0.692887,
+      -1.800326,
+      0.945246,
+      1.123388,
+      -2.436533,
+      0.40105,
+      3.333214,
+      -2.295661,
+      -4.380766,
+      0.401668,
+      0.481483,
+      0.0,
+      -0.526384,
+      -0.528852,
+      -0.548748,
+      -1.222055,
+      0.0,
+      -2.541522,
+      0.08146,
+      -2.541522,
+      0.173864,
+      0.105377,
+      -1.42648,
+      0.303191,
+      -0.49231,
+      -0.99372,
+      0.416845,
+      0.0,
+      -0.54683,
+      -0.529146,
+      -0.962381,
+      0.559285,
+      -0.79532,
+      0.176301,
+      -0.281212,
+      -0.105067,
+      -0.723958,
+      0.201435,
+      0.753253,
+      2.081144,
+      4.376609,
+      1.103933,
+      -0.71798,
+      0.397371,
+      -0.592367,
+      0.869574,
+      -0.151578,
+      -0.151578,
+      -0.732584,
+      -0.199962,
+      0.374716,
+      -0.683086,
+      0.02829,
+      0.0,
+      0.02829
+    ],
+    "classes": [
+      0,
+      1
+    ]
+  },
+  "metrics": {
+    "eval": {
+      "accuracy": 0.960674,
+      "averagePrecision": 0.962528,
+      "brier": 0.041638,
+      "rocAuc": 0.975986
+    },
+    "hard_negative_eval": {
+      "accuracy": 0.961957,
+      "averagePrecision": 0.955545,
+      "brier": 0.038002,
+      "rocAuc": 0.994449
+    }
+  },
+  "datasetSummary": {
+    "totalExamples": 788,
+    "bySplit": {
+      "train": 426,
+      "eval": 178,
+      "hard_negative_eval": 184
+    },
+    "byScenario": {
+      "canonical": 200,
+      "valid_with_stack": 28,
+      "hard_pair": 160,
+      "off_anchor": 122,
+      "wrong_scale": 114,
+      "partial_like": 52,
+      "open_box_like": 52,
+      "blocked": 60
+    },
+    "byOperator": {
+      "steel_brace": 120,
+      "electric_fork": 184,
+      "ice_bar": 128,
+      "soul_dot": 40,
+      "void_cut": 192,
+      "martial_axis": 124
+    }
+  },
+  "trainingSummary": {
+    "topTrainRows": 426,
+    "topEvalRows": 178,
+    "topHardNegativeRows": 184
+  },
+  "notes": [
+    "confidence is trained on top-candidate rows only",
+    "confidence targets drop to zero for blockedBy, off-anchor, and wrong-scale cases"
+  ]
+}

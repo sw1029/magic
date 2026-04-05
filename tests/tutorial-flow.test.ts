@@ -17,4 +17,11 @@ describe("tutorial flow", () => {
 
     expect(TUTORIAL_DEMO_STEPS[nextIndex]?.id).toBe("water_variation");
   });
+
+  it("describes each step with a simple shape summary and checklist", () => {
+    for (const step of TUTORIAL_DEMO_STEPS) {
+      expect(step.shapeSummary.length).toBeGreaterThan(0);
+      expect(step.shapeChecklist.length).toBeGreaterThanOrEqual(2);
+    }
+  });
 });

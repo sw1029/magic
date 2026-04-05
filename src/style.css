@@ -571,6 +571,36 @@ button.primary {
   gap: 8px;
 }
 
+.tutorial-shape-guide {
+  display: grid;
+  gap: 8px;
+  border-radius: 18px;
+  padding: 0.85rem 0.9rem;
+  background: rgba(255, 251, 244, 0.82);
+  border: 1px solid rgba(23, 49, 59, 0.08);
+}
+
+.tutorial-shape-guide strong {
+  font-size: 0.98rem;
+  color: #17313b;
+}
+
+.tutorial-shape-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tutorial-shape-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  background: rgba(23, 49, 59, 0.06);
+  color: rgba(23, 49, 59, 0.78);
+  font: 600 0.74rem "IBM Plex Mono", "SFMono-Regular", monospace;
+}
+
 .tutorial-step-copy h4 {
   margin: 0;
   font-size: 1rem;
@@ -632,6 +662,27 @@ button.primary {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 14px;
+}
+
+.insight-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.insight-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.reading-guide-exemplar {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(23, 49, 59, 0.08);
 }
 
 .personalization-lane {
@@ -1072,6 +1123,10 @@ button.primary {
   .compare-delta-row,
   .personalization-grid {
     grid-template-columns: 1fr;
+  }
+
+  .insight-tabs {
+    flex-direction: column;
   }
 
   .tutorial-step-focus,

@@ -14,6 +14,7 @@ export interface DemoViewState {
   guidanceMode: boolean;
   showRecentSeals: boolean;
   showQualitySplit: boolean;
+  showTutorialFlowPanel: boolean;
   showPersonalizationPanel: boolean;
   showExemplarPanel: boolean;
   showProfilePanel: boolean;
@@ -66,6 +67,7 @@ export function createDemoViewState(preset: DemoViewPreset = "clean"): DemoViewS
       guidanceMode: true,
       showRecentSeals: true,
       showQualitySplit: false,
+      showTutorialFlowPanel: false,
       showPersonalizationPanel: false,
       showExemplarPanel: false,
       showProfilePanel: false,
@@ -88,6 +90,7 @@ export function applyDemoViewPreset(state: DemoViewState, preset: DemoViewPreset
         guidanceMode: true,
         showRecentSeals: true,
         showQualitySplit: false,
+        showTutorialFlowPanel: false,
         showPersonalizationPanel: false,
         showExemplarPanel: false,
         showProfilePanel: false,
@@ -103,6 +106,7 @@ export function applyDemoViewPreset(state: DemoViewState, preset: DemoViewPreset
         guidanceMode: true,
         showRecentSeals: true,
         showQualitySplit: true,
+        showTutorialFlowPanel: true,
         showPersonalizationPanel: true,
         showExemplarPanel: true,
         showProfilePanel: true,
@@ -118,6 +122,7 @@ export function applyDemoViewPreset(state: DemoViewState, preset: DemoViewPreset
         guidanceMode: true,
         showRecentSeals: true,
         showQualitySplit: true,
+        showTutorialFlowPanel: true,
         showPersonalizationPanel: true,
         showExemplarPanel: true,
         showProfilePanel: true,

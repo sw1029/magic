@@ -22,6 +22,7 @@ import {
   applyDemoViewPreset,
   createDemoViewState,
 } from "./demo-layer";
+import { TUTORIAL_DEMO_STEPS, resolveNextTutorialStepIndex } from "./demo/tutorial-flow";
 import {
   buildDemoOutcomeCompare,
   createRecentSealSnapshot,
@@ -153,6 +154,17 @@ interface TutorialHookWindow extends Window {
   __magicTutorialOnboardingHook__?: TutorialOnboardingHook;
 }
 
+interface TutorialComparisonSnapshot {
+  capturedAt: number;
+  baseSession: StrokeSession;
+  overlayStrokes: Stroke[];
+  baseSealed: boolean;
+  baseResult: RecognitionResult;
+  overlayRecognition: OverlayRecognition | null;
+  overlayRecords: OverlayStrokeRecord[];
+  tutorialSampleCount: number;
+}
+
 export function mountApp(root: HTMLDivElement): void {
   const scenarioButtons = GUIDED_DEMO_SCENARIOS.map(
     (scenario) => `
@@ -221,6 +233,10 @@ export function mountApp(root: HTMLDivElement): void {
                 <label class="toggle-pill">
                   <input id="personalization-toggle" type="checkbox" />
                   <span>입력 습관 보기</span>
+                </label>
+                <label class="toggle-pill">
+                  <input id="tutorial-toggle" type="checkbox" />
+                  <span>연습 흐름 보기</span>
                 </label>
                 <label class="toggle-pill">
                   <input id="exemplar-toggle" type="checkbox" />
@@ -372,6 +388,27 @@ export function mountApp(root: HTMLDivElement): void {
             <div id="support-badges" class="promise-inline"></div>
             <div id="support-metrics" class="summary-grid"></div>
           </section>
+          <section id="tutorial-card" class="card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">연습 입력 시작</p>
+                <h3 id="tutorial-title">연습 전 비교 준비</h3>
+              </div>
+              <span id="tutorial-status" class="status-chip status-waiting">대기</span>
+            </div>
+            <p id="tutorial-copy" class="card-copy">
+              현재 입력을 기준으로 연습 전과 연습 후를 같은 화면에서 비교합니다.
+            </p>
+            <div id="tutorial-progress" class="promise-inline"></div>
+            <div id="tutorial-step-card" class="tutorial-step-card"></div>
+            <div id="tutorial-step-list" class="tutorial-step-list"></div>
+            <div class="tutorial-actions">
+              <button id="tutorial-start-button">연습 시작</button>
+              <button id="tutorial-capture-button" class="primary">현재 입력 저장</button>
+              <button id="tutorial-result-button">연습 결과 보기</button>
+              <button id="tutorial-clear-button">연습 지우기</button>
+            </div>
+          </section>
           <section id="personalization-card" class="card">
             <div class="split-head">
               <div>
@@ -382,6 +419,21 @@ export function mountApp(root: HTMLDivElement): void {
             <p id="personalization-copy" class="card-copy">실제 판정, 보조 판독, 입력 습관 반영 시험 계산을 한 화면에서 비교합니다.</p>
             <div id="personalization-compare" class="personalization-grid"></div>
             <div id="personalization-effects" class="metric-list"></div>
+          </section>
+          <section id="tutorial-compare-card" class="card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">연습 전 / 후 비교</p>
+                <h3 id="tutorial-compare-title">같은 입력 다시 보기</h3>
+              </div>
+              <span id="tutorial-compare-status" class="status-chip status-waiting">대기</span>
+            </div>
+            <p id="tutorial-compare-copy" class="card-copy">
+              같은 입력을 연습 전, 보조 판독 시험 계산, 연습 후로 나눠 비교합니다.
+            </p>
+            <div id="tutorial-compare-grid" class="personalization-grid tutorial-compare-grid"></div>
+            <div id="tutorial-compare-effects" class="metric-list"></div>
+            <div id="tutorial-compare-metrics" class="summary-grid"></div>
           </section>
           <section id="principles-card" class="card">
             <div class="split-head">
@@ -476,6 +528,7 @@ export function mountApp(root: HTMLDivElement): void {
   const analysisToggle = select<HTMLInputElement>(root, "#analysis-toggle");
   const detailsToggle = select<HTMLInputElement>(root, "#details-toggle");
   const personalizationToggle = select<HTMLInputElement>(root, "#personalization-toggle");
+  const tutorialToggle = select<HTMLInputElement>(root, "#tutorial-toggle");
   const exemplarToggle = select<HTMLInputElement>(root, "#exemplar-toggle");
   const presetChip = select<HTMLSpanElement>(root, "#preset-chip");
   const scenarioTitle = select<HTMLElement>(root, "#scenario-title");
@@ -525,11 +578,29 @@ export function mountApp(root: HTMLDivElement): void {
   const supportCopy = select<HTMLParagraphElement>(root, "#support-copy");
   const supportBadges = select<HTMLDivElement>(root, "#support-badges");
   const supportMetrics = select<HTMLDivElement>(root, "#support-metrics");
+  const tutorialCard = select<HTMLElement>(root, "#tutorial-card");
+  const tutorialTitle = select<HTMLElement>(root, "#tutorial-title");
+  const tutorialStatus = select<HTMLElement>(root, "#tutorial-status");
+  const tutorialCopy = select<HTMLParagraphElement>(root, "#tutorial-copy");
+  const tutorialProgress = select<HTMLDivElement>(root, "#tutorial-progress");
+  const tutorialStepCard = select<HTMLDivElement>(root, "#tutorial-step-card");
+  const tutorialStepList = select<HTMLDivElement>(root, "#tutorial-step-list");
+  const tutorialStartButton = select<HTMLButtonElement>(root, "#tutorial-start-button");
+  const tutorialCaptureButton = select<HTMLButtonElement>(root, "#tutorial-capture-button");
+  const tutorialResultButton = select<HTMLButtonElement>(root, "#tutorial-result-button");
+  const tutorialClearButton = select<HTMLButtonElement>(root, "#tutorial-clear-button");
   const personalizationCard = select<HTMLElement>(root, "#personalization-card");
   const personalizationTitle = select<HTMLElement>(root, "#personalization-title");
   const personalizationCopy = select<HTMLParagraphElement>(root, "#personalization-copy");
   const personalizationCompare = select<HTMLDivElement>(root, "#personalization-compare");
   const personalizationEffects = select<HTMLDivElement>(root, "#personalization-effects");
+  const tutorialCompareCard = select<HTMLElement>(root, "#tutorial-compare-card");
+  const tutorialCompareTitle = select<HTMLElement>(root, "#tutorial-compare-title");
+  const tutorialCompareStatus = select<HTMLElement>(root, "#tutorial-compare-status");
+  const tutorialCompareCopy = select<HTMLParagraphElement>(root, "#tutorial-compare-copy");
+  const tutorialCompareGrid = select<HTMLDivElement>(root, "#tutorial-compare-grid");
+  const tutorialCompareEffects = select<HTMLDivElement>(root, "#tutorial-compare-effects");
+  const tutorialCompareMetrics = select<HTMLDivElement>(root, "#tutorial-compare-metrics");
   const principlesCard = select<HTMLElement>(root, "#principles-card");
   const principlesList = select<HTMLDivElement>(root, "#principles-list");
   const exemplarCard = select<HTMLElement>(root, "#exemplar-card");
@@ -573,11 +644,17 @@ export function mountApp(root: HTMLDivElement): void {
   let compiledResult: CompiledSealResult | null = null;
   let logs: RecognitionLogEntry[] = [];
   let recentSealSnapshots: RecentSealSnapshot[] = [];
+  let tutorialFlowActive = false;
+  let tutorialStepIndex = 0;
+  let tutorialCompletedStepIds: string[] = [];
+  let tutorialBeforeSnapshot: TutorialComparisonSnapshot | null = null;
+  let tutorialAfterSnapshot: TutorialComparisonSnapshot | null = null;
   const setTutorialProfileStore = (nextStore: TutorialProfileStore): void => {
     tutorialProfileStore = nextStore;
     syncTutorialHookMetadata(root, nextStore);
     saveTutorialProfileStore(nextStore);
     root.dispatchEvent(new CustomEvent("magic:tutorial-profile-updated", { detail: structuredClone(nextStore) }));
+    refreshRecognitionState();
   };
   const tutorialOnboardingHook = createTutorialOnboardingHook({
     getBaseStrokes: () => structuredClone(baseSession.strokes),
@@ -867,11 +944,107 @@ export function mountApp(root: HTMLDivElement): void {
     render();
   });
 
+  tutorialToggle.addEventListener("change", () => {
+    demoView = {
+      ...demoView,
+      showTutorialFlowPanel: tutorialToggle.checked
+    };
+    render();
+  });
+
   exemplarToggle.addEventListener("change", () => {
     demoView = {
       ...demoView,
       showExemplarPanel: exemplarToggle.checked
     };
+    render();
+  });
+
+  tutorialStartButton.addEventListener("click", () => {
+    if (!tutorialBeforeSnapshot) {
+      tutorialBeforeSnapshot = createTutorialComparisonSnapshot(currentRecognitionProfile());
+    }
+
+    if (!tutorialBeforeSnapshot) {
+      return;
+    }
+
+    tutorialFlowActive = true;
+    tutorialAfterSnapshot = null;
+    render();
+  });
+
+  tutorialCaptureButton.addEventListener("click", () => {
+    const step = TUTORIAL_DEMO_STEPS[tutorialStepIndex];
+    const stepState = getTutorialStepState(step, baseSealResult, overlayRecords, baseSession, overlaySession);
+
+    if (!stepState.ready) {
+      return;
+    }
+
+    if (!tutorialBeforeSnapshot) {
+      tutorialBeforeSnapshot = createTutorialComparisonSnapshot(currentRecognitionProfile());
+    }
+
+    if (!tutorialBeforeSnapshot) {
+      return;
+    }
+
+    const capture = recordTutorialDemoStep(step);
+
+    if (!capture) {
+      return;
+    }
+
+    tutorialFlowActive = true;
+    tutorialAfterSnapshot = null;
+    if (!tutorialCompletedStepIds.includes(step.id)) {
+      tutorialCompletedStepIds = [...tutorialCompletedStepIds, step.id];
+    }
+    tutorialStepIndex = resolveNextTutorialStepIndex(tutorialCompletedStepIds, tutorialStepIndex);
+    render();
+  });
+
+  tutorialResultButton.addEventListener("click", () => {
+    if (!tutorialBeforeSnapshot) {
+      return;
+    }
+
+    tutorialAfterSnapshot = replayTutorialComparisonSnapshot(tutorialBeforeSnapshot);
+    tutorialFlowActive = true;
+    render();
+  });
+
+  tutorialClearButton.addEventListener("click", () => {
+    tutorialOnboardingHook.clear();
+    tutorialFlowActive = false;
+    tutorialStepIndex = 0;
+    tutorialCompletedStepIds = [];
+    tutorialBeforeSnapshot = null;
+    tutorialAfterSnapshot = null;
+    render();
+  });
+
+  tutorialStepList.addEventListener("click", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const button = target.closest<HTMLButtonElement>("[data-tutorial-step-index]");
+
+    if (!button) {
+      return;
+    }
+
+    const nextIndex = Number(button.dataset.tutorialStepIndex);
+
+    if (!Number.isFinite(nextIndex) || nextIndex < 0 || nextIndex >= TUTORIAL_DEMO_STEPS.length) {
+      return;
+    }
+
+    tutorialStepIndex = nextIndex;
     render();
   });
 
@@ -1052,6 +1225,18 @@ export function mountApp(root: HTMLDivElement): void {
       tutorialProfileStore,
       demoView
     );
+    const tutorialModel = buildTutorialFlowModel({
+      stepIndex: tutorialStepIndex,
+      completedStepIds: tutorialCompletedStepIds,
+      tutorialFlowActive,
+      beforeSnapshot: tutorialBeforeSnapshot,
+      afterSnapshot: tutorialAfterSnapshot,
+      baseSession,
+      overlaySession,
+      baseSealResult,
+      overlayRecords,
+      tutorialStore: tutorialProfileStore
+    });
 
     syncTinyMlRuntimeMetadata(root, baseDisplay, overlayLive);
 
@@ -1066,6 +1251,7 @@ export function mountApp(root: HTMLDivElement): void {
     analysisToggle.checked = demoView.analysisOverlay;
     detailsToggle.checked = demoView.showQualitySplit;
     personalizationToggle.checked = demoView.showPersonalizationPanel;
+    tutorialToggle.checked = demoView.showTutorialFlowPanel;
     exemplarToggle.checked = demoView.showExemplarPanel;
     presetChip.textContent = demoView.viewPreset;
     presetChip.className = `status-chip status-${demoView.viewPreset === "workshop" ? "authoring" : "ready"}`;
@@ -1081,7 +1267,9 @@ export function mountApp(root: HTMLDivElement): void {
     qualityCard.hidden = !demoView.showQualitySplit;
     recentSealsCard.hidden = !demoView.showRecentSeals;
     supportCard.hidden = !demoView.showPersonalizationPanel;
+    tutorialCard.hidden = !demoView.showTutorialFlowPanel;
     personalizationCard.hidden = !demoView.showPersonalizationPanel;
+    tutorialCompareCard.hidden = !demoView.showTutorialFlowPanel;
     principlesCard.hidden = !demoView.showPersonalizationPanel;
     exemplarCard.hidden = !demoView.showExemplarPanel;
     profileCard.hidden = !demoView.showProfilePanel;
@@ -1229,10 +1417,28 @@ export function mountApp(root: HTMLDivElement): void {
     supportCopy.textContent = personalizationModel.cardCopy;
     supportBadges.innerHTML = personalizationModel.cardBadges;
     supportMetrics.innerHTML = personalizationModel.metricRows;
+    tutorialTitle.textContent = tutorialModel.title;
+    tutorialStatus.textContent = tutorialModel.statusLabel;
+    tutorialStatus.className = `status-chip status-${tutorialModel.statusTone}`;
+    tutorialCopy.textContent = tutorialModel.copy;
+    tutorialProgress.innerHTML = tutorialModel.progressBadges;
+    tutorialStepCard.innerHTML = tutorialModel.stepCard;
+    tutorialStepList.innerHTML = tutorialModel.stepList;
+    tutorialStartButton.disabled = tutorialModel.startDisabled;
+    tutorialCaptureButton.disabled = tutorialModel.captureDisabled;
+    tutorialResultButton.disabled = tutorialModel.resultDisabled;
+    tutorialClearButton.disabled = tutorialModel.clearDisabled;
     personalizationTitle.textContent = personalizationModel.compareTitle;
     personalizationCopy.textContent = personalizationModel.compareCopy;
     personalizationCompare.innerHTML = personalizationModel.compareLanes;
     personalizationEffects.innerHTML = personalizationModel.effectRows;
+    tutorialCompareTitle.textContent = tutorialModel.compareTitle;
+    tutorialCompareStatus.textContent = tutorialModel.compareStatusLabel;
+    tutorialCompareStatus.className = `status-chip status-${tutorialModel.compareStatusTone}`;
+    tutorialCompareCopy.textContent = tutorialModel.compareCopy;
+    tutorialCompareGrid.innerHTML = tutorialModel.compareGrid;
+    tutorialCompareEffects.innerHTML = tutorialModel.compareEffects;
+    tutorialCompareMetrics.innerHTML = tutorialModel.compareMetrics;
     principlesList.innerHTML = renderHciPrinciples();
     exemplarTitle.textContent = personalizationModel.exemplarTitle;
     exemplarCopy.textContent = personalizationModel.exemplarCopy;
@@ -1278,6 +1484,147 @@ export function mountApp(root: HTMLDivElement): void {
       ? "분석 안내선을 켜면 축선, 닫힘 보조선, 위치 힌트, 가이드 모양이 보이지만 원본 선은 그대로 유지됩니다."
       : "분석 안내선을 끄면 핵심 결과만 남기고 보조선은 숨깁니다.";
     analysisLegend.innerHTML = renderAnalysisLegend(demoView.analysisOverlay);
+  }
+
+  function refreshRecognitionState(): void {
+    previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
+
+    const shouldReplayBase = Boolean(baseSealResult?.canonicalFamily) || phase !== "base" || overlayAuthoringStarted;
+
+    if (!shouldReplayBase || baseSession.strokes.length === 0) {
+      if (!shouldReplayBase) {
+        currentOverlayPreview = null;
+      }
+      return;
+    }
+
+    const sealedReplay = recognizeSession(baseSession, { sealed: true, profile: currentRecognitionProfile() });
+    baseSealResult = sealedReplay.canonicalFamily ? sealedReplay : null;
+
+    if (!baseSealResult?.canonicalFamily) {
+      currentOverlayPreview = null;
+      overlayRecords = [];
+      compiledResult = null;
+      return;
+    }
+
+    const replay = replayOverlaySeries(baseSession, overlaySession.strokes);
+    overlayRecords = replay.records;
+    currentOverlayPreview =
+      phase === "overlay"
+        ? replay.lastRecognition
+        : replay.records[replay.records.length - 1]?.recognition ?? null;
+
+    if (compiledResult) {
+      compiledResult = compileSealResult(baseSealResult, overlayRecords, latestProfileDelta);
+    }
+  }
+
+  function replayOverlaySeries(
+    replayBaseSession: StrokeSession,
+    overlayStrokes: Stroke[]
+  ): { records: OverlayStrokeRecord[]; lastRecognition: OverlayRecognition | null } {
+    const replaySession: StrokeSession = {
+      strokes: [],
+      startedAt:
+        overlayStrokes[0]?.points[0]?.t ??
+        replayBaseSession.endedAt ??
+        replayBaseSession.startedAt
+    };
+    const records: OverlayStrokeRecord[] = [];
+    let lastRecognition: OverlayRecognition | null = null;
+
+    for (const stroke of overlayStrokes) {
+      const replayStroke = structuredClone(stroke);
+      replaySession.strokes.push(replayStroke);
+      replaySession.endedAt = replayStroke.points[replayStroke.points.length - 1]?.t ?? replaySession.startedAt;
+      const recognition = recognizeOverlayStroke(
+        replayStroke,
+        createOverlayContext(
+          replayBaseSession,
+          records,
+          replaySession,
+          createTutorialOverlayPersonalizationProfile(tutorialProfileStore)
+        )
+      );
+      records.push({ stroke: replayStroke, recognition });
+      lastRecognition = recognition;
+    }
+
+    return { records, lastRecognition };
+  }
+
+  function createTutorialComparisonSnapshot(profile: UserInputProfile): TutorialComparisonSnapshot | null {
+    if (baseSession.strokes.length === 0) {
+      return null;
+    }
+
+    const snapshotBaseSession = structuredClone(baseSession);
+    const snapshotOverlayStrokes = structuredClone(overlaySession.strokes);
+    const baseSealed = Boolean(baseSealResult?.canonicalFamily);
+    const snapshotBaseResult = recognizeSession(snapshotBaseSession, { sealed: baseSealed, profile });
+    const replayedOverlay =
+      baseSealed && snapshotBaseResult.canonicalFamily
+        ? replayOverlaySeries(snapshotBaseSession, snapshotOverlayStrokes)
+        : { records: [] as OverlayStrokeRecord[], lastRecognition: null as OverlayRecognition | null };
+
+    return {
+      capturedAt: Date.now(),
+      baseSession: snapshotBaseSession,
+      overlayStrokes: snapshotOverlayStrokes,
+      baseSealed,
+      baseResult: snapshotBaseResult,
+      overlayRecognition: replayedOverlay.lastRecognition,
+      overlayRecords: replayedOverlay.records,
+      tutorialSampleCount: tutorialProfileStore.shapeProfile.tutorialSampleCount
+    };
+  }
+
+  function replayTutorialComparisonSnapshot(source: TutorialComparisonSnapshot): TutorialComparisonSnapshot {
+    const nextBaseSession = structuredClone(source.baseSession);
+    const nextOverlayStrokes = structuredClone(source.overlayStrokes);
+    const nextBaseResult = recognizeSession(nextBaseSession, {
+      sealed: source.baseSealed,
+      profile: currentRecognitionProfile()
+    });
+    const replayedOverlay =
+      source.baseSealed && nextBaseResult.canonicalFamily
+        ? replayOverlaySeries(nextBaseSession, nextOverlayStrokes)
+        : { records: [] as OverlayStrokeRecord[], lastRecognition: null as OverlayRecognition | null };
+
+    return {
+      capturedAt: Date.now(),
+      baseSession: nextBaseSession,
+      overlayStrokes: nextOverlayStrokes,
+      baseSealed: source.baseSealed,
+      baseResult: nextBaseResult,
+      overlayRecognition: replayedOverlay.lastRecognition,
+      overlayRecords: replayedOverlay.records,
+      tutorialSampleCount: tutorialProfileStore.shapeProfile.tutorialSampleCount
+    };
+  }
+
+  function recordTutorialDemoStep(step: (typeof TUTORIAL_DEMO_STEPS)[number]): TutorialCapture | null {
+    if (step.kind === "family" && step.expectedFamily) {
+      return tutorialOnboardingHook.captureBaseFamily(step.expectedFamily, step.source);
+    }
+
+    if (step.kind === "operator" && step.expectedOperator) {
+      const stroke = overlayRecords[overlayRecords.length - 1]?.stroke ?? overlaySession.strokes[overlaySession.strokes.length - 1];
+
+      if (!stroke) {
+        return null;
+      }
+
+      return tutorialOnboardingHook.recordCapture({
+        kind: "operator",
+        expectedOperator: step.expectedOperator,
+        source: step.source,
+        strokes: [structuredClone(stroke)]
+      });
+    }
+
+    return null;
   }
 }
 
@@ -1350,6 +1697,7 @@ function resolvePresetView(state: DemoViewState, preset: DemoViewPreset): DemoVi
         explainResult: false,
         analysisOverlay: false,
         showQualitySplit: false,
+        showTutorialFlowPanel: false,
         showPersonalizationPanel: false,
         showExemplarPanel: false,
         showProfilePanel: false,
@@ -1363,6 +1711,7 @@ function resolvePresetView(state: DemoViewState, preset: DemoViewPreset): DemoVi
         explainResult: true,
         analysisOverlay: false,
         showQualitySplit: false,
+        showTutorialFlowPanel: true,
         showPersonalizationPanel: true,
         showExemplarPanel: true,
         showProfilePanel: true,
@@ -1376,6 +1725,7 @@ function resolvePresetView(state: DemoViewState, preset: DemoViewPreset): DemoVi
         explainResult: true,
         analysisOverlay: true,
         showQualitySplit: true,
+        showTutorialFlowPanel: true,
         showPersonalizationPanel: true,
         showExemplarPanel: true,
         showProfilePanel: true,
@@ -2070,6 +2420,379 @@ interface PersonalizationDemoModel {
   exemplarGrid: string;
 }
 
+interface TutorialFlowModel {
+  title: string;
+  statusLabel: string;
+  statusTone: "recognized" | "ready" | "waiting";
+  copy: string;
+  progressBadges: string;
+  stepCard: string;
+  stepList: string;
+  startDisabled: boolean;
+  captureDisabled: boolean;
+  resultDisabled: boolean;
+  clearDisabled: boolean;
+  compareTitle: string;
+  compareStatusLabel: string;
+  compareStatusTone: "recognized" | "ready" | "waiting";
+  compareCopy: string;
+  compareGrid: string;
+  compareEffects: string;
+  compareMetrics: string;
+}
+
+function getTutorialStepState(
+  step: (typeof TUTORIAL_DEMO_STEPS)[number],
+  baseSealResult: RecognitionResult | null,
+  overlayRecords: OverlayStrokeRecord[],
+  baseSession: StrokeSession,
+  overlaySession: StrokeSession
+): { ready: boolean; tone: "recognized" | "ready" | "waiting"; label: string; copy: string } {
+  if (step.kind === "family") {
+    const ready = baseSession.strokes.length > 0;
+    return {
+      ready,
+      tone: ready ? "ready" : "waiting",
+      label: ready ? "현재 입력 저장 가능" : "기본 모양 필요",
+      copy: ready
+        ? "지금 그린 기본 모양을 연습 입력으로 저장할 수 있습니다."
+        : "먼저 기본 모양을 한 번 그리고 저장 버튼을 눌러 주세요."
+    };
+  }
+
+  if (step.requiresSealedBase && !baseSealResult?.canonicalFamily) {
+    return {
+      ready: false,
+      tone: "waiting",
+      label: "기본 모양 고정 필요",
+      copy: "추가 효과 연습은 기본 모양을 먼저 고정한 뒤에만 열립니다."
+    };
+  }
+
+  if (step.requiresExistingOperator) {
+    const existingOperators = new Set(
+      overlayRecords
+        .map((record) => record.recognition.operator)
+        .filter((operator): operator is OverlayOperator => Boolean(operator))
+    );
+
+    if (!existingOperators.has(step.requiresExistingOperator)) {
+      return {
+        ready: false,
+        tone: "waiting",
+        label: `${operatorLabel(step.requiresExistingOperator)} 필요`,
+        copy: `${operatorLabel(step.requiresExistingOperator)}를 먼저 기록한 뒤 이 단계를 저장해 주세요.`
+      };
+    }
+  }
+
+  const hasOperatorStroke = overlayRecords.length > 0 || overlaySession.strokes.length > 0;
+  return {
+    ready: hasOperatorStroke,
+    tone: hasOperatorStroke ? "ready" : "waiting",
+    label: hasOperatorStroke ? "현재 입력 저장 가능" : "추가 효과 선 필요",
+    copy: hasOperatorStroke
+      ? "방금 그린 추가 효과 한 획을 연습 입력으로 저장할 수 있습니다."
+      : "추가 효과 선을 한 번 그린 뒤 저장 버튼을 눌러 주세요."
+  };
+}
+
+function buildTutorialFlowModel(args: {
+  stepIndex: number;
+  completedStepIds: string[];
+  tutorialFlowActive: boolean;
+  beforeSnapshot: TutorialComparisonSnapshot | null;
+  afterSnapshot: TutorialComparisonSnapshot | null;
+  baseSession: StrokeSession;
+  overlaySession: StrokeSession;
+  baseSealResult: RecognitionResult | null;
+  overlayRecords: OverlayStrokeRecord[];
+  tutorialStore: TutorialProfileStore;
+}): TutorialFlowModel {
+  const currentStep = TUTORIAL_DEMO_STEPS[args.stepIndex] ?? TUTORIAL_DEMO_STEPS[0];
+  const stepState = getTutorialStepState(
+    currentStep,
+    args.baseSealResult,
+    args.overlayRecords,
+    args.baseSession,
+    args.overlaySession
+  );
+  const completedCount = args.completedStepIds.length;
+  const tutorialSamples = args.tutorialStore.shapeProfile.tutorialSampleCount;
+  const stage = strongestPersonalizationStage(
+    args.afterSnapshot?.baseResult.personalization?.stage,
+    args.afterSnapshot?.overlayRecognition?.personalization?.stage
+  );
+  const targetId = currentStep.expectedFamily ?? currentStep.expectedOperator ?? null;
+  const stepBadges = [
+    renderPromiseBadge(`${completedCount}/${TUTORIAL_DEMO_STEPS.length} 단계`, completedCount > 0),
+    renderPromiseBadge(stepState.label, stepState.ready),
+    renderPromiseBadge(
+      args.beforeSnapshot ? "연습 전 입력 고정됨" : "연습 전 입력 대기",
+      Boolean(args.beforeSnapshot)
+    ),
+    renderPromiseBadge(`연습 입력 ${tutorialSamples}회`, tutorialSamples > 0)
+  ].join("");
+  const stepCard = `
+    <article class="tutorial-step-focus ${stepState.ready ? "ready" : ""}">
+      <div class="tutorial-step-copy">
+        <p class="mini-label">지금 따라 그릴 기준</p>
+        <h4>${currentStep.title}</h4>
+        <p>${currentStep.instruction}</p>
+        <div class="promise-inline">${stepBadges}</div>
+        <p class="tutorial-step-note">${stepState.copy}</p>
+      </div>
+      ${
+        targetId
+          ? `<div class="tutorial-step-exemplar">${renderExemplarChip(targetId, {
+              active: true,
+              hint: currentStep.kind === "family" ? "같은 모양을 유지한 채 한 번 더 또렷하게 그려 보세요." : "같은 위치와 길이 감각으로 한 획만 다시 붙여 보세요."
+            })}</div>`
+          : ""
+      }
+    </article>
+  `;
+  const stepList = TUTORIAL_DEMO_STEPS.map((step, index) => {
+    const completed = args.completedStepIds.includes(step.id);
+    const selected = step.id === currentStep.id;
+    const locked =
+      Boolean(step.requiresSealedBase && !args.baseSealResult?.canonicalFamily) ||
+      Boolean(
+        step.requiresExistingOperator &&
+          !args.overlayRecords.some((record) => record.recognition.operator === step.requiresExistingOperator)
+      );
+
+    return `
+      <button
+        class="tutorial-step-chip ${selected ? "active" : ""} ${completed ? "completed" : ""} ${locked ? "locked" : ""}"
+        type="button"
+        data-tutorial-step-index="${index}"
+      >
+        <span>${index + 1}</span>
+        <strong>${step.shortLabel}</strong>
+      </button>
+    `;
+  }).join("");
+
+  const compare = buildTutorialComparisonDisplay(args.beforeSnapshot, args.afterSnapshot);
+
+  return {
+    title: args.tutorialFlowActive ? "연습 입력 진행 중" : "연습 전 비교 준비",
+    statusLabel: args.tutorialFlowActive ? "진행 중" : args.beforeSnapshot ? "준비됨" : "대기",
+    statusTone: args.tutorialFlowActive ? "ready" : args.beforeSnapshot ? "recognized" : "waiting",
+    copy: args.beforeSnapshot
+      ? "현재 입력을 기준으로 같은 모양을 다시 계산해 연습 전과 연습 후를 비교합니다."
+      : "먼저 현재 입력을 고정해 두면, 연습 후에 같은 입력을 다시 읽어 차이를 비교할 수 있습니다.",
+    progressBadges: stepBadges,
+    stepCard,
+    stepList,
+    startDisabled: args.baseSession.strokes.length === 0,
+    captureDisabled: !stepState.ready,
+    resultDisabled: !args.beforeSnapshot,
+    clearDisabled:
+      tutorialSamples === 0 &&
+      !args.beforeSnapshot &&
+      !args.afterSnapshot &&
+      args.completedStepIds.length === 0,
+    compareTitle: compare.title,
+    compareStatusLabel: compare.statusLabel,
+    compareStatusTone: compare.statusTone,
+    compareCopy: compare.copy,
+    compareGrid: compare.grid,
+    compareEffects: compare.effects,
+    compareMetrics: compare.metrics
+  };
+}
+
+function buildTutorialComparisonDisplay(
+  beforeSnapshot: TutorialComparisonSnapshot | null,
+  afterSnapshot: TutorialComparisonSnapshot | null
+): {
+  title: string;
+  statusLabel: string;
+  statusTone: "recognized" | "ready" | "waiting";
+  copy: string;
+  grid: string;
+  effects: string;
+  metrics: string;
+} {
+  if (!beforeSnapshot) {
+    return {
+      title: "같은 입력 다시 보기",
+      statusLabel: "대기",
+      statusTone: "waiting",
+      copy: "연습 시작을 누르면 지금 입력을 고정해 두고, 연습 후에 같은 입력을 다시 읽어 비교합니다.",
+      grid: `<div class="empty-state">아직 연습 전 기준 입력이 없습니다.</div>`,
+      effects: renderMetricNotes(["같은 입력을 먼저 고정하면 연습 후 차이를 같은 화면에서 읽을 수 있습니다."]),
+      metrics: renderSummaryRows([["연습 입력 누적", "0회"], ["비교 상태", "전 기준 대기"], ["최종 판정", "규칙 기준 유지"]])
+    };
+  }
+
+  if (!afterSnapshot) {
+    return {
+      title: "연습 결과 대기",
+      statusLabel: "준비됨",
+      statusTone: "ready",
+      copy: "연습 결과 보기를 누르면 같은 입력을 다시 읽어 연습 전/후 차이를 비교합니다.",
+      grid: `<div class="empty-state">연습 입력을 몇 번 저장한 뒤 결과 비교를 열어 보세요.</div>`,
+      effects: renderMetricNotes([
+        "연습 전 입력은 이미 고정됐습니다.",
+        "연습 후에는 같은 입력을 다시 읽어 편향 보완 정도를 확인합니다."
+      ]),
+      metrics: renderSummaryRows([
+        ["연습 전 입력", formatClockTime(beforeSnapshot.capturedAt)],
+        ["연습 입력 누적", `${beforeSnapshot.tutorialSampleCount}회`],
+        ["비교 상태", "연습 결과 대기"]
+      ])
+    };
+  }
+
+  const supportLane = buildShadowLane("보조 판독", "shadow", afterSnapshot.baseResult, afterSnapshot.overlayRecognition);
+  const beforeLane = {
+    label: "연습 전",
+    title: "연습 전 현재 판정",
+    statusLabel: statusLabel(beforeSnapshot.baseResult.status),
+    statusTone: beforeSnapshot.baseResult.status,
+    baseLabel: readCurrentFamily(beforeSnapshot.baseResult)
+      ? familyLabel(readCurrentFamily(beforeSnapshot.baseResult) as GlyphFamily)
+      : "아직 없음",
+    overlayLabel: beforeSnapshot.overlayRecognition?.operator
+      ? operatorLabel(beforeSnapshot.overlayRecognition.operator)
+      : beforeSnapshot.overlayRecognition?.topCandidate?.operator
+        ? operatorLabel(beforeSnapshot.overlayRecognition.topCandidate.operator)
+        : "아직 없음",
+    copy: "연습을 시작하기 전에 같은 입력을 읽은 결과입니다."
+  };
+  const afterLane = {
+    label: "연습 후",
+    title: "연습 후 입력 습관 반영",
+    statusLabel: statusLabel(afterSnapshot.baseResult.status),
+    statusTone: afterSnapshot.baseResult.status,
+    baseLabel: readCurrentFamily(afterSnapshot.baseResult)
+      ? familyLabel(readCurrentFamily(afterSnapshot.baseResult) as GlyphFamily)
+      : "아직 없음",
+    overlayLabel: afterSnapshot.overlayRecognition?.operator
+      ? operatorLabel(afterSnapshot.overlayRecognition.operator)
+      : afterSnapshot.overlayRecognition?.topCandidate?.operator
+        ? operatorLabel(afterSnapshot.overlayRecognition.topCandidate.operator)
+        : "아직 없음",
+    copy: "같은 입력을 다시 읽어 본 연습 후 현재 판정입니다."
+  };
+  const compareGrid = [beforeLane, supportLane, afterLane]
+    .map(
+      (lane) => `
+        <article class="personalization-lane ${lane.label === "연습 후" ? "active" : ""}">
+          <div class="recent-seal-head">
+            <div>
+              <p class="mini-label">${lane.label}</p>
+              <h4>${lane.title}</h4>
+            </div>
+            <span class="status-chip status-${lane.statusTone}">${lane.statusLabel}</span>
+          </div>
+          <div class="summary-grid">
+            <div class="summary-row">
+              <span>기본 모양</span>
+              <strong>${lane.baseLabel}</strong>
+            </div>
+            <div class="summary-row">
+              <span>추가 효과</span>
+              <strong>${lane.overlayLabel}</strong>
+            </div>
+          </div>
+          <p class="recent-seal-summary">${lane.copy}</p>
+        </article>
+      `
+    )
+    .join("");
+
+  return {
+    title: "같은 입력 전 / 후 비교 완료",
+    statusLabel: "비교 가능",
+    statusTone: "recognized",
+    copy: "연습 전, 보조 판독 시험 계산, 연습 후 현재 판정을 같은 입력 기준으로 나란히 보여 줍니다.",
+    grid: compareGrid,
+    effects: renderMetricNotes(buildTutorialComparisonEffects(beforeSnapshot, afterSnapshot)),
+    metrics: renderSummaryRows(buildTutorialComparisonMetrics(beforeSnapshot, afterSnapshot))
+  };
+}
+
+function buildTutorialComparisonEffects(
+  beforeSnapshot: TutorialComparisonSnapshot,
+  afterSnapshot: TutorialComparisonSnapshot
+): string[] {
+  const effects: string[] = [];
+  const beforeBaseLabel = readCurrentFamily(beforeSnapshot.baseResult);
+  const afterBaseLabel = readCurrentFamily(afterSnapshot.baseResult);
+  const beforeBaseGap = candidateGap(beforeSnapshot.baseResult.candidates);
+  const afterBaseGap = candidateGap(afterSnapshot.baseResult.candidates);
+  const beforeOverlayGap = candidateGap(beforeSnapshot.overlayRecognition?.candidates ?? []);
+  const afterOverlayGap = candidateGap(afterSnapshot.overlayRecognition?.candidates ?? []);
+
+  if (beforeBaseLabel === afterBaseLabel) {
+    if (afterSnapshot.baseResult.status !== beforeSnapshot.baseResult.status) {
+      effects.push(
+        `기본 모양 상태가 ${statusLabel(beforeSnapshot.baseResult.status)}에서 ${statusLabel(afterSnapshot.baseResult.status)}로 바뀌었습니다.`
+      );
+    } else if (afterBaseGap > beforeBaseGap + 0.03) {
+      effects.push("기본 모양 확정 여유가 커졌습니다.");
+    } else {
+      effects.push("기본 모양 후보는 전/후가 거의 같습니다.");
+    }
+  } else {
+    effects.push("경합 구간에서 앞선 기본 모양 후보가 조금 달라졌습니다.");
+  }
+
+  if (!beforeSnapshot.overlayRecognition && afterSnapshot.overlayRecognition) {
+    effects.push("추가 효과 위치 읽기가 새로 열렸습니다.");
+  } else if (
+    afterSnapshot.overlayRecognition?.status === "recognized" &&
+    beforeSnapshot.overlayRecognition?.status !== "recognized"
+  ) {
+    effects.push("추가 효과 위치 읽기가 더 안정적으로 잡혔습니다.");
+  } else if (
+    afterSnapshot.overlayRecognition?.topCandidate?.blockedBy ||
+    beforeSnapshot.overlayRecognition?.topCandidate?.blockedBy
+  ) {
+    effects.push("규칙 차단은 그대로 유지됩니다.");
+  } else if (afterOverlayGap > beforeOverlayGap + 0.03) {
+    effects.push("추가 효과 후보 차이도 조금 더 벌어졌습니다.");
+  } else {
+    effects.push("추가 효과 읽기는 큰 변화 없이 유지됩니다.");
+  }
+
+  effects.push("최종 판정은 여전히 규칙 기준으로 고정됩니다.");
+  return effects;
+}
+
+function buildTutorialComparisonMetrics(
+  beforeSnapshot: TutorialComparisonSnapshot,
+  afterSnapshot: TutorialComparisonSnapshot
+): Array<[string, string]> {
+  const stage = strongestPersonalizationStage(
+    afterSnapshot.baseResult.personalization?.stage,
+    afterSnapshot.overlayRecognition?.personalization?.stage
+  );
+
+  return [
+    [
+      "기본 모양 후보 차이",
+      `${candidateGap(beforeSnapshot.baseResult.candidates).toFixed(2)} -> ${candidateGap(afterSnapshot.baseResult.candidates).toFixed(2)}`
+    ],
+    [
+      "추가 효과 후보 차이",
+      `${candidateGap(beforeSnapshot.overlayRecognition?.candidates ?? []).toFixed(2)} -> ${candidateGap(afterSnapshot.overlayRecognition?.candidates ?? []).toFixed(2)}`
+    ],
+    ["연습 입력 누적", `${beforeSnapshot.tutorialSampleCount} -> ${afterSnapshot.tutorialSampleCount}`],
+    ["현재 반영 단계", personalizationStageLabel(stage)]
+  ];
+}
+
+function candidateGap<T extends { score: number }>(candidates: T[]): number {
+  const top = candidates[0]?.score ?? 0;
+  const second = candidates[1]?.score ?? 0;
+  return Math.max(0, top - second);
+}
+
 function buildPersonalizationDemoModel(
   baseResult: RecognitionResult,
   overlayRecognition: OverlayRecognition | null,
@@ -2327,9 +3050,11 @@ function renderPracticeDetails(store: TutorialProfileStore): string {
 
 function renderHciPrinciples(): string {
   return [
+    "연습 입력 전/후를 같은 화면에서 비교합니다.",
     "최종 판정과 시험 계산을 나눠 보여 줍니다.",
     "같은 모양은 같은 종류로 유지합니다.",
     "원본 선은 그대로 두고 설명용 선만 덧댑니다.",
+    "추가 효과는 위치와 길이도 함께 봅니다.",
     "연습 입력은 입력 습관만 반영하고 의미는 바꾸지 않습니다.",
     "경합과 미완성은 이유를 짧게 설명합니다.",
     "최근 변화와 이번 차이를 다시 그려 보지 않아도 읽을 수 있게 합니다."

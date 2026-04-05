@@ -43,11 +43,14 @@ describe("demo layer", () => {
 
     expect(initial.qualityInfluence).toBe(true);
     expect(initial.showPersonalizationPanel).toBe(false);
+    expect(initial.showTutorialFlowPanel).toBe(false);
     expect(explain.explainResult).toBe(true);
+    expect(explain.showTutorialFlowPanel).toBe(true);
     expect(explain.showPersonalizationPanel).toBe(true);
     expect(explain.showExemplarPanel).toBe(true);
     expect(explain.showLogViewer).toBe(false);
     expect(workshop.analysisOverlay).toBe(true);
+    expect(workshop.showTutorialFlowPanel).toBe(true);
     expect(workshop.showLogViewer).toBe(true);
     expect(workshop.qualityInfluence).toBe(true);
   });

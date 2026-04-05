@@ -547,6 +547,93 @@ button.primary {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.tutorial-step-card {
+  margin-top: 14px;
+}
+
+.tutorial-step-focus {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.92fr);
+  gap: 14px;
+  border-radius: 22px;
+  padding: 14px;
+  background: rgba(23, 49, 59, 0.04);
+  border: 1px solid rgba(23, 49, 59, 0.08);
+}
+
+.tutorial-step-focus.ready {
+  background: linear-gradient(180deg, rgba(61, 125, 101, 0.08), rgba(255, 249, 240, 0.92));
+  border-color: rgba(61, 125, 101, 0.2);
+}
+
+.tutorial-step-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.tutorial-step-copy h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.tutorial-step-copy p,
+.tutorial-step-note {
+  margin: 0;
+  color: rgba(23, 49, 59, 0.76);
+}
+
+.tutorial-step-exemplar .exemplar-chip {
+  height: 100%;
+}
+
+.tutorial-step-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.tutorial-step-chip {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  border-radius: 18px;
+  padding: 0.8rem 0.9rem;
+  background: rgba(23, 49, 59, 0.05);
+  border: 1px solid rgba(23, 49, 59, 0.08);
+  text-transform: none;
+}
+
+.tutorial-step-chip span {
+  font: 600 0.72rem "IBM Plex Mono", "SFMono-Regular", monospace;
+  color: rgba(23, 49, 59, 0.56);
+}
+
+.tutorial-step-chip strong {
+  font-size: 0.92rem;
+}
+
+.tutorial-step-chip.active {
+  background: linear-gradient(135deg, rgba(163, 92, 56, 0.14), rgba(61, 125, 101, 0.1));
+  border-color: rgba(163, 92, 56, 0.24);
+}
+
+.tutorial-step-chip.completed {
+  border-color: rgba(61, 125, 101, 0.22);
+  background: rgba(61, 125, 101, 0.08);
+}
+
+.tutorial-step-chip.locked {
+  opacity: 0.68;
+}
+
+.tutorial-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 .personalization-lane {
   display: grid;
   gap: 10px;
@@ -984,6 +1071,11 @@ button.primary {
   .compare-grid,
   .compare-delta-row,
   .personalization-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tutorial-step-focus,
+  .tutorial-step-list {
     grid-template-columns: 1fr;
   }
 

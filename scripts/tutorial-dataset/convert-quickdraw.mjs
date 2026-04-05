@@ -56,6 +56,7 @@ for await (const entry of iterateQuickdrawEntries(inputPath)) {
       forbiddenUses: PUBLIC_FORBIDDEN_USES,
       strokes,
       metadata: {
+        layerRole: "public_auxiliary",
         sourceLabel: entry.word || null,
         sourceFile: entry.__sourceFile ?? null,
         recognized: entry.recognized ?? null,

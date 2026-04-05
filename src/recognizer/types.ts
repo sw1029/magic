@@ -20,6 +20,7 @@ export type OverlayAnchorZoneId =
   | "lower_right";
 export type RecognitionStatus = "recognized" | "ambiguous" | "incomplete" | "invalid";
 export type RitualPhase = "base" | "overlay" | "final";
+export type TutorialPersonalizationStage = "none" | "few_shot" | "enough_shot";
 
 export interface PointSample {
   x: number;
@@ -101,6 +102,36 @@ export interface RecognitionCandidate {
   completenessHint?: string;
 }
 
+export interface PersonalizationRuntimeSummary {
+  tutorialSampleCount: number;
+  stage: TutorialPersonalizationStage;
+  featureInjectionMix: number;
+  thresholdBias: number;
+}
+
+export interface ShadowScoreCandidate<TLabel extends string = string> {
+  label: TLabel;
+  heuristicScore: number;
+  shadowScore: number;
+  delta: number;
+  probability?: number;
+}
+
+export interface ShadowRuntimeSummary<TLabel extends string = string> {
+  mode: "heuristic_only" | "shadow";
+  artifactVersion?: string;
+  heuristicTopLabel?: TLabel;
+  shadowTopLabel?: TLabel;
+  actualTopLabel?: TLabel;
+  actualStatus?: RecognitionStatus;
+  shadowStatus?: RecognitionStatus;
+  decisionChanged: boolean;
+  statusChanged: boolean;
+  calibratedConfidence?: number;
+  ambiguityProbability?: number;
+  candidates: ShadowScoreCandidate<TLabel>[];
+}
+
 export interface QualityVector {
   closure: number;
   symmetry: number;
@@ -126,6 +157,8 @@ export interface RecognitionResult {
   normalizedStrokes: PointSample[][];
   symmetryAxis?: AxisLine;
   closureLine?: AxisLine;
+  personalization?: PersonalizationRuntimeSummary;
+  shadow?: ShadowRuntimeSummary<GlyphFamily>;
 }
 
 export interface TutorialCapture {
@@ -186,6 +219,8 @@ export interface TutorialConfusionPair {
 
 export interface UserShapeProfile {
   tutorialSampleCount: number;
+  familyTutorialSampleCount?: number;
+  operatorTutorialSampleCount?: number;
   familyPrototypes: Partial<Record<GlyphFamily, FamilyPrototype>>;
   operatorPrototypes: Partial<Record<OverlayOperator, OperatorPrototype>>;
   confusionPairs: TutorialConfusionPair[];
@@ -256,6 +291,8 @@ export interface OverlayRecognition {
   bounds: StrokeBounds;
   debugAxis?: AxisLine;
   anchorZoneId?: OverlayAnchorZoneId;
+  personalization?: PersonalizationRuntimeSummary;
+  shadow?: ShadowRuntimeSummary<OverlayOperator>;
 }
 
 export interface OverlayStrokeRecord {

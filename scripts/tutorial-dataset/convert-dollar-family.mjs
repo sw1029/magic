@@ -60,6 +60,7 @@ for (const filePath of files) {
       forbiddenUses: PUBLIC_FORBIDDEN_USES,
       strokes,
       metadata: {
+        layerRole: "public_auxiliary",
         sourceLabel: gestureName,
         sourcePath: filePath
       }

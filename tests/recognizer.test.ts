@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GLYPH_TEMPLATES } from "../src/recognizer/templates";
 import { recognizeSession } from "../src/recognizer/recognize";
+import { getTinyMlRuntimeStatus } from "../src/recognizer/rerank";
 import type { Stroke, StrokeSession } from "../src/recognizer/types";
 
 describe("magic recognizer", () => {
@@ -126,6 +127,31 @@ describe("magic recognizer", () => {
     expect(slantedResult.canonicalFamily).toBe("fire");
     expect(slantedResult.quality.rotationBias).toBeGreaterThan(baseResult.quality.rotationBias + 0.2);
     expect(Math.abs(slantedResult.quality.closure - baseResult.quality.closure)).toBeLessThan(0.2);
+  });
+
+  it("records base shadow evaluation without changing a clear canonical family", () => {
+    const runtime = getTinyMlRuntimeStatus();
+    const session = fromTemplate("water", {
+      scale: 192,
+      rotate: -0.18,
+      translate: { x: 300, y: 250 },
+      noise: 0.01
+    });
+    const result = recognizeSession(session, { sealed: true });
+
+    expect(result.status).toBe("recognized");
+    expect(result.canonicalFamily).toBe("water");
+    expect(result.shadow).toBeDefined();
+    expect(result.shadow?.actualTopLabel).toBe(result.topCandidate?.family);
+    expect(result.shadow?.actualStatus).toBe(result.status);
+    expect(result.shadow?.candidates.length).toBeGreaterThan(0);
+
+    if (runtime.baseShadowAvailable) {
+      expect(result.shadow?.mode).toBe("shadow");
+      expect(result.shadow?.artifactVersion).toBeTruthy();
+    } else {
+      expect(result.shadow?.mode).toBe("heuristic_only");
+    }
   });
 });
 

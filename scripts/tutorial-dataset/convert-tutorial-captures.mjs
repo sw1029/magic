@@ -67,6 +67,7 @@ function tutorialCaptureToRecord(capture, index, split) {
     allowedUses: TUTORIAL_ALLOWED_USES,
     strokes: sanitizeStrokes(capture.strokes, `tutorial-${index + 1}`),
     metadata: {
+      layerRole: "tutorial_primary",
       captureId: capture.id || `tutorial-${index + 1}`,
       timestamp: capture.timestamp || null,
       tutorialPriorityRank: 0

@@ -36,6 +36,11 @@
 * [T02-07 operator tutorial context snapshot과 placement-aware personalization](task-07-operator-tutorial-context-and-placement-personalization.md)
 * [T02-08 tutorial vector capture와 ML adaptation contract](task-08-tutorial-vector-capture-and-ml-adaptation-contract.md)
 
+## Tiny ML 연결
+
+* [T02-08 tutorial vector capture와 ML adaptation contract](task-08-tutorial-vector-capture-and-ml-adaptation-contract.md)은 [T07-08 tiny ML baseline 설계와 offline 실험안](../epic-07-future-expansion-backlog/task-08-tiny-ml-baseline-and-offline-eval.md)과 [T07-09 tutorial-aware personalization adapter 설계](../epic-07-future-expansion-backlog/task-09-tutorial-aware-personalization-adapter.md)를 잇는 vector-only contract bridge다.
+* 현재 작업 트리에는 tutorial store와 personalization runtime groundwork가 있지만, actual ML adaptation activation은 `T02-08`이 닫히기 전까지 열지 않는다.
+
 ## 선행 task
 
 * [Epic 01 source-and-freeze](../epic-01-source-and-freeze/README.md)
@@ -52,7 +57,7 @@
 * 속도와 각도가 결과 차이에 어떻게 들어가는지 정리된다.
 * 튜토리얼 기반 개인화 보조층의 경계와 구조가 정리된다.
 * operator placement-aware personalization의 허용 범위와 stop condition이 정리된다.
-* tutorial vector capture가 tiny ML personalization과 어떻게 연결될지 계약이 정리된다.
+* tutorial vector capture가 tiny ML personalization과 어떻게 연결될지 계약이 `T07-08` offline baseline과 `T07-09` adapter 기준에 맞게 정리된다.
 
 ## 지금은 보류하지만 자리 남길 요소
 

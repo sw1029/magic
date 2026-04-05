@@ -81,6 +81,8 @@ export function createEmptyRecognitionCalibration(): RecognitionCalibration {
 export function createEmptyUserShapeProfile(updatedAt = Date.now()): UserShapeProfile {
   return {
     tutorialSampleCount: 0,
+    familyTutorialSampleCount: 0,
+    operatorTutorialSampleCount: 0,
     familyPrototypes: {},
     operatorPrototypes: {},
     confusionPairs: [],
@@ -228,9 +230,9 @@ export function createTutorialOverlayPersonalizationProfile(
     };
     return accumulator;
   }, {});
-  const sampleCount = Object.values(operatorPrototypes).reduce(
-    (sum, prototype) => sum + (prototype?.sampleCount ?? 0),
-    0
+  const sampleCount = Math.max(
+    safeStore.shapeProfile.operatorTutorialSampleCount ?? 0,
+    Object.values(operatorPrototypes).reduce((sum, prototype) => sum + (prototype?.sampleCount ?? 0), 0)
   );
 
   if (sampleCount === 0) {
@@ -239,6 +241,8 @@ export function createTutorialOverlayPersonalizationProfile(
 
   return {
     sampleCount,
+    tutorialSampleCount: sampleCount,
+    operatorTutorialSampleCount: sampleCount,
     operatorPrototypes,
     recognitionCalibration: safeStore.calibration,
     calibration: safeStore.calibration
@@ -277,6 +281,9 @@ export function buildUserShapeProfile(captures: TutorialCapture[], updatedAt = l
     return createEmptyUserShapeProfile(updatedAt > 0 ? updatedAt : Date.now());
   }
 
+  const familyTutorialSampleCount = captures.filter((capture) => capture.kind === "family").length;
+  const operatorTutorialSampleCount = captures.filter((capture) => capture.kind === "operator").length;
+
   const familyPrototypes = TUTORIAL_FAMILY_ORDER.reduce<UserShapeProfile["familyPrototypes"]>((accumulator, family) => {
     const prototype = buildFamilyPrototype(
       family,
@@ -307,6 +314,8 @@ export function buildUserShapeProfile(captures: TutorialCapture[], updatedAt = l
 
   return {
     tutorialSampleCount: captures.length,
+    familyTutorialSampleCount,
+    operatorTutorialSampleCount,
     familyPrototypes,
     operatorPrototypes,
     confusionPairs: buildConfusionPairs(familyPrototypes, operatorPrototypes),

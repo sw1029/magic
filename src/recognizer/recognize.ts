@@ -11,7 +11,7 @@ import {
 } from "./geometry";
 import { createEmptyQualityVector } from "./user-profile";
 import { calculateAdjustedQuality, calculateQualityVector } from "./quality";
-import { rerankBaseCandidates } from "./rerank";
+import { buildBaseShadowSummary, rerankBaseCandidates, resolveBasePersonalizationRuntime } from "./rerank";
 import { GLYPH_TEMPLATES } from "./templates";
 import type {
   AxisLine,
@@ -42,31 +42,44 @@ export function recognizeSession(
   const rawQuality = calculateQualityVector(strokes, normalized);
   const { adjustedQuality, qualityAdjustment } = calculateAdjustedQuality(rawQuality, options.profile);
   const features = deriveFeatures({ ...session, strokes }, normalized);
+  const heuristicCandidates = TEMPLATE_BUNDLES.map((template) =>
+    scoreCandidate(template.family, normalized.normalizedCloud, strokes.length, features, rawQuality)
+  ).sort((left, right) => right.score - left.score);
+  const personalization = resolveBasePersonalizationRuntime(options.profile);
   const candidates = rerankBaseCandidates({
-    candidates: TEMPLATE_BUNDLES.map((template) =>
-      scoreCandidate(template.family, normalized.normalizedCloud, strokes.length, features, rawQuality)
-    ).sort((left, right) => right.score - left.score),
+    candidates: heuristicCandidates,
     normalizedCloud: normalized.normalizedCloud,
     features,
+    quality: rawQuality,
     profile: options.profile
   });
 
   const topCandidate = candidates[0];
   const secondCandidate = candidates[1];
   const margin = topCandidate ? topCandidate.score - (secondCandidate?.score ?? 0) : 0;
+  const recognizedScoreThreshold = 0.7 - personalization.thresholdBias;
+  const recognizedMarginThreshold = Math.max(0.08, 0.15 - personalization.thresholdBias * 0.7);
   let status: RecognitionResult["status"] = "invalid";
   let invalidReason = "기준형과 충분히 가깝지 않습니다.";
 
   if (topCandidate && topCandidate.score >= 0.55 && topCandidate.completenessHint) {
     status = "incomplete";
     invalidReason = topCandidate.completenessHint;
-  } else if (topCandidate && topCandidate.score >= 0.7 && margin >= 0.15) {
+  } else if (topCandidate && topCandidate.score >= recognizedScoreThreshold && margin >= recognizedMarginThreshold) {
     status = "recognized";
     invalidReason = "seal 조건을 만족했습니다.";
   } else if (topCandidate && topCandidate.score >= 0.55) {
     status = "ambiguous";
     invalidReason = "여러 기준형의 점수가 가까워 최종 family를 확정하지 않습니다.";
   }
+
+  const shadow = buildBaseShadowSummary({
+    heuristicCandidates,
+    actualCandidates: candidates,
+    actualStatus: status,
+    features,
+    quality: rawQuality
+  });
 
   return {
     status,
@@ -81,6 +94,8 @@ export function recognizeSession(
     canonicalFamily: options.sealed && status === "recognized" ? topCandidate.family : undefined,
     invalidReason,
     normalizedStrokes: normalized.normalizedStrokes,
+    personalization,
+    shadow,
     symmetryAxis: buildSymmetryAxis(normalized.rawCentroid, normalized.rawAngleRadians, normalized.diagonal),
     closureLine: buildClosureLine(strokes)
   };

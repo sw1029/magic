@@ -193,7 +193,10 @@ export const SYNTHETIC_ALLOWED_USES = [
   "prototype_bootstrap",
   "operator_bootstrap",
   "hard_negative_bootstrap",
-  "normalization_regression"
+  "normalization_regression",
+  "rerank_supervision",
+  "confidence_calibration",
+  "hard_negative_eval"
 ]
 
 export const TUTORIAL_ALLOWED_USES = [
@@ -868,7 +871,7 @@ export async function readJsonOrNdjson(filePath) {
   }
 
   if (trimmed.startsWith("{")) {
-    return [JSON.parse(trimmed)]
+    return JSON.parse(trimmed)
   }
 
   return raw

@@ -11,7 +11,13 @@ import {
   strokeStraightness
 } from "./geometry";
 import { OVERLAY_OPERATOR_TEMPLATES, type OverlayOperatorTemplate } from "./operator-templates";
-import { rerankOverlayCandidates, type OverlayPersonalizationProfile, type OverlayRerankCandidate } from "./rerank";
+import {
+  buildOverlayShadowSummary,
+  rerankOverlayCandidates,
+  resolveOverlayPersonalizationRuntime,
+  type OverlayPersonalizationProfile,
+  type OverlayRerankCandidate
+} from "./rerank";
 import type {
   AxisLine,
   OverlayAnchorZone,
@@ -133,8 +139,12 @@ export function recognizeOverlayStroke(
 
   const normalized = normalizeStrokes([stroke], 64);
   const features = deriveOverlayFeatures(stroke, normalized.normalizedCloud, context.referenceFrame);
+  const heuristicCandidates = TEMPLATE_BUNDLES.map((template) =>
+    scoreOverlayCandidate(template, normalized.normalizedCloud, features, context)
+  );
+  const personalization = resolveOverlayPersonalizationRuntime(context.personalizationProfile);
   const candidates = rerankOverlayCandidates(
-    TEMPLATE_BUNDLES.map((template) => scoreOverlayCandidate(template, normalized.normalizedCloud, features, context)),
+    heuristicCandidates,
     {
       profile: context.personalizationProfile,
       topK: 3
@@ -145,6 +155,9 @@ export function recognizeOverlayStroke(
   const martialAxisCandidate = candidates.find((candidate) => candidate.operator === "martial_axis");
   const secondCandidate = candidates[1];
   const margin = topCandidate ? topCandidate.score - (secondCandidate?.score ?? 0) : 0;
+  const recognizedScoreThreshold = 0.74 - personalization.thresholdBias;
+  const recognizedShapeThreshold = Math.max(0.44, 0.54 - personalization.thresholdBias * 0.7);
+  const recognizedMarginThreshold = Math.max(0.03, 0.05 - personalization.thresholdBias * 0.4);
   let status: OverlayRecognition["status"] = "invalid";
   let operator: OverlayOperator | undefined;
   let invalidReason = "overlay operator 기준형과 충분히 가깝지 않습니다.";
@@ -182,10 +195,10 @@ export function recognizeOverlayStroke(
     status = "incomplete";
     invalidReason = topCandidate.completenessHint;
   } else if (
-    topCandidate?.score >= 0.74 &&
-    topCandidate.shapeConfidence >= 0.54 &&
+    topCandidate?.score >= recognizedScoreThreshold &&
+    topCandidate.shapeConfidence >= recognizedShapeThreshold &&
     topCandidate.scaleScore >= 0.34 &&
-    margin >= 0.05
+    margin >= recognizedMarginThreshold
   ) {
     status = "recognized";
     operator = topCandidate.operator;
@@ -194,6 +207,12 @@ export function recognizeOverlayStroke(
     status = "ambiguous";
     invalidReason = "overlay operator 후보가 겹쳐 최종 stack에 추가하지 않습니다.";
   }
+
+  const shadow = buildOverlayShadowSummary({
+    heuristicCandidates,
+    actualCandidates: candidates,
+    actualStatus: status
+  });
 
   return {
     strokeId: stroke.id,
@@ -205,7 +224,9 @@ export function recognizeOverlayStroke(
     normalizedStrokes: normalized.normalizedStrokes,
     bounds,
     debugAxis: buildDebugAxis(stroke),
-    anchorZoneId: topCandidate?.anchorZoneId
+    anchorZoneId: topCandidate?.anchorZoneId,
+    personalization,
+    shadow
   };
 }
 

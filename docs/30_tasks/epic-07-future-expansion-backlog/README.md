@@ -3,6 +3,7 @@
 ## 요약
 
 현재 범위에서 바로 구현하지 않는 3D, 가벼운 AI, hybrid 데이터 전략, 실험 스테이지, 실패 흔적과 추가 반응층을 backlog task로 정리하는 epic이다.
+다만 tiny ML baseline branch처럼 현재 작업 트리에서 shadow-mode까지 먼저 들어온 항목도 이 epic 안에서 함께 추적한다.
 
 ## 아이디어 원본
 
@@ -35,6 +36,12 @@
 * [T07-08 tiny ML baseline 설계와 offline 실험안](task-08-tiny-ml-baseline-and-offline-eval.md)
 * [T07-09 tutorial-aware personalization adapter 설계](task-09-tutorial-aware-personalization-adapter.md)
 
+## Tiny ML Branch
+
+* [T07-08 tiny ML baseline 설계와 offline 실험안](task-08-tiny-ml-baseline-and-offline-eval.md)은 현재 작업 트리의 dataset split/feature spec, base/operator artifact, runtime shadow-mode acceptance 기준을 맡는다.
+* [T02-08 tutorial vector capture와 ML adaptation contract](../epic-02-symbols-and-input/task-08-tutorial-vector-capture-and-ml-adaptation-contract.md)은 `T07-09`로 가는 vector capture contract bridge다.
+* [T07-09 tutorial-aware personalization adapter 설계](task-09-tutorial-aware-personalization-adapter.md)는 runtime groundwork가 있어도 `T02-08`이 닫히기 전까지 blocked로 유지한다.
+
 ## 선행 task
 
 * [Epic 04 result-resolution-and-runtime](../epic-04-result-resolution-and-runtime/README.md)
@@ -51,7 +58,8 @@
 * 향후 확장이 현재 구조와 어떻게 이어지는지 문서상 보인다.
 * lightweight personalization과 tiny model 실험의 범위가 backlog 수준으로 정리된다.
 * placement-aware operator personalization 이후의 tiny model 확장 범위가 backlog로 정리된다.
-* public/synthetic/tutorial을 함께 쓰는 첫 tiny ML baseline과 user personalization 후속 설계가 backlog로 정리된다.
+* public/synthetic/tutorial을 함께 쓰는 첫 tiny ML baseline과 user personalization 후속 설계가 현재 상태와 다음 상태를 구분한 채 추적된다.
+* tiny ML gate-open acceptance는 `ambiguity` 또는 `hard-negative error` 감소, `family flip` 증가 `0`, `dependency violation` `0` 기준으로 유지된다.
 
 ## 지금은 보류하지만 자리 남길 요소
 

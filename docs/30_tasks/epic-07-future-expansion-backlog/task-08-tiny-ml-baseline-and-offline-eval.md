@@ -3,7 +3,7 @@
 - id: T07-08
 - parent: E07
 - priority: P2
-- status: backlog
+- status: done
 - depends_on: T07-05
 - blocks: T07-09
 - source_chat: request-answer03, request-answer11, request-answer18
@@ -12,6 +12,21 @@
 ## 요약
 
 public auxiliary / synthetic / tutorial 계층을 분리한 상태에서 첫 tiny ML baseline과 offline eval 방식을 정리한다.
+
+## 현재 작업 트리 반영 상태
+
+현재 작업 트리 기준으로 아래가 이미 연결돼 있다.
+
+* `artifacts/ml/dataset-split-v1.json`, `artifacts/ml/feature-spec-v1.json`
+* `artifacts/ml/base-rerank-v1.json`, `artifacts/ml/base-confidence-v1.json`
+* `artifacts/ml/operator-rerank-v1.json`, `artifacts/ml/operator-confidence-v1.json`
+* `src/recognizer/rerank.ts`의 artifact loader와 base/operator shadow summary
+* `src/app.ts`의 tiny ML shadow runtime status 노출
+
+아직 열지 않은 범위는 아래다.
+
+* shadow result를 최종 decision에 반영하는 gate-open rollout
+* `T02-08` 이후 tutorial vector capture를 붙인 user-specific adapter 활성화
 
 ## 아이디어 원본
 
@@ -42,6 +57,8 @@ public auxiliary / synthetic / tutorial 계층을 분리한 상태에서 첫 tin
 ## 관련 문서
 
 * [`../../../20_queue/tiny-ml-baseline-plan.md`](../../../20_queue/tiny-ml-baseline-plan.md)
+* [T02-08 tutorial vector capture와 ML adaptation contract](../epic-02-symbols-and-input/task-08-tutorial-vector-capture-and-ml-adaptation-contract.md)
+* [T07-09 tutorial-aware personalization adapter 설계](task-09-tutorial-aware-personalization-adapter.md)
 
 ## 선행 task
 
@@ -55,7 +72,9 @@ public auxiliary / synthetic / tutorial 계층을 분리한 상태에서 첫 tin
 
 * base/operator baseline의 모델 타입, 입력 feature, output artifact 형식이 정리된다.
 * offline eval 지표와 acceptance 기준이 문서상 고정된다.
-* runtime shadow mode 적용 순서가 정리된다.
+* `ambiguity` 감소 또는 `hard-negative error` 감소가 acceptance 후보로 정리된다.
+* `family flip` 증가 `0`, `dependency violation` `0`, `off-anchor rescue` `0`이 gate-open stop condition으로 고정된다.
+* runtime shadow mode 적용 순서가 정리되고, 최종 decision gate-open은 아직 열지 않는다는 상태 구분이 남는다.
 
 ## 지금은 보류하지만 자리 남길 요소
 

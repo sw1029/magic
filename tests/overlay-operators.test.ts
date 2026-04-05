@@ -12,6 +12,7 @@ import {
   hydrateTutorialProfileStore
 } from "../src/recognizer/tutorial-profile";
 import {
+  getTinyMlRuntimeStatus,
   rerankOverlayCandidates,
   type OverlayPersonalizationProfile,
   type OverlayRerankCandidate
@@ -171,6 +172,35 @@ describe("overlay operator recognizer", () => {
 
     expect(recognition.topCandidate?.operator).toBe(baseline.topCandidate?.operator);
     expect(recognition.topCandidate?.score).toBeLessThanOrEqual((baseline.topCandidate?.score ?? 0) + 0.001);
+  });
+
+  it("records operator shadow evaluation while keeping dependency violations blocked", () => {
+    const runtime = getTinyMlRuntimeStatus();
+    const stroke = fromOverlayTemplate("martial_axis", {
+      scale: 118,
+      rotate: 0,
+      translate: { x: 470, y: 360 }
+    });
+    const overlaySession = makeSession([stroke]);
+    const recognition = recognizeOverlayStroke(stroke, {
+      referenceFrame,
+      existingOperators: [],
+      overlaySession
+    });
+
+    expect(recognition.status).toBe("incomplete");
+    expect(recognition.invalidReason).toContain("void_cut");
+    expect(recognition.shadow).toBeDefined();
+    expect(recognition.shadow?.actualTopLabel).toBe(recognition.topCandidate?.operator);
+    expect(recognition.shadow?.actualStatus).toBe(recognition.status);
+    expect(recognition.shadow?.candidates.length).toBeGreaterThan(0);
+
+    if (runtime.operatorShadowAvailable) {
+      expect(recognition.shadow?.mode).toBe("shadow");
+      expect(recognition.shadow?.artifactVersion).toBeTruthy();
+    } else {
+      expect(recognition.shadow?.mode).toBe("heuristic_only");
+    }
   });
 });
 

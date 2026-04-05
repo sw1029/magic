@@ -28,71 +28,7 @@ import {
   toNumber,
   writeNdjson
 } from "./common.mjs"
-
-const PRESETS = {
-  bootstrap: {
-    split: "train",
-    sourceWeights: {
-      trace: 0.45,
-      recall: 0.35,
-      variation: 0.2
-    },
-    rotationDeg: [-9, 9],
-    scale: [0.9, 1.12],
-    stretch: [0.9, 1.12],
-    translate: [-0.08, 0.08],
-    jitter: [0.006, 0.03],
-    overshoot: [0, 0.08],
-    closureLeak: [0, 0.08],
-    partialTrim: [0, 0.08],
-    cornerRounding: [0, 0.22],
-    anchorShift: [0, 0.08],
-    reverseStrokeOrderProbability: 0.18,
-    reverseStrokeDirectionProbability: 0.35,
-    pointGap: [10, 22]
-  },
-  "tutorial-like": {
-    split: "adaptation",
-    sourceWeights: {
-      trace: 0.4,
-      recall: 0.4,
-      variation: 0.2
-    },
-    rotationDeg: [-12, 12],
-    scale: [0.88, 1.15],
-    stretch: [0.86, 1.18],
-    translate: [-0.1, 0.1],
-    jitter: [0.01, 0.04],
-    overshoot: [0, 0.11],
-    closureLeak: [0.01, 0.12],
-    partialTrim: [0, 0.12],
-    cornerRounding: [0.02, 0.28],
-    anchorShift: [0.01, 0.1],
-    reverseStrokeOrderProbability: 0.24,
-    reverseStrokeDirectionProbability: 0.45,
-    pointGap: [8, 24]
-  },
-  "hard-negative": {
-    split: "train",
-    sourceWeights: {
-      recall: 0.4,
-      variation: 0.6
-    },
-    rotationDeg: [-16, 16],
-    scale: [0.84, 1.18],
-    stretch: [0.8, 1.25],
-    translate: [-0.12, 0.12],
-    jitter: [0.02, 0.06],
-    overshoot: [0.03, 0.14],
-    closureLeak: [0.03, 0.18],
-    partialTrim: [0.04, 0.18],
-    cornerRounding: [0.08, 0.34],
-    anchorShift: [0.04, 0.14],
-    reverseStrokeOrderProbability: 0.28,
-    reverseStrokeDirectionProbability: 0.55,
-    pointGap: [6, 26]
-  }
-}
+import { resolveSyntheticPriority, SYNTHETIC_PRESETS } from "./synthetic-presets.mjs"
 
 const args = parseArgs(process.argv.slice(2))
 
@@ -102,7 +38,7 @@ if (args.help) {
 }
 
 const presetName = String(args.preset || "bootstrap")
-const preset = PRESETS[presetName]
+const preset = SYNTHETIC_PRESETS[presetName]
 
 if (!preset) {
   throw new Error(`unknown preset: ${presetName}`)
@@ -175,13 +111,15 @@ function generateRecord(target, presetName, preset, sampleIndex, split, rng) {
     kind: target.kind,
     label: target.label,
     split,
-    priority: split === "adaptation" ? "synthetic_tutorial_like" : "synthetic_bootstrap",
+    priority: resolveSyntheticPriority(presetName),
     source,
     allowedUses: SYNTHETIC_ALLOWED_USES,
     strokes,
     metadata: {
+      layerRole: "synthetic_primary",
       seedHint: sampleIndex,
       preset: presetName,
+      syntheticPriority: resolveSyntheticPriority(presetName),
       cues: target.cues,
       confusionWith: target.confusionWith,
       requiresOperator: target.requiresOperator || null,
@@ -253,7 +191,8 @@ function minPointsForTarget(target) {
 }
 
 function targetedDistortion(target, presetName, rng) {
-  const severity = presetName === "hard-negative" ? 1 : presetName === "tutorial-like" ? 0.75 : 0.55
+  const severity =
+    presetName === "hard-negative" ? 1 : presetName === "placement-shift" ? 0.85 : presetName === "tutorial-like" ? 0.75 : 0.55
   const base = {
     affine: {
       scaleX: 1,
@@ -348,7 +287,7 @@ function printHelp() {
 Options:
   --target family|operator|all
   --label <label>           repeatable, limits generation to specific labels
-  --preset bootstrap|tutorial-like|hard-negative
+  --preset bootstrap|tutorial-like|hard-negative|placement-shift
   --count <n>               samples per label, default 24
   --split <name>            default comes from preset
   --seed <n>

@@ -29,6 +29,7 @@ import {
 } from "./demo/outcome-summary";
 import { buildExplainNotes } from "./demo/explain";
 import { recognizeSession } from "./recognizer/recognize";
+import { getTinyMlRuntimeStatus } from "./recognizer/rerank";
 import type {
   AxisLine,
   CompiledSealResult,
@@ -508,6 +509,7 @@ export function mountApp(root: HTMLDivElement): void {
 
   exposeTutorialOnboardingHook(root, tutorialOnboardingHook);
   syncTutorialHookMetadata(root, tutorialProfileStore);
+  syncTinyMlRuntimeMetadata(root);
 
   canvas.addEventListener("pointerdown", (event) => {
     if (phase === "final") {
@@ -946,6 +948,8 @@ export function mountApp(root: HTMLDivElement): void {
     const compilePreview =
       compiledResult ?? (baseSealResult?.canonicalFamily ? compileSealResult(baseSealResult, overlayRecords, latestProfileDelta) : null);
     const scenario = scenarioAppeal(demoView.selectedScenarioId);
+
+    syncTinyMlRuntimeMetadata(root, baseDisplay, overlayLive);
 
     syncPresetButtons(demoView.viewPreset, [
       ["clean", presetCleanButton],
@@ -1452,6 +1456,49 @@ function exposeTutorialOnboardingHook(root: HTMLDivElement, hook: TutorialOnboar
 function syncTutorialHookMetadata(root: HTMLDivElement, store: TutorialProfileStore): void {
   root.dataset.tutorialSampleCount = String(store.shapeProfile.tutorialSampleCount);
   root.dataset.tutorialUpdatedAt = String(store.updatedAt);
+}
+
+function syncTinyMlRuntimeMetadata(
+  root: HTMLDivElement,
+  baseResult?: RecognitionResult,
+  overlayRecognition?: OverlayRecognition | null
+): void {
+  const metadata = buildTinyMlRuntimeMetadata(baseResult, overlayRecognition);
+
+  for (const [key, value] of Object.entries(metadata)) {
+    root.dataset[key] = value;
+  }
+}
+
+export function buildTinyMlRuntimeMetadata(
+  baseResult?: RecognitionResult,
+  overlayRecognition?: OverlayRecognition | null
+): Record<string, string> {
+  const runtime = getTinyMlRuntimeStatus();
+  const operatorLabelValue = overlayRecognition?.operator ?? overlayRecognition?.topCandidate?.operator ?? "none";
+
+  return {
+    tinyMlShadowMode: runtime.shadowMode ? "shadow" : "off",
+    tinyMlBaseArtifacts: runtime.baseShadowAvailable ? "ready" : "missing",
+    tinyMlOperatorArtifacts: runtime.operatorShadowAvailable ? "ready" : "missing",
+    tinyMlFeatureSpec: runtime.featureSpecAvailable ? "ready" : "missing",
+    baseActualFamily: baseResult ? readCurrentFamily(baseResult) ?? "none" : "none",
+    baseActualStatus: baseResult?.status ?? "waiting",
+    basePersonalizationStage: baseResult?.personalization?.stage ?? "none",
+    baseThresholdBias: baseResult?.personalization?.thresholdBias.toFixed(3) ?? "0.000",
+    baseShadowDecisionChanged: baseResult?.shadow ? String(baseResult.shadow.decisionChanged) : "false",
+    baseShadowStatusChanged: baseResult?.shadow ? String(baseResult.shadow.statusChanged) : "false",
+    operatorActualLabel: operatorLabelValue,
+    operatorActualStatus: overlayRecognition?.status ?? "waiting",
+    operatorPersonalizationStage: overlayRecognition?.personalization?.stage ?? "none",
+    operatorThresholdBias: overlayRecognition?.personalization?.thresholdBias.toFixed(3) ?? "0.000",
+    operatorShadowDecisionChanged: overlayRecognition?.shadow
+      ? String(overlayRecognition.shadow.decisionChanged)
+      : "false",
+    operatorShadowStatusChanged: overlayRecognition?.shadow
+      ? String(overlayRecognition.shadow.statusChanged)
+      : "false"
+  };
 }
 
 function pointFromEvent(canvas: HTMLCanvasElement, event: PointerEvent): { x: number; y: number } {

@@ -3,4 +3,8 @@ dist
 coverage
 .DS_Store
 external
-tmp/tutorial-dataset
+artifacts
+tmp
+.tmp
+__pycache__/
+*.pyc

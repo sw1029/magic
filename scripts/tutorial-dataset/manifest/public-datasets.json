@@ -4,10 +4,12 @@
     {
       "id": "quickdraw-raw",
       "dataset": "quickdraw",
+      "layerRole": "public_auxiliary",
       "version": "raw-public-gcs",
       "kind": "direct",
       "baseUrl": "https://storage.googleapis.com/quickdraw_dataset/full/raw",
       "targetDir": "external/quickdraw",
+      "recommendedSplit": "pretrain",
       "licenseNote": "Quick, Draw! dataset by Google Creative Lab / Google Cloud public dataset.",
       "usage": {
         "allowed": [
@@ -32,10 +34,12 @@
     {
       "id": "dollar-unistroke-xml",
       "dataset": "dollar_family",
+      "layerRole": "public_auxiliary",
       "version": "uist-2007-xml",
       "kind": "archive",
       "url": "https://depts.washington.edu/acelab/proj/dollar/xml.zip",
       "targetDir": "external/dollar/xml",
+      "recommendedSplit": "pretrain",
       "extract": "zip",
       "licenseNote": "Official $1 recognizer unistroke gesture logs from University of Washington ACELab.",
       "usage": {
@@ -55,10 +59,12 @@
     {
       "id": "dollar-multistroke-mmg",
       "dataset": "dollar_family",
+      "layerRole": "public_auxiliary",
       "version": "gi-2010-mmg",
       "kind": "archive",
       "url": "https://depts.washington.edu/acelab/proj/dollar/mmg.zip",
       "targetDir": "external/dollar/mmg",
+      "recommendedSplit": "pretrain",
       "extract": "zip",
       "licenseNote": "Official $N/$P multistroke gesture logs from University of Washington ACELab.",
       "usage": {
@@ -78,10 +84,12 @@
     {
       "id": "crohme-package",
       "dataset": "crohme",
+      "layerRole": "public_auxiliary",
       "version": "ICFHR_package",
       "kind": "archive",
       "url": "http://www.isical.ac.in/~crohme/ICFHR_package.zip",
       "targetDir": "external/crohme/ICFHR_package",
+      "recommendedSplit": "pretrain",
       "extract": "zip",
       "licenseNote": "Official CROHME website package with competition data and tools.",
       "usage": {

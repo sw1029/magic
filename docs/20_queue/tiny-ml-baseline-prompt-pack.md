@@ -9,6 +9,11 @@
 * 규칙계 권위를 유지하는 shadow-mode integration
 * tutorial vector capture가 들어왔을 때의 user personalization adapter
 
+주의:
+
+* `synthetic_tutorial_like`는 onboarding 분포 근사용 synthetic preset이며, 실제 tutorial `adaptation` lane을 대신하지 않는다.
+* `adaptation` / `acceptance_eval` split은 tutorial vector capture export가 들어온 뒤에만 쓴다.
+
 권장 방식은 **통합 프롬프트 1개 + 병렬 agent 프롬프트 5개 + 최종 검수 프롬프트**다.
 
 ---
@@ -20,9 +25,11 @@
 * base family 5종, overlay operator 6종의 heuristic recognizer가 있다.
 * `rerank.ts`를 통해 heuristic-only personalization이 이미 들어가 있다.
 * `tutorial-profile.ts`에는 family/operator prototype과 placement-aware operator summary가 있다.
-* `scripts/tutorial-dataset/*`에는 public auxiliary raw cache/downloader와 NDJSON converter가 있다.
+* `scripts/tutorial-dataset/*`에는 public auxiliary raw cache/downloader와 NDJSON converter, ML split/feature manifest generator가 있다.
+* `scripts/ml-baseline/*`와 `artifacts/ml/*`에 base/operator offline baseline과 artifact가 있다.
+* runtime artifact loader와 shadow-mode summary가 이미 연결돼 있다.
 * tutorial capture 실제 수집 UI는 아직 없다.
-* tiny ML training code와 runtime artifact loader는 아직 없다.
+* 최종 decision gate-open은 아직 열지 않았다.
 
 현재 확인된 실제 데이터 상태:
 
@@ -31,7 +38,7 @@
 * CROHME loose InkML: `488`
 * public auxiliary는 모두 `label: null`, `priority: public_auxiliary`, `usage.forbidden` 계약을 가진다.
 
-즉, 이 pack은 **ML baseline 설계 및 첫 구현 wave**를 시작하기 위한 것이다.
+즉, 이 pack은 **현재 shadow baseline의 acceptance/test/doc sync와 다음 personalization wave 준비**를 위한 것이다.
 
 ---
 
@@ -242,7 +249,7 @@
 
 필수 요구:
 * ambiguity 감소, hard-negative error 감소, family flip 증가 0, dependency violation 0을 수용 기준으로 정리한다.
-* T07-08, T07-09, 필요 시 T02-08을 queue와 README에 연결한다.
+* T07-08, T07-09, 필요 시 T02-08을 queue와 README에 연결하고 현재 구현 상태와 남은 계획 상태를 분리한다.
 * 문서는 실제 구현보다 앞서 나가지 않게 현재 상태와 계획 상태를 구분해 쓴다.
 ```
 

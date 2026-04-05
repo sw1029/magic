@@ -13,6 +13,19 @@
 
 tutorial vector capture가 tiny ML baseline의 user personalization 입력으로 어떻게 들어갈지 계약을 정리한다.
 
+## 현재 작업 트리 반영 상태
+
+현재 작업 트리 기준으로 아래 groundwork는 이미 있다.
+
+* tutorial capture/store와 operator context snapshot path가 존재한다.
+* base/operator personalization runtime은 tutorial sample count와 threshold bias를 이미 읽는다.
+* `T07-08` 쪽에서는 shadow artifact와 offline acceptance 기준이 먼저 고정돼 있다.
+
+아직 이 task에서 닫히지 않은 범위는 아래다.
+
+* 실제 tutorial vector capture를 `adaptation` / `acceptance_eval` split contract로 export하는 최종 문서화
+* `T07-09`가 참조할 base/operator personalization feature schema의 확정
+
 ## 아이디어 원본
 
 * [request-answer03](../../../chat/request-answer03.md)
@@ -38,6 +51,8 @@ tutorial vector capture가 tiny ML baseline의 user personalization 입력으로
 
 * [`../../../20_queue/tiny-ml-baseline-plan.md`](../../../20_queue/tiny-ml-baseline-plan.md)
 * [`../../../20_queue/tutorial-personalization-plan.md`](../../../20_queue/tutorial-personalization-plan.md)
+* [`../../../20_queue/tutorial-ml-adaptation-rollout-plan.md`](../../../20_queue/tutorial-ml-adaptation-rollout-plan.md)
+* [T07-08 tiny ML baseline 설계와 offline 실험안](../epic-07-future-expansion-backlog/task-08-tiny-ml-baseline-and-offline-eval.md)
 
 ## 선행 task
 
@@ -53,6 +68,7 @@ tutorial vector capture가 tiny ML baseline의 user personalization 입력으로
 
 * tutorial vector capture가 tiny ML baseline의 user adaptation 입력으로 쓰일 contract가 정리된다.
 * sample 수 기준 activation policy가 정리된다.
+* `adaptation` / `acceptance_eval` split과 base/operator export shape가 `T07-08` / `T07-09`에서 그대로 참조 가능하게 정리된다.
 * raster image 혼합을 현재 baseline에서 제외한다는 결정이 문서상 명확하다.
 
 ## 지금은 보류하지만 자리 남길 요소

@@ -14,6 +14,8 @@ export interface DemoViewState {
   guidanceMode: boolean;
   showRecentSeals: boolean;
   showQualitySplit: boolean;
+  showPersonalizationPanel: boolean;
+  showExemplarPanel: boolean;
   showProfilePanel: boolean;
   showLogViewer: boolean;
   selectedScenarioId: GuidedDemoScenarioId;
@@ -64,6 +66,8 @@ export function createDemoViewState(preset: DemoViewPreset = "clean"): DemoViewS
       guidanceMode: true,
       showRecentSeals: true,
       showQualitySplit: false,
+      showPersonalizationPanel: false,
+      showExemplarPanel: false,
       showProfilePanel: false,
       showLogViewer: false,
       selectedScenarioId: "same_shape_fast"
@@ -84,6 +88,8 @@ export function applyDemoViewPreset(state: DemoViewState, preset: DemoViewPreset
         guidanceMode: true,
         showRecentSeals: true,
         showQualitySplit: false,
+        showPersonalizationPanel: false,
+        showExemplarPanel: false,
         showProfilePanel: false,
         showLogViewer: false
       };
@@ -97,6 +103,8 @@ export function applyDemoViewPreset(state: DemoViewState, preset: DemoViewPreset
         guidanceMode: true,
         showRecentSeals: true,
         showQualitySplit: true,
+        showPersonalizationPanel: true,
+        showExemplarPanel: true,
         showProfilePanel: true,
         showLogViewer: false
       };
@@ -110,6 +118,8 @@ export function applyDemoViewPreset(state: DemoViewState, preset: DemoViewPreset
         guidanceMode: true,
         showRecentSeals: true,
         showQualitySplit: true,
+        showPersonalizationPanel: true,
+        showExemplarPanel: true,
         showProfilePanel: true,
         showLogViewer: true
       };

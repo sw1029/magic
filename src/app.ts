@@ -28,6 +28,7 @@ import {
   getChangedOutcomeMetrics
 } from "./demo/outcome-summary";
 import { buildExplainNotes } from "./demo/explain";
+import { getExemplarSpec, renderExemplarChip, resolveRelevantExemplarIds } from "./demo/exemplars";
 import { recognizeSession } from "./recognizer/recognize";
 import { getTinyMlRuntimeStatus } from "./recognizer/rerank";
 import type {
@@ -39,6 +40,7 @@ import type {
   OverlayRecognition,
   OverlayReferenceFrame,
   OverlayStrokeRecord,
+  PersonalizationRuntimeSummary,
   QualityVector,
   RecognitionLogEntry,
   RecognitionResult,
@@ -216,6 +218,14 @@ export function mountApp(root: HTMLDivElement): void {
                   <input id="details-toggle" type="checkbox" />
                   <span>세부 정보</span>
                 </label>
+                <label class="toggle-pill">
+                  <input id="personalization-toggle" type="checkbox" />
+                  <span>입력 습관 보기</span>
+                </label>
+                <label class="toggle-pill">
+                  <input id="exemplar-toggle" type="checkbox" />
+                  <span>모범 선례 보기</span>
+                </label>
               </div>
             </div>
           </div>
@@ -241,6 +251,15 @@ export function mountApp(root: HTMLDivElement): void {
         <p id="narration-copy" class="narration-copy">
           불꽃 삼각형을 빠르게 그리고 결과 비교를 열어 출력감만 달라지고 종류는 그대로라는 점을 설명하세요.
         </p>
+      </section>
+      <section class="support-strip">
+        <div>
+          <p class="panel-label">보조 판독 상태</p>
+          <p id="support-strip-copy" class="strip-copy">
+            같은 모양은 같은 종류로 유지한 채, 보조 판독과 입력 습관 반영은 시험 계산으로만 비교합니다.
+          </p>
+        </div>
+        <div id="support-strip-badges" class="promise-inline"></div>
       </section>
       <main class="workspace">
         <section class="board-panel">
@@ -341,6 +360,48 @@ export function mountApp(root: HTMLDivElement): void {
             <p id="why-copy" class="card-copy">짧은 문장으로 현재 판정 이유와 품질 영향 설명을 보여 줍니다.</p>
             <div id="why-list" class="metric-list"></div>
           </section>
+          <section id="support-card" class="card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">보조 판독 상태</p>
+                <h3 id="support-title">시험 계산 준비 전</h3>
+              </div>
+              <span id="support-status" class="status-chip status-waiting">대기</span>
+            </div>
+            <p id="support-copy" class="card-copy">보조 판독과 입력 습관 반영은 최종 판정을 바꾸지 않고 시험 계산으로만 보여 줍니다.</p>
+            <div id="support-badges" class="promise-inline"></div>
+            <div id="support-metrics" class="summary-grid"></div>
+          </section>
+          <section id="personalization-card" class="card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">입력 습관 반영 비교</p>
+                <h3 id="personalization-title">현재 판정과 시험 계산</h3>
+              </div>
+            </div>
+            <p id="personalization-copy" class="card-copy">실제 판정, 보조 판독, 입력 습관 반영 시험 계산을 한 화면에서 비교합니다.</p>
+            <div id="personalization-compare" class="personalization-grid"></div>
+            <div id="personalization-effects" class="metric-list"></div>
+          </section>
+          <section id="principles-card" class="card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">이번 화면에 반영된 UX 원칙</p>
+                <h3>시연 포인트</h3>
+              </div>
+            </div>
+            <div id="principles-list" class="principles-list"></div>
+          </section>
+          <section id="exemplar-card" class="card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">모범 선례 패턴칩</p>
+                <h3 id="exemplar-title">안정적으로 읽히는 기준</h3>
+              </div>
+            </div>
+            <p id="exemplar-copy" class="card-copy">내부 규칙 문자열을 바로 시각화한 작은 모범 선례입니다.</p>
+            <div id="exemplar-grid" class="exemplar-grid"></div>
+          </section>
           <section id="quality-card" class="card">
             <div class="split-head">
               <div>
@@ -371,10 +432,10 @@ export function mountApp(root: HTMLDivElement): void {
             <div id="recent-seals" class="recent-seals"></div>
           </section>
           <section id="profile-card" class="card">
-            <p class="panel-label">입력 습관 프로필</p>
+            <p class="panel-label">연습 입력 상태</p>
             <h3 id="profile-samples">0회 누적</h3>
-            <p id="profile-delta" class="card-copy">기본 모양을 확정할 때마다 입력 습관이 누적됩니다.</p>
-            <div id="profile-baseline-list" class="quality-list"></div>
+            <p id="profile-delta" class="card-copy">연습 입력은 의미를 바꾸지 않고 입력 습관만 반영합니다.</p>
+            <div id="profile-baseline-list" class="summary-grid"></div>
             <div id="profile-delta-list" class="metric-list"></div>
           </section>
           <section id="log-card" class="card log-card">
@@ -414,10 +475,14 @@ export function mountApp(root: HTMLDivElement): void {
   const explainToggle = select<HTMLInputElement>(root, "#explain-toggle");
   const analysisToggle = select<HTMLInputElement>(root, "#analysis-toggle");
   const detailsToggle = select<HTMLInputElement>(root, "#details-toggle");
+  const personalizationToggle = select<HTMLInputElement>(root, "#personalization-toggle");
+  const exemplarToggle = select<HTMLInputElement>(root, "#exemplar-toggle");
   const presetChip = select<HTMLSpanElement>(root, "#preset-chip");
   const scenarioTitle = select<HTMLElement>(root, "#scenario-title");
   const scenarioCopy = select<HTMLParagraphElement>(root, "#scenario-copy");
   const narrationCopy = select<HTMLParagraphElement>(root, "#narration-copy");
+  const supportStripCopy = select<HTMLParagraphElement>(root, "#support-strip-copy");
+  const supportStripBadges = select<HTMLDivElement>(root, "#support-strip-badges");
   const scenarioChipButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-scenario-id]"));
   const canvasHint = select<HTMLParagraphElement>(root, "#canvas-hint");
   const analysisCopy = select<HTMLParagraphElement>(root, "#analysis-copy");
@@ -454,6 +519,23 @@ export function mountApp(root: HTMLDivElement): void {
   const whyStatus = select<HTMLElement>(root, "#why-status");
   const whyCopy = select<HTMLParagraphElement>(root, "#why-copy");
   const whyList = select<HTMLDivElement>(root, "#why-list");
+  const supportCard = select<HTMLElement>(root, "#support-card");
+  const supportTitle = select<HTMLElement>(root, "#support-title");
+  const supportStatus = select<HTMLElement>(root, "#support-status");
+  const supportCopy = select<HTMLParagraphElement>(root, "#support-copy");
+  const supportBadges = select<HTMLDivElement>(root, "#support-badges");
+  const supportMetrics = select<HTMLDivElement>(root, "#support-metrics");
+  const personalizationCard = select<HTMLElement>(root, "#personalization-card");
+  const personalizationTitle = select<HTMLElement>(root, "#personalization-title");
+  const personalizationCopy = select<HTMLParagraphElement>(root, "#personalization-copy");
+  const personalizationCompare = select<HTMLDivElement>(root, "#personalization-compare");
+  const personalizationEffects = select<HTMLDivElement>(root, "#personalization-effects");
+  const principlesCard = select<HTMLElement>(root, "#principles-card");
+  const principlesList = select<HTMLDivElement>(root, "#principles-list");
+  const exemplarCard = select<HTMLElement>(root, "#exemplar-card");
+  const exemplarTitle = select<HTMLElement>(root, "#exemplar-title");
+  const exemplarCopy = select<HTMLParagraphElement>(root, "#exemplar-copy");
+  const exemplarGrid = select<HTMLDivElement>(root, "#exemplar-grid");
   const qualityCard = select<HTMLElement>(root, "#quality-card");
   const qualitySummary = select<HTMLDivElement>(root, "#quality-summary");
   const rawQualityList = select<HTMLDivElement>(root, "#raw-quality-list");
@@ -777,6 +859,22 @@ export function mountApp(root: HTMLDivElement): void {
     render();
   });
 
+  personalizationToggle.addEventListener("change", () => {
+    demoView = {
+      ...demoView,
+      showPersonalizationPanel: personalizationToggle.checked
+    };
+    render();
+  });
+
+  exemplarToggle.addEventListener("change", () => {
+    demoView = {
+      ...demoView,
+      showExemplarPanel: exemplarToggle.checked
+    };
+    render();
+  });
+
   for (const button of scenarioChipButtons) {
     button.addEventListener("click", () => {
       const scenarioId = button.dataset.scenarioId as GuidedDemoScenarioId | undefined;
@@ -948,6 +1046,12 @@ export function mountApp(root: HTMLDivElement): void {
     const compilePreview =
       compiledResult ?? (baseSealResult?.canonicalFamily ? compileSealResult(baseSealResult, overlayRecords, latestProfileDelta) : null);
     const scenario = scenarioAppeal(demoView.selectedScenarioId);
+    const personalizationModel = buildPersonalizationDemoModel(
+      baseDisplay,
+      overlayLive,
+      tutorialProfileStore,
+      demoView
+    );
 
     syncTinyMlRuntimeMetadata(root, baseDisplay, overlayLive);
 
@@ -961,17 +1065,25 @@ export function mountApp(root: HTMLDivElement): void {
     explainToggle.checked = demoView.explainResult;
     analysisToggle.checked = demoView.analysisOverlay;
     detailsToggle.checked = demoView.showQualitySplit;
+    personalizationToggle.checked = demoView.showPersonalizationPanel;
+    exemplarToggle.checked = demoView.showExemplarPanel;
     presetChip.textContent = demoView.viewPreset;
     presetChip.className = `status-chip status-${demoView.viewPreset === "workshop" ? "authoring" : "ready"}`;
     scenarioTitle.textContent = scenario.title;
     scenarioCopy.textContent = scenario.prompt;
     narrationCopy.textContent = buildNarrationCopy(scenario.narration, phase, baseSealed, demoView.analysisOverlay);
+    supportStripCopy.textContent = personalizationModel.stripCopy;
+    supportStripBadges.innerHTML = personalizationModel.stripBadges;
     syncScenarioButtons(scenarioChipButtons, demoView.selectedScenarioId);
 
     outcomeCard.hidden = !demoView.compareMode;
     whyCard.hidden = !demoView.explainResult;
     qualityCard.hidden = !demoView.showQualitySplit;
     recentSealsCard.hidden = !demoView.showRecentSeals;
+    supportCard.hidden = !demoView.showPersonalizationPanel;
+    personalizationCard.hidden = !demoView.showPersonalizationPanel;
+    principlesCard.hidden = !demoView.showPersonalizationPanel;
+    exemplarCard.hidden = !demoView.showExemplarPanel;
     profileCard.hidden = !demoView.showProfilePanel;
     logCard.hidden = !demoView.showLogViewer;
 
@@ -1111,6 +1223,21 @@ export function mountApp(root: HTMLDivElement): void {
         : "품질 반영을 끈 상태에서는 모양 판정과 기본 결과감만 설명합니다.";
     whyList.innerHTML = renderWhyPanel(baseDisplay, compare, demoView.qualityInfluence, overlayLive, compilePreview);
 
+    supportTitle.textContent = personalizationModel.cardTitle;
+    supportStatus.textContent = personalizationModel.cardStatusLabel;
+    supportStatus.className = `status-chip status-${personalizationModel.cardStatusTone}`;
+    supportCopy.textContent = personalizationModel.cardCopy;
+    supportBadges.innerHTML = personalizationModel.cardBadges;
+    supportMetrics.innerHTML = personalizationModel.metricRows;
+    personalizationTitle.textContent = personalizationModel.compareTitle;
+    personalizationCopy.textContent = personalizationModel.compareCopy;
+    personalizationCompare.innerHTML = personalizationModel.compareLanes;
+    personalizationEffects.innerHTML = personalizationModel.effectRows;
+    principlesList.innerHTML = renderHciPrinciples();
+    exemplarTitle.textContent = personalizationModel.exemplarTitle;
+    exemplarCopy.textContent = personalizationModel.exemplarCopy;
+    exemplarGrid.innerHTML = personalizationModel.exemplarGrid;
+
     qualitySummary.innerHTML = renderQualitySummary(activeQuality, adjustedQuality);
     rawQualityList.innerHTML = renderQuality(activeQuality);
     adjustedQualityList.innerHTML = renderQuality(adjustedQuality);
@@ -1132,14 +1259,10 @@ export function mountApp(root: HTMLDivElement): void {
             overlayCount: recognizedOverlays.length
           });
 
-    profileSamples.textContent = `${userProfile.sampleCount}회 누적`;
-    profileDelta.textContent = latestProfileDelta
-      ? `누적 횟수 ${latestProfileDelta.previousSampleCount} -> ${latestProfileDelta.nextSampleCount} / 평균 시간 ${formatSignedMs(
-          latestProfileDelta.averageDurationDeltaMs
-        )} / 평균 길이 ${formatSigned(latestProfileDelta.averagePathLengthDelta, 1)}`
-      : "기본 모양을 확정할 때마다 입력 습관이 조금씩 누적됩니다.";
-    profileBaselineList.innerHTML = renderQuality(userProfile.averageQuality);
-    profileDeltaList.innerHTML = latestProfileDelta ? renderProfileDelta(latestProfileDelta) : "";
+    profileSamples.textContent = personalizationModel.profileTitle;
+    profileDelta.textContent = personalizationModel.profileCopy;
+    profileBaselineList.innerHTML = personalizationModel.profileSummary;
+    profileDeltaList.innerHTML = personalizationModel.profileDetails;
 
     logCount.textContent = `${logs.length}건`;
     logViewer.textContent = JSON.stringify(logs, null, 2);
@@ -1227,6 +1350,8 @@ function resolvePresetView(state: DemoViewState, preset: DemoViewPreset): DemoVi
         explainResult: false,
         analysisOverlay: false,
         showQualitySplit: false,
+        showPersonalizationPanel: false,
+        showExemplarPanel: false,
         showProfilePanel: false,
         showLogViewer: false
       };
@@ -1238,7 +1363,9 @@ function resolvePresetView(state: DemoViewState, preset: DemoViewPreset): DemoVi
         explainResult: true,
         analysisOverlay: false,
         showQualitySplit: false,
-        showProfilePanel: false,
+        showPersonalizationPanel: true,
+        showExemplarPanel: true,
+        showProfilePanel: true,
         showLogViewer: false
       };
     case "workshop":
@@ -1249,6 +1376,8 @@ function resolvePresetView(state: DemoViewState, preset: DemoViewPreset): DemoVi
         explainResult: true,
         analysisOverlay: true,
         showQualitySplit: true,
+        showPersonalizationPanel: true,
+        showExemplarPanel: true,
         showProfilePanel: true,
         showLogViewer: true
       };
@@ -1917,6 +2046,381 @@ function boundsFromPoints(points: Array<{ x: number; y: number }>): {
     width: Math.max(maxX - minX, 0.0001),
     height: Math.max(maxY - minY, 0.0001)
   };
+}
+
+interface PersonalizationDemoModel {
+  stripCopy: string;
+  stripBadges: string;
+  cardTitle: string;
+  cardStatusLabel: string;
+  cardStatusTone: "recognized" | "ready" | "waiting";
+  cardCopy: string;
+  cardBadges: string;
+  metricRows: string;
+  compareTitle: string;
+  compareCopy: string;
+  compareLanes: string;
+  effectRows: string;
+  profileTitle: string;
+  profileCopy: string;
+  profileSummary: string;
+  profileDetails: string;
+  exemplarTitle: string;
+  exemplarCopy: string;
+  exemplarGrid: string;
+}
+
+function buildPersonalizationDemoModel(
+  baseResult: RecognitionResult,
+  overlayRecognition: OverlayRecognition | null,
+  tutorialStore: TutorialProfileStore,
+  demoView: DemoViewState
+): PersonalizationDemoModel {
+  const runtime = getTinyMlRuntimeStatus();
+  const tutorialSamples = tutorialStore.shapeProfile.tutorialSampleCount;
+  const familySamples = tutorialStore.shapeProfile.familyTutorialSampleCount ?? 0;
+  const operatorSamples = tutorialStore.shapeProfile.operatorTutorialSampleCount ?? 0;
+  const baseShadow = baseResult.shadow;
+  const overlayShadow = overlayRecognition?.shadow;
+  const stage = strongestPersonalizationStage(baseShadow?.personalizationStage, overlayShadow?.personalizationStage);
+  const stageTone = stage === "enough_shot" ? "recognized" : stage === "few_shot" ? "ready" : "waiting";
+  const shadowReady = runtime.baseShadowAvailable || runtime.operatorShadowAvailable;
+  const stripBadges = [
+    renderPromiseBadge(shadowReady ? "보조 판독 시험 계산" : "보조 판독 준비 중", shadowReady),
+    renderPromiseBadge(`연습 입력 ${tutorialSamples}회`, tutorialSamples > 0),
+    renderPromiseBadge(personalizationStageLabel(stage), stage !== "none")
+  ].join("");
+  const effectRows = renderMetricNotes([
+    summarizeShadowEffect(baseResult, "base"),
+    summarizeShadowEffect(overlayRecognition, "overlay"),
+    "최종 판정은 계속 규칙 기준으로 고정됩니다."
+  ]);
+  const exemplarIds = resolveRelevantExemplarIds(baseResult, overlayRecognition).slice(
+    0,
+    demoView.viewPreset === "clean" ? 1 : 3
+  );
+
+  return {
+    stripCopy:
+      tutorialSamples > 0
+        ? "같은 모양은 같은 종류로 유지한 채, 보조 판독과 연습 입력 반영은 시험 계산으로만 비교합니다."
+        : "연습 입력이 아직 없어도 보조 판독 시험 계산은 확인할 수 있지만, 최종 판정은 그대로 유지합니다.",
+    stripBadges,
+    cardTitle: shadowReady ? "보조 판독 시험 계산 연결됨" : "보조 판독 준비 전",
+    cardStatusLabel: stage === "none" ? (shadowReady ? "보조만" : "대기") : "반영 중",
+    cardStatusTone: stageTone,
+    cardCopy:
+      tutorialSamples > 0
+        ? "연습 입력은 입력 습관만 반영하고, 종류 의미나 규칙 자체는 바꾸지 않습니다."
+        : "현재는 보조 판독만 시험 계산으로 보이고, 입력 습관 반영은 아직 시작 전입니다.",
+    cardBadges: [
+      renderPromiseBadge(runtime.baseShadowAvailable ? "기본 모양 보조 판독 준비" : "기본 모양 보조 판독 없음", runtime.baseShadowAvailable),
+      renderPromiseBadge(
+        runtime.operatorShadowAvailable ? "추가 효과 보조 판독 준비" : "추가 효과 보조 판독 없음",
+        runtime.operatorShadowAvailable
+      ),
+      renderPromiseBadge("최종 판정은 그대로 유지", true)
+    ].join(""),
+    metricRows: renderSummaryRows([
+      ["연습 입력 누적", `${tutorialSamples}회`],
+      ["기본 모양 연습", `${familySamples}회`],
+      ["추가 효과 연습", `${operatorSamples}회`],
+      ["반영 단계", personalizationStageLabel(stage)],
+      ["보조 판독 준비", shadowReady ? "연결됨" : "준비 중"],
+      ["입력 습관 반영", stage === "none" ? "아직 없음" : "시험 계산 중"]
+    ]),
+    compareTitle: "실제 판정 / 보조 판독 / 입력 습관 반영",
+    compareCopy: "실제 판정은 그대로 두고, 보조 판독과 입력 습관 반영이 후보를 어떻게 다시 읽는지만 비교합니다.",
+    compareLanes: renderPersonalizationCompare(baseResult, overlayRecognition),
+    effectRows,
+    profileTitle: `연습 입력 ${tutorialSamples}회`,
+    profileCopy:
+      tutorialSamples > 0
+        ? `기본 모양 ${familySamples}회 / 추가 효과 ${operatorSamples}회 / 현재 단계 ${personalizationStageLabel(stage)}`
+        : "연습 입력이 쌓이면 후보 여유와 위치 신호를 시험 계산에서 먼저 다시 봅니다.",
+    profileSummary: renderSummaryRows([
+      ["가장 최근 반영", formatClockTime(tutorialStore.updatedAt)],
+      ["기본 모양 prototype", `${Object.keys(tutorialStore.shapeProfile.familyPrototypes).length}종`],
+      ["추가 효과 prototype", `${Object.keys(tutorialStore.shapeProfile.operatorPrototypes).length}종`]
+    ]),
+    profileDetails: renderPracticeDetails(tutorialStore),
+    exemplarTitle: "안정적으로 읽히는 기준",
+    exemplarCopy:
+      exemplarIds.length > 0
+        ? "현재 화면과 가장 관련 있는 모범 선례만 골라 작게 보여 줍니다."
+        : "모범 선례는 기본 모양이나 추가 효과 후보가 생기면 함께 보여 줍니다.",
+    exemplarGrid:
+      exemplarIds.length > 0
+        ? exemplarIds
+            .map((id, index) =>
+              renderExemplarChip(id, {
+                active: index === 0,
+                hint: buildExemplarHint(id, baseResult, overlayRecognition)
+              })
+            )
+            .join("")
+        : `<div class="empty-state">아직 비교할 모범 선례가 없습니다.</div>`
+  };
+}
+
+function renderPromiseBadge(text: string, positive: boolean): string {
+  return `<span class="inline-guarantee ${positive ? "positive" : "muted"}">${text}</span>`;
+}
+
+function renderSummaryRows(items: Array<[string, string]>): string {
+  return items
+    .map(
+      ([label, value]) => `
+        <div class="summary-row">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderMetricNotes(lines: string[]): string {
+  return lines
+    .map(
+      (line) => `
+        <div class="metric-row">
+          <span>${line}</span>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderPersonalizationCompare(baseResult: RecognitionResult, overlayRecognition: OverlayRecognition | null): string {
+  const lanes = [
+    buildShadowLane("현재 판정", "actual", baseResult, overlayRecognition),
+    buildShadowLane("보조 판독", "shadow", baseResult, overlayRecognition),
+    buildShadowLane("입력 습관 반영", "personalized", baseResult, overlayRecognition)
+  ];
+
+  return lanes
+    .map(
+      (lane) => `
+        <article class="personalization-lane ${lane.active ? "active" : ""}">
+          <div class="recent-seal-head">
+            <div>
+              <p class="mini-label">${lane.label}</p>
+              <h4>${lane.title}</h4>
+            </div>
+            <span class="status-chip status-${lane.statusTone}">${lane.statusLabel}</span>
+          </div>
+          <div class="summary-grid">
+            <div class="summary-row">
+              <span>기본 모양</span>
+              <strong>${lane.baseLabel}</strong>
+            </div>
+            <div class="summary-row">
+              <span>추가 효과</span>
+              <strong>${lane.overlayLabel}</strong>
+            </div>
+          </div>
+          <p class="recent-seal-summary">${lane.copy}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function buildShadowLane(
+  label: string,
+  mode: "actual" | "shadow" | "personalized",
+  baseResult: RecognitionResult,
+  overlayRecognition: OverlayRecognition | null
+): {
+  label: string;
+  title: string;
+  statusLabel: string;
+  statusTone: string;
+  baseLabel: string;
+  overlayLabel: string;
+  copy: string;
+  active: boolean;
+} {
+  const actualBaseLabel = readCurrentFamily(baseResult);
+  const actualBaseStatus = baseResult.status;
+  const shadowBaseLabel = baseResult.shadow?.shadowTopLabel ?? actualBaseLabel;
+  const shadowBaseStatus = baseResult.shadow?.shadowStatus ?? actualBaseStatus;
+  const personalizedBaseLabel = baseResult.shadow?.personalizedShadowTopLabel ?? shadowBaseLabel;
+  const personalizedBaseStatus = baseResult.shadow?.personalizedShadowStatus ?? shadowBaseStatus;
+  const actualOverlayLabel = overlayRecognition?.operator ?? overlayRecognition?.topCandidate?.operator ?? null;
+  const actualOverlayStatus = overlayRecognition?.status ?? "waiting";
+  const shadowOverlayLabel = overlayRecognition?.shadow?.shadowTopLabel ?? actualOverlayLabel;
+  const shadowOverlayStatus = overlayRecognition?.shadow?.shadowStatus ?? actualOverlayStatus;
+  const personalizedOverlayLabel = overlayRecognition?.shadow?.personalizedShadowTopLabel ?? shadowOverlayLabel;
+  const personalizedOverlayStatus = overlayRecognition?.shadow?.personalizedShadowStatus ?? shadowOverlayStatus;
+
+  if (mode === "actual") {
+    return {
+      label,
+      title: "현재 화면에서 확정된 값",
+      statusLabel: statusLabel(actualBaseStatus),
+      statusTone: actualBaseStatus,
+      baseLabel: actualBaseLabel ? familyLabel(actualBaseLabel) : "아직 없음",
+      overlayLabel: actualOverlayLabel ? operatorLabel(actualOverlayLabel) : "아직 없음",
+      copy: "지금 화면에서 실제로 채택된 판정입니다.",
+      active: true
+    };
+  }
+
+  if (mode === "shadow") {
+    return {
+      label,
+      title: "보조 판독이 다시 본 후보",
+      statusLabel: statusLabel(shadowBaseStatus),
+      statusTone: shadowBaseStatus,
+      baseLabel: shadowBaseLabel ? familyLabel(shadowBaseLabel) : "변화 없음",
+      overlayLabel: shadowOverlayLabel ? operatorLabel(shadowOverlayLabel) : "변화 없음",
+      copy:
+        shadowBaseLabel !== actualBaseLabel || shadowOverlayLabel !== actualOverlayLabel
+          ? "보조 판독은 후보 순서를 다시 계산해 봤지만 최종 판정은 바꾸지 않았습니다."
+          : "보조 판독을 켜도 현재 후보와 크게 다르지 않습니다.",
+      active: false
+    };
+  }
+
+  return {
+    label,
+    title: "연습 입력을 참고한 시험 계산",
+    statusLabel: statusLabel(personalizedBaseStatus),
+    statusTone: personalizedBaseStatus,
+    baseLabel: personalizedBaseLabel ? familyLabel(personalizedBaseLabel) : "변화 없음",
+    overlayLabel: personalizedOverlayLabel ? operatorLabel(personalizedOverlayLabel) : "변화 없음",
+    copy:
+      personalizedBaseLabel !== shadowBaseLabel || personalizedOverlayLabel !== shadowOverlayLabel
+        ? "연습 입력을 반영하면 후보 여유와 위치 신호가 조금 달라집니다. 그래도 최종 판정은 그대로입니다."
+        : "연습 입력 반영은 아직 후보 여유만 조금 조정합니다.",
+    active: false
+  };
+}
+
+function renderPracticeDetails(store: TutorialProfileStore): string {
+  const familyRows = Object.entries(store.shapeProfile.familyPrototypes)
+    .map(([family, prototype]) => [familyLabel(family), `${prototype?.sampleCount ?? 0}회`])
+    .slice(0, 5);
+  const operatorRows = Object.entries(store.shapeProfile.operatorPrototypes)
+    .map(([operator, prototype]) => [operatorLabel(operator), `${prototype?.sampleCount ?? 0}회`])
+    .slice(0, 6);
+
+  const rows = [...familyRows, ...operatorRows];
+
+  if (rows.length === 0) {
+    return `<div class="metric-row"><span>아직 연습 입력이 없습니다.</span></div>`;
+  }
+
+  return rows
+    .map(
+      ([label, value]) => `
+        <div class="metric-row">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderHciPrinciples(): string {
+  return [
+    "최종 판정과 시험 계산을 나눠 보여 줍니다.",
+    "같은 모양은 같은 종류로 유지합니다.",
+    "원본 선은 그대로 두고 설명용 선만 덧댑니다.",
+    "연습 입력은 입력 습관만 반영하고 의미는 바꾸지 않습니다.",
+    "경합과 미완성은 이유를 짧게 설명합니다.",
+    "최근 변화와 이번 차이를 다시 그려 보지 않아도 읽을 수 있게 합니다."
+  ]
+    .map(
+      (text) => `
+        <div class="principle-row">
+          <span>${text}</span>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function buildExemplarHint(id: string, baseResult: RecognitionResult, overlayRecognition: OverlayRecognition | null): string {
+  const spec = getExemplarSpec(id as GlyphFamily | OverlayOperator);
+
+  if (!spec) {
+    return "";
+  }
+
+  if (spec.category === "family") {
+    if (baseResult.status === "incomplete") {
+      return `${spec.caption} 지금은 닫힘이나 핵심 구조 한 줄을 더 보강하면 읽기 쉬워집니다.`;
+    }
+
+    if (baseResult.status === "ambiguous") {
+      return `${spec.caption} 지금은 비슷한 후보와의 차이를 조금 더 벌려 주면 안정적입니다.`;
+    }
+
+    return spec.caption;
+  }
+
+  if (overlayRecognition?.status === "ambiguous" || overlayRecognition?.status === "incomplete") {
+    return `${spec.caption} 지금은 위치와 길이를 조금 더 분명하게 보여 주는 편이 좋습니다.`;
+  }
+
+  return spec.caption;
+}
+
+function strongestPersonalizationStage(
+  left: PersonalizationRuntimeSummary["stage"] | undefined,
+  right: PersonalizationRuntimeSummary["stage"] | undefined
+): PersonalizationRuntimeSummary["stage"] {
+  const order = { none: 0, few_shot: 1, enough_shot: 2 } as const;
+  const leftStage = left ?? "none";
+  const rightStage = right ?? "none";
+  return order[leftStage] >= order[rightStage] ? leftStage : rightStage;
+}
+
+function personalizationStageLabel(stage: PersonalizationRuntimeSummary["stage"]): string {
+  switch (stage) {
+    case "few_shot":
+      return "조금 반영";
+    case "enough_shot":
+      return "충분히 반영";
+    default:
+      return "아직 반영 전";
+  }
+}
+
+function summarizeShadowEffect(
+  target: RecognitionResult | OverlayRecognition | null,
+  kind: "base" | "overlay"
+): string {
+  const shadow = target?.shadow;
+
+  if (!shadow) {
+    return kind === "base" ? "기본 모양은 아직 시험 계산이 없습니다." : "추가 효과는 아직 시험 계산이 없습니다.";
+  }
+
+  const globalChanged = shadow.decisionChanged || shadow.statusChanged;
+  const personalizedChanged = shadow.personalizedDecisionChanged || shadow.personalizedStatusChanged;
+
+  if (kind === "base") {
+    if (personalizedChanged) {
+      return "연습 입력 반영 후에는 기본 모양 후보 순서가 조금 달라졌습니다.";
+    }
+    if (globalChanged) {
+      return "보조 판독은 기본 모양 후보를 다시 계산했지만 최종 종류는 그대로입니다.";
+    }
+    return "기본 모양은 보조 판독을 켜도 현재 후보와 크게 다르지 않습니다.";
+  }
+
+  if (personalizedChanged) {
+    return "연습 입력 반영 후에는 추가 효과의 위치 신호를 조금 다르게 읽습니다.";
+  }
+  if (globalChanged) {
+    return "보조 판독은 추가 효과 후보를 다시 정렬해 보지만 규칙을 넘어서지는 않습니다.";
+  }
+  return "추가 효과는 입력 습관을 참고해도 현재 후보와 크게 다르지 않습니다.";
 }
 
 function renderQuality(quality: QualityVector): string {

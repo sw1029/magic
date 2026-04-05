@@ -65,6 +65,8 @@ export function buildExplainNotes(
     });
   }
 
+  notes.push(...buildPersonalizationNotes(result, overlayLive));
+
   if (overlayLive?.operator && overlayLive.status === "recognized") {
     notes.push({
       tone: "neutral",
@@ -77,7 +79,7 @@ export function buildExplainNotes(
     });
   }
 
-  return notes.slice(0, 5);
+  return notes.slice(0, 6);
 }
 
 function buildStatusNotes(result: RecognitionResult): ExplainNote[] {
@@ -210,6 +212,50 @@ function buildQualityNotes(result: RecognitionResult, compare: DemoOutcomeCompar
   return notes;
 }
 
+function buildPersonalizationNotes(result: RecognitionResult, overlayLive: OverlayRecognition | null): ExplainNote[] {
+  const notes: ExplainNote[] = [];
+  const baseShadow = result.shadow;
+
+  if (baseShadow?.personalizationStage && baseShadow.personalizationStage !== "none") {
+    if (
+      baseShadow.personalizedShadowTopLabel &&
+      baseShadow.shadowTopLabel &&
+      baseShadow.personalizedShadowTopLabel !== baseShadow.shadowTopLabel
+    ) {
+      notes.push({
+        tone: "neutral",
+        text: `연습 입력을 반영한 시험 계산에서는 ${familyLabel(baseShadow.personalizedShadowTopLabel)}형 쪽 여유가 더 커졌습니다. 그래도 최종 종류는 바꾸지 않습니다.`
+      });
+    } else {
+      notes.push({
+        tone: "neutral",
+        text: `연습 입력 반영은 지금 ${personalizationStageLabel(baseShadow.personalizationStage)} 단계라 후보 여유만 조금 조정합니다.`
+      });
+    }
+  }
+
+  const overlayShadow = overlayLive?.shadow;
+  if (overlayShadow?.personalizationStage && overlayShadow.personalizationStage !== "none") {
+    if (
+      overlayShadow.personalizedShadowTopLabel &&
+      overlayShadow.shadowTopLabel &&
+      overlayShadow.personalizedShadowTopLabel !== overlayShadow.shadowTopLabel
+    ) {
+      notes.push({
+        tone: "neutral",
+        text: `추가 효과도 연습 입력을 반영하면 ${readableOperator(overlayShadow.personalizedShadowTopLabel)} 쪽이 더 자연스럽다고 다시 계산합니다.`
+      });
+    } else {
+      notes.push({
+        tone: "neutral",
+        text: "추가 효과는 입력 습관을 참고해도 규칙을 넘어 새 장식을 확정하지는 않습니다."
+      });
+    }
+  }
+
+  return notes;
+}
+
 function describeDrivers(
   adjustedQuality: QualityVector,
   metric: DemoOutcomeMetric,
@@ -309,6 +355,17 @@ function familyLabel(family: string): string {
       return "생명";
     default:
       return family;
+  }
+}
+
+function personalizationStageLabel(stage: "none" | "few_shot" | "enough_shot"): string {
+  switch (stage) {
+    case "few_shot":
+      return "조금 반영";
+    case "enough_shot":
+      return "충분히 반영";
+    default:
+      return "아직 반영 전";
   }
 }
 

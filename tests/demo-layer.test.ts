@@ -42,7 +42,10 @@ describe("demo layer", () => {
     const workshop = applyDemoViewPreset(explain, "workshop");
 
     expect(initial.qualityInfluence).toBe(true);
+    expect(initial.showPersonalizationPanel).toBe(false);
     expect(explain.explainResult).toBe(true);
+    expect(explain.showPersonalizationPanel).toBe(true);
+    expect(explain.showExemplarPanel).toBe(true);
     expect(explain.showLogViewer).toBe(false);
     expect(workshop.analysisOverlay).toBe(true);
     expect(workshop.showLogViewer).toBe(true);

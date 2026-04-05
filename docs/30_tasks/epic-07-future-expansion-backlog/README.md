@@ -40,7 +40,7 @@
 
 * [T07-08 tiny ML baseline 설계와 offline 실험안](task-08-tiny-ml-baseline-and-offline-eval.md)은 현재 작업 트리의 dataset split/feature spec, base/operator artifact, runtime shadow-mode acceptance 기준을 맡는다.
 * [T02-08 tutorial vector capture와 ML adaptation contract](../epic-02-symbols-and-input/task-08-tutorial-vector-capture-and-ml-adaptation-contract.md)은 `T07-09`로 가는 vector capture contract bridge다.
-* [T07-09 tutorial-aware personalization adapter 설계](task-09-tutorial-aware-personalization-adapter.md)는 runtime groundwork가 있어도 `T02-08`이 닫히기 전까지 blocked로 유지한다.
+* [T07-09 tutorial-aware personalization adapter 설계](task-09-tutorial-aware-personalization-adapter.md)는 shadow-only adapter까지 현재 작업 트리에 연결돼 있고, 남은 범위는 acceptance/provenance와 gate-open readiness다.
 
 ## 선행 task
 

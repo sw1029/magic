@@ -3,8 +3,8 @@
 - id: T02-08
 - parent: E02
 - priority: P1
-- status: blocked
-- depends_on: T02-04, T02-07, T06-01
+- status: done
+- depends_on: T02-04, T02-07
 - blocks: T07-09
 - source_chat: request-answer03, request-answer11, request-answer18
 - phase: Phase 5
@@ -21,10 +21,16 @@ tutorial vector capture가 tiny ML baseline의 user personalization 입력으로
 * base/operator personalization runtime은 tutorial sample count와 threshold bias를 이미 읽는다.
 * `T07-08` 쪽에서는 shadow artifact와 offline acceptance 기준이 먼저 고정돼 있다.
 
-아직 이 task에서 닫히지 않은 범위는 아래다.
+이번 wave에서 아래가 실제로 닫혔다.
 
-* 실제 tutorial vector capture를 `adaptation` / `acceptance_eval` split contract로 export하는 최종 문서화
-* `T07-09`가 참조할 base/operator personalization feature schema의 확정
+* tutorial export split이 `adaptation` / `acceptance_eval`로 고정됐다.
+* `convert-tutorial-captures.mjs`가 auto holdout / locked split / manifest provenance를 지원한다.
+* `T07-09`가 참조할 base/operator export shape와 metadata key가 helper 수준에서 고정됐다.
+
+이번 재정리 기준에서 `T02-08`은 아래 두 wave를 담당한다.
+
+* Wave 1. contract
+* Wave 2. export helper / provenance 기초
 
 ## 아이디어 원본
 
@@ -70,6 +76,8 @@ tutorial vector capture가 tiny ML baseline의 user personalization 입력으로
 * sample 수 기준 activation policy가 정리된다.
 * `adaptation` / `acceptance_eval` split과 base/operator export shape가 `T07-08` / `T07-09`에서 그대로 참조 가능하게 정리된다.
 * raster image 혼합을 현재 baseline에서 제외한다는 결정이 문서상 명확하다.
+
+현재 작업 트리 기준 위 완료 기준은 충족된 상태다.
 
 ## 지금은 보류하지만 자리 남길 요소
 

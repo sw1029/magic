@@ -145,6 +145,10 @@ describe("magic recognizer", () => {
     expect(result.shadow?.actualTopLabel).toBe(result.topCandidate?.family);
     expect(result.shadow?.actualStatus).toBe(result.status);
     expect(result.shadow?.candidates.length).toBeGreaterThan(0);
+    expect(result.shadow?.personalizationStage).toBe("none");
+    expect(result.shadow?.personalizationMix).toBe(0);
+    expect(result.shadow?.personalizedShadowTopLabel).toBe(result.shadow?.shadowTopLabel);
+    expect(result.shadow?.personalizedCandidates?.length).toBe(result.shadow?.candidates.length);
 
     if (runtime.baseShadowAvailable) {
       expect(result.shadow?.mode).toBe("shadow");

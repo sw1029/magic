@@ -78,7 +78,9 @@ export function recognizeSession(
     actualCandidates: candidates,
     actualStatus: status,
     features,
-    quality: rawQuality
+    quality: rawQuality,
+    normalizedCloud: normalized.normalizedCloud,
+    profile: options.profile
   });
 
   return {

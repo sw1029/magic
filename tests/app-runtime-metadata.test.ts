@@ -19,11 +19,17 @@ describe("app tiny ML runtime metadata", () => {
         mode: "shadow",
         heuristicTopLabel: "fire",
         shadowTopLabel: "earth",
+        personalizedShadowTopLabel: "fire",
         actualTopLabel: "fire",
         actualStatus: "recognized",
         shadowStatus: "ambiguous",
+        personalizedShadowStatus: "recognized",
         decisionChanged: true,
         statusChanged: true,
+        personalizedDecisionChanged: false,
+        personalizedStatusChanged: false,
+        personalizationStage: "few_shot",
+        personalizationMix: 0.32,
         candidates: []
       }
     } as unknown as RecognitionResult;
@@ -43,11 +49,17 @@ describe("app tiny ML runtime metadata", () => {
         mode: "shadow",
         heuristicTopLabel: "martial_axis",
         shadowTopLabel: "void_cut",
+        personalizedShadowTopLabel: "martial_axis",
         actualTopLabel: "martial_axis",
         actualStatus: "incomplete",
         shadowStatus: "ambiguous",
+        personalizedShadowStatus: "incomplete",
         decisionChanged: true,
         statusChanged: true,
+        personalizedDecisionChanged: false,
+        personalizedStatusChanged: false,
+        personalizationStage: "few_shot",
+        personalizationMix: 0.28,
         candidates: []
       }
     } as unknown as OverlayRecognition;
@@ -58,9 +70,17 @@ describe("app tiny ML runtime metadata", () => {
     expect(metadata.baseActualStatus).toBe("recognized");
     expect(metadata.baseShadowDecisionChanged).toBe("true");
     expect(metadata.baseShadowStatusChanged).toBe("true");
+    expect(metadata.basePersonalizationMix).toBe("0.320");
+    expect(metadata.basePersonalizedShadowTopLabel).toBe("fire");
+    expect(metadata.basePersonalizedShadowDecisionChanged).toBe("false");
+    expect(metadata.basePersonalizedShadowStatusChanged).toBe("false");
     expect(metadata.operatorActualLabel).toBe("martial_axis");
     expect(metadata.operatorActualStatus).toBe("incomplete");
     expect(metadata.operatorShadowDecisionChanged).toBe("true");
     expect(metadata.operatorShadowStatusChanged).toBe("true");
+    expect(metadata.operatorPersonalizationMix).toBe("0.280");
+    expect(metadata.operatorPersonalizedShadowTopLabel).toBe("martial_axis");
+    expect(metadata.operatorPersonalizedShadowDecisionChanged).toBe("false");
+    expect(metadata.operatorPersonalizedShadowStatusChanged).toBe("false");
   });
 });

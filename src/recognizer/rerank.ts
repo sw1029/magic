@@ -9,6 +9,7 @@ import type {
   RecognitionCandidate,
   RecognitionFeatures,
   RecognitionStatus,
+  ShadowScoreCandidate,
   ShadowRuntimeSummary,
   UserInputProfile
 } from "./types";
@@ -431,9 +432,14 @@ export function buildBaseShadowSummary(params: {
   actualStatus: RecognitionStatus;
   features: RecognitionFeatures;
   quality: QualityVector;
+  normalizedCloud: PointSample[];
+  profile?: UserInputProfile;
 }): ShadowRuntimeSummary<GlyphFamily> {
   const rerankArtifact = TINY_ML_ARTIFACTS.baseRerank;
   const confidenceArtifact = TINY_ML_ARTIFACTS.baseConfidence;
+  const personalization = resolveBasePersonalizationRuntime(params.profile);
+  const shapeProfile = resolveShapeProfile(params.profile);
+  const calibration = resolveCalibration(params.profile, shapeProfile, personalization.tutorialSampleCount);
 
   if (
     !rerankArtifact?.featureOrder ||
@@ -443,7 +449,10 @@ export function buildBaseShadowSummary(params: {
     !confidenceArtifact.featureNormalization ||
     !confidenceArtifact.models?.main?.model
   ) {
-    return buildHeuristicOnlyShadowSummary(params.heuristicCandidates, params.actualCandidates, params.actualStatus);
+    return withPersonalizedShadow(
+      buildHeuristicOnlyShadowSummary(params.heuristicCandidates, params.actualCandidates, params.actualStatus),
+      personalization
+    );
   }
 
   const topScore = params.heuristicCandidates[0]?.score ?? 0;
@@ -457,7 +466,10 @@ export function buildBaseShadowSummary(params: {
     }));
 
   if (selected.length === 0) {
-    return buildHeuristicOnlyShadowSummary(params.heuristicCandidates, params.actualCandidates, params.actualStatus);
+    return withPersonalizedShadow(
+      buildHeuristicOnlyShadowSummary(params.heuristicCandidates, params.actualCandidates, params.actualStatus),
+      personalization
+    );
   }
 
   const candidatePairId = resolveBaseCandidatePairId(params.heuristicCandidates, topScore, topMargin, rerankArtifact.supportedPairs);
@@ -469,6 +481,7 @@ export function buildBaseShadowSummary(params: {
     templateDistance: candidate.templateDistance,
     topScoreGap: topScore - candidate.score,
     top1MinusTop2Margin: topMargin,
+    completenessHint: candidate.completenessHint,
     strokeCount: params.features.strokeCount,
     pointCount: params.features.pointCount,
     durationMs: params.features.durationMs,
@@ -529,11 +542,11 @@ export function buildBaseShadowSummary(params: {
   const shadowStatus = resolveBaseStatus(
     topShadow.rerankedScore,
     topShadow.rerankedScore - (secondShadow?.rerankedScore ?? 0),
-    params.heuristicCandidates.find((candidate) => candidate.family === topShadow.candidateFamilyId)?.completenessHint
+    topShadow.completenessHint
   );
   const actualTopLabel = params.actualCandidates[0]?.family;
 
-  return {
+  const globalSummary: ShadowRuntimeSummary<GlyphFamily> = {
     mode: "shadow",
     artifactVersion: [
       rerankArtifact.version,
@@ -558,15 +571,77 @@ export function buildBaseShadowSummary(params: {
       probability: row.modelProbability
     }))
   };
+
+  if (personalization.featureInjectionMix <= 0) {
+    return withPersonalizedShadow(globalSummary, personalization);
+  }
+
+  const personalizedCandidates = rerankBaseCandidates({
+    candidates: reranked.map((row) => ({
+      family: row.candidateFamilyId,
+      score: row.rerankedScore,
+      templateDistance: row.templateDistance,
+      notes: [],
+      completenessHint: row.completenessHint
+    })),
+    normalizedCloud: params.normalizedCloud,
+    features: params.features,
+    quality: params.quality,
+    profile: params.profile
+  });
+  const personalizedTop = personalizedCandidates[0];
+  const personalizedRunner = personalizedCandidates[1];
+  const personalizedTopRow = personalizedTop
+    ? reranked.find((row) => row.candidateFamilyId === personalizedTop.family)
+    : undefined;
+  const topPrototypeSignal = personalizedTop
+    ? resolvePrototypeSignal(shapeProfile?.familyPrototypes?.[personalizedTop.family], params.normalizedCloud, params.features)
+    : 0.5;
+  const personalizedConfidence = clamp(
+    (globalSummary.calibratedConfidence ?? 0.5) +
+      Math.max((personalizedTop?.score ?? 0) - (personalizedTopRow?.rerankedScore ?? 0), 0) * 0.5 +
+      Math.max(topPrototypeSignal - 0.55, 0) * calibration.confidenceBias * personalization.featureInjectionMix,
+    0.001,
+    0.999
+  );
+
+  return withPersonalizedShadow(
+    globalSummary,
+    personalization,
+    {
+      topLabel: personalizedTop?.family,
+      status: personalizedTop
+        ? resolveBaseStatus(
+            personalizedTop.score,
+            personalizedTop.score - (personalizedRunner?.score ?? 0),
+            personalizedTop.completenessHint
+          )
+        : globalSummary.shadowStatus,
+      calibratedConfidence: personalizedConfidence,
+      ambiguityProbability: clamp(1 - personalizedConfidence, 0.001, 0.999),
+      candidates: personalizedCandidates.map((candidate) => {
+        const row = reranked.find((entry) => entry.candidateFamilyId === candidate.family);
+        return {
+          label: candidate.family,
+          heuristicScore: row?.heuristicScore ?? candidate.score,
+          shadowScore: candidate.score,
+          delta: candidate.score - (row?.heuristicScore ?? candidate.score),
+          probability: row?.modelProbability
+        };
+      })
+    }
+  );
 }
 
 export function buildOverlayShadowSummary<T extends OverlayRerankCandidate>(params: {
   heuristicCandidates: T[];
   actualCandidates: T[];
   actualStatus: RecognitionStatus;
+  profile?: OverlayPersonalizationProfile;
 }): ShadowRuntimeSummary<OverlayOperator> {
   const rerankArtifact = TINY_ML_ARTIFACTS.operatorRerank;
   const confidenceArtifact = TINY_ML_ARTIFACTS.operatorConfidence;
+  const personalization = resolveOverlayPersonalizationRuntime(params.profile);
 
   if (
     !rerankArtifact?.featureOrder ||
@@ -577,7 +652,10 @@ export function buildOverlayShadowSummary<T extends OverlayRerankCandidate>(para
     !confidenceArtifact.featureNormalization ||
     !confidenceArtifact.weights
   ) {
-    return buildHeuristicOnlyShadowSummary(params.heuristicCandidates, params.actualCandidates, params.actualStatus);
+    return withPersonalizedShadow(
+      buildHeuristicOnlyShadowSummary(params.heuristicCandidates, params.actualCandidates, params.actualStatus),
+      personalization
+    );
   }
 
   const sorted = [...params.heuristicCandidates].sort((left, right) => right.score - left.score);
@@ -590,7 +668,10 @@ export function buildOverlayShadowSummary<T extends OverlayRerankCandidate>(para
     );
 
   if (topRows.length === 0) {
-    return buildHeuristicOnlyShadowSummary(params.heuristicCandidates, params.actualCandidates, params.actualStatus);
+    return withPersonalizedShadow(
+      buildHeuristicOnlyShadowSummary(params.heuristicCandidates, params.actualCandidates, params.actualStatus),
+      personalization
+    );
   }
 
   const reranked = topRows
@@ -618,7 +699,7 @@ export function buildOverlayShadowSummary<T extends OverlayRerankCandidate>(para
   const ambiguityProbability = clamp(1 - calibratedConfidence, 0.001, 0.999);
   const actualTopLabel = params.actualCandidates[0]?.operator;
 
-  return {
+  const globalSummary: ShadowRuntimeSummary<OverlayOperator> = {
     mode: "shadow",
     artifactVersion: [rerankArtifact.version, confidenceArtifact.version].filter(Boolean).join("+"),
     heuristicTopLabel: sorted[0]?.operator,
@@ -638,6 +719,76 @@ export function buildOverlayShadowSummary<T extends OverlayRerankCandidate>(para
       probability: clamp(1 - row.suppression, 0.001, 0.999)
     }))
   };
+
+  if (personalization.featureInjectionMix <= 0) {
+    return withPersonalizedShadow(globalSummary, personalization);
+  }
+
+  const personalizedCandidates = rerankOverlayCandidates(
+    reranked.map((row) => ({
+      operator: row.operatorId,
+      score: row.shadowScore,
+      baseScore: row.shadowScore,
+      templateDistance: row.templateDistance,
+      shapeConfidence: row.shapeConfidence,
+      notes: [],
+      anchorZoneId: row.anchorZoneId,
+      placementAnchorZoneId: row.placement,
+      anchorScore: row.anchorScore,
+      scaleScore: row.scaleScore,
+      angleRadians: row.angleRadians,
+      scaleRatio: row.scaleRatio,
+      straightness: row.straightness,
+      corners: row.corners,
+      closure: row.closure,
+      stackIndex: row.stackIndex,
+      existingOperators: row.existingOperatorsMask,
+      blockedBy: row.blockedByOperator === "none" ? undefined : row.blockedByOperator
+    })),
+    {
+      profile: params.profile,
+      topK: MAX_TOP_K
+    }
+  );
+  const personalizedTop = personalizedCandidates[0];
+  const personalizedTopRow = personalizedTop
+    ? reranked.find((row) => row.operatorId === personalizedTop.operator)
+    : undefined;
+  const personalizedConfidence = clamp(
+    (globalSummary.calibratedConfidence ?? 0.5) +
+      Math.max((personalizedTop?.score ?? 0) - (personalizedTopRow?.shadowScore ?? 0), 0) * 0.35 +
+      Math.max((personalizedTop?.shapeConfidence ?? 0) - (personalizedTopRow?.shapeConfidence ?? 0), 0) * 0.45,
+    0.001,
+    0.999
+  );
+
+  return withPersonalizedShadow(
+    globalSummary,
+    personalization,
+    {
+      topLabel: personalizedTop?.operator,
+      status: personalizedTop
+        ? resolveOverlayStatus(personalizedTop.score, personalizedTop.blockedBy ? 1 : 0, personalizedTop.scaleScore)
+        : globalSummary.shadowStatus,
+      calibratedConfidence: personalizedConfidence,
+      ambiguityProbability: clamp(1 - personalizedConfidence, 0.001, 0.999),
+      candidates: personalizedCandidates.map((candidate) => {
+        const row = reranked.find((entry) => entry.operatorId === candidate.operator);
+        const probabilityBase = row ? clamp(1 - row.suppression, 0.001, 0.999) : 0.5;
+        return {
+          label: candidate.operator,
+          heuristicScore: row?.heuristicScore ?? candidate.score,
+          shadowScore: candidate.score,
+          delta: candidate.score - (row?.heuristicScore ?? candidate.score),
+          probability: clamp(
+            probabilityBase + (candidate.shapeConfidence - (row?.shapeConfidence ?? candidate.shapeConfidence)) * 0.25,
+            0.001,
+            0.999
+          )
+        };
+      })
+    }
+  );
 }
 
 function buildPersonalizationRuntime(input: {
@@ -709,6 +860,37 @@ function buildHeuristicOnlyShadowSummary<
   };
 }
 
+function withPersonalizedShadow<TLabel extends string>(
+  summary: ShadowRuntimeSummary<TLabel>,
+  personalization: PersonalizationRuntimeSummary,
+  personalized?: {
+    topLabel?: TLabel;
+    status?: RecognitionStatus;
+    calibratedConfidence?: number;
+    ambiguityProbability?: number;
+    candidates?: ShadowScoreCandidate<TLabel>[];
+  }
+): ShadowRuntimeSummary<TLabel> {
+  const topLabel = personalized?.topLabel ?? summary.shadowTopLabel;
+  const status = personalized?.status ?? summary.shadowStatus;
+  const candidates = personalized?.candidates ?? summary.candidates;
+
+  return {
+    ...summary,
+    personalizedShadowTopLabel: topLabel,
+    personalizedShadowStatus: status,
+    personalizedDecisionChanged:
+      summary.actualTopLabel !== undefined && topLabel !== undefined ? summary.actualTopLabel !== topLabel : summary.decisionChanged,
+    personalizedStatusChanged:
+      summary.actualStatus !== undefined && status !== undefined ? summary.actualStatus !== status : summary.statusChanged,
+    personalizedCalibratedConfidence: personalized?.calibratedConfidence ?? summary.calibratedConfidence,
+    personalizedAmbiguityProbability: personalized?.ambiguityProbability ?? summary.ambiguityProbability,
+    personalizationStage: personalization.stage,
+    personalizationMix: personalization.featureInjectionMix,
+    personalizedCandidates: candidates
+  };
+}
+
 function resolveBaseCandidatePairId(
   candidates: RecognitionCandidate[],
   topScore: number,
@@ -741,8 +923,10 @@ function applyBaseShadowRerank(
     candidatePairId: string;
     candidateRank: number;
     heuristicScore: number;
+    templateDistance: number;
     topScoreGap: number;
     top1MinusTop2Margin: number;
+    completenessHint?: string;
   }>,
   probabilities: number[],
   deltaTransform: Record<string, number>
@@ -750,9 +934,11 @@ function applyBaseShadowRerank(
   candidateFamilyId: GlyphFamily;
   candidateRank: number;
   heuristicScore: number;
+  templateDistance: number;
   modelProbability: number;
   topScoreGap: number;
   top1MinusTop2Margin: number;
+  completenessHint?: string;
   rerankDelta: number;
   rerankedScore: number;
 }> {

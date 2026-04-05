@@ -22,6 +22,7 @@ tiny ML branch 추적:
 
 * 현재 작업 트리 기준 tiny ML baseline은 dataset split/feature spec, base/operator artifact, runtime shadow mode까지 연결돼 있다.
 * gate-open은 아직 열지 않는다. 최종 decision은 계속 규칙/heuristic 경로가 유지된다.
+* tutorial export contract/helper와 shadow-only personalization adapter는 현재 작업 트리에서 연결돼 있고, 다음 tiny ML branch wave는 acceptance/provenance 검증이다.
 * tiny ML 관련 문서는 [`tiny-ml-baseline-plan.md`](tiny-ml-baseline-plan.md) -> [`tutorial-ml-adaptation-rollout-plan.md`](tutorial-ml-adaptation-rollout-plan.md) -> [T07-08 tiny ML baseline 설계와 offline 실험안](../30_tasks/epic-07-future-expansion-backlog/task-08-tiny-ml-baseline-and-offline-eval.md) -> [T02-08 tutorial vector capture와 ML adaptation contract](../30_tasks/epic-02-symbols-and-input/task-08-tutorial-vector-capture-and-ml-adaptation-contract.md) -> [T07-09 tutorial-aware personalization adapter 설계](../30_tasks/epic-07-future-expansion-backlog/task-09-tutorial-aware-personalization-adapter.md) -> [`work-queue.md`](work-queue.md) 순서로 읽는다.
 
 현재 구현된 HCI demo를 먼저 확인하려면 아래 순서가 가장 빠릅니다.

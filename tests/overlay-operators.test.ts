@@ -106,6 +106,10 @@ describe("overlay operator recognizer", () => {
     expect(recognition.status).toBe("incomplete");
     expect(recognition.operator).toBeUndefined();
     expect(recognition.invalidReason).toContain("void_cut");
+    expect(recognition.shadow?.personalizationStage).not.toBe("none");
+    expect(recognition.shadow?.personalizationMix).toBeGreaterThan(0);
+    expect(recognition.shadow?.personalizedCandidates?.length).toBeGreaterThan(0);
+    expect(recognition.shadow?.personalizedShadowStatus).not.toBe("recognized");
   });
 
   it("returns ambiguous or invalid for a partial ice_bar stroke", () => {
@@ -194,6 +198,10 @@ describe("overlay operator recognizer", () => {
     expect(recognition.shadow?.actualTopLabel).toBe(recognition.topCandidate?.operator);
     expect(recognition.shadow?.actualStatus).toBe(recognition.status);
     expect(recognition.shadow?.candidates.length).toBeGreaterThan(0);
+    expect(recognition.shadow?.personalizationStage).toBe("none");
+    expect(recognition.shadow?.personalizationMix).toBe(0);
+    expect(recognition.shadow?.personalizedShadowTopLabel).toBe(recognition.shadow?.shadowTopLabel);
+    expect(recognition.shadow?.personalizedCandidates?.length).toBe(recognition.shadow?.candidates.length);
 
     if (runtime.operatorShadowAvailable) {
       expect(recognition.shadow?.mode).toBe("shadow");

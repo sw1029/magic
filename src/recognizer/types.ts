@@ -122,14 +122,23 @@ export interface ShadowRuntimeSummary<TLabel extends string = string> {
   artifactVersion?: string;
   heuristicTopLabel?: TLabel;
   shadowTopLabel?: TLabel;
+  personalizedShadowTopLabel?: TLabel;
   actualTopLabel?: TLabel;
   actualStatus?: RecognitionStatus;
   shadowStatus?: RecognitionStatus;
+  personalizedShadowStatus?: RecognitionStatus;
   decisionChanged: boolean;
   statusChanged: boolean;
+  personalizedDecisionChanged?: boolean;
+  personalizedStatusChanged?: boolean;
   calibratedConfidence?: number;
   ambiguityProbability?: number;
+  personalizedCalibratedConfidence?: number;
+  personalizedAmbiguityProbability?: number;
+  personalizationStage?: TutorialPersonalizationStage;
+  personalizationMix?: number;
   candidates: ShadowScoreCandidate<TLabel>[];
+  personalizedCandidates?: ShadowScoreCandidate<TLabel>[];
 }
 
 export interface QualityVector {

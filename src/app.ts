@@ -1485,18 +1485,37 @@ export function buildTinyMlRuntimeMetadata(
     baseActualFamily: baseResult ? readCurrentFamily(baseResult) ?? "none" : "none",
     baseActualStatus: baseResult?.status ?? "waiting",
     basePersonalizationStage: baseResult?.personalization?.stage ?? "none",
+    basePersonalizationMix: baseResult?.shadow?.personalizationMix?.toFixed(3) ?? baseResult?.personalization?.featureInjectionMix.toFixed(3) ?? "0.000",
     baseThresholdBias: baseResult?.personalization?.thresholdBias.toFixed(3) ?? "0.000",
     baseShadowDecisionChanged: baseResult?.shadow ? String(baseResult.shadow.decisionChanged) : "false",
     baseShadowStatusChanged: baseResult?.shadow ? String(baseResult.shadow.statusChanged) : "false",
+    basePersonalizedShadowTopLabel: baseResult?.shadow?.personalizedShadowTopLabel ?? "none",
+    basePersonalizedShadowDecisionChanged: baseResult?.shadow
+      ? String(baseResult.shadow.personalizedDecisionChanged ?? false)
+      : "false",
+    basePersonalizedShadowStatusChanged: baseResult?.shadow
+      ? String(baseResult.shadow.personalizedStatusChanged ?? false)
+      : "false",
     operatorActualLabel: operatorLabelValue,
     operatorActualStatus: overlayRecognition?.status ?? "waiting",
     operatorPersonalizationStage: overlayRecognition?.personalization?.stage ?? "none",
+    operatorPersonalizationMix:
+      overlayRecognition?.shadow?.personalizationMix?.toFixed(3) ??
+      overlayRecognition?.personalization?.featureInjectionMix.toFixed(3) ??
+      "0.000",
     operatorThresholdBias: overlayRecognition?.personalization?.thresholdBias.toFixed(3) ?? "0.000",
     operatorShadowDecisionChanged: overlayRecognition?.shadow
       ? String(overlayRecognition.shadow.decisionChanged)
       : "false",
     operatorShadowStatusChanged: overlayRecognition?.shadow
       ? String(overlayRecognition.shadow.statusChanged)
+      : "false",
+    operatorPersonalizedShadowTopLabel: overlayRecognition?.shadow?.personalizedShadowTopLabel ?? "none",
+    operatorPersonalizedShadowDecisionChanged: overlayRecognition?.shadow
+      ? String(overlayRecognition.shadow.personalizedDecisionChanged ?? false)
+      : "false",
+    operatorPersonalizedShadowStatusChanged: overlayRecognition?.shadow
+      ? String(overlayRecognition.shadow.personalizedStatusChanged ?? false)
       : "false"
   };
 }

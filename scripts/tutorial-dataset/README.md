@@ -258,11 +258,23 @@ node scripts/tutorial-dataset/download-crohme.mjs
 
 ## 실행 예시
 
-Tutorial export를 adaptation 세트로 바꾸기:
+Tutorial export를 자동 holdout으로 나누기:
 
 ```bash
 node scripts/tutorial-dataset/convert-tutorial-captures.mjs \
   --input exports/tutorial-captures.json \
+  --out tmp/tutorial-dataset/tutorial-all.ndjson \
+  --adaptation-out tmp/tutorial-dataset/tutorial-adaptation.ndjson \
+  --acceptance-out tmp/tutorial-dataset/tutorial-acceptance.ndjson \
+  --manifest-out tmp/tutorial-dataset/tutorial-export.manifest.json
+```
+
+Tutorial export를 강제로 adaptation 세트로 고정하기:
+
+```bash
+node scripts/tutorial-dataset/convert-tutorial-captures.mjs \
+  --input exports/tutorial-captures.json \
+  --split adaptation \
   --out tmp/tutorial-dataset/tutorial-adaptation.ndjson
 ```
 

@@ -39,7 +39,7 @@
 ## Tiny ML 연결
 
 * [T02-08 tutorial vector capture와 ML adaptation contract](task-08-tutorial-vector-capture-and-ml-adaptation-contract.md)은 [T07-08 tiny ML baseline 설계와 offline 실험안](../epic-07-future-expansion-backlog/task-08-tiny-ml-baseline-and-offline-eval.md)과 [T07-09 tutorial-aware personalization adapter 설계](../epic-07-future-expansion-backlog/task-09-tutorial-aware-personalization-adapter.md)를 잇는 vector-only contract bridge다.
-* 현재 작업 트리에는 tutorial store와 personalization runtime groundwork가 있지만, actual ML adaptation activation은 `T02-08`이 닫히기 전까지 열지 않는다.
+* 현재 작업 트리에는 tutorial export contract/helper와 shadow-only personalization adapter가 있고, 다음 tiny ML wave는 acceptance/provenance 검증이다.
 
 ## 선행 task
 

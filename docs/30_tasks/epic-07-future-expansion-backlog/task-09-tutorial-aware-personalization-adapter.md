@@ -3,7 +3,7 @@
 - id: T07-09
 - parent: E07
 - priority: P2
-- status: blocked
+- status: in_progress
 - depends_on: T02-08, T07-08
 - blocks: -
 - source_chat: request-answer03, request-answer11, request-answer18
@@ -20,11 +20,17 @@ tutorial vector capture가 들어왔을 때 global tiny baseline 위에 user-spe
 * base/operator personalization runtime이 tutorial sample count에 따라 weak/strong threshold bias를 계산한다.
 * tutorial profile store와 operator placement summary가 이미 존재한다.
 * `T07-08` shadow baseline artifact와 runtime hook가 먼저 연결돼 있다.
+* global shadow와 personalized shadow를 분리한 summary/metadata가 base/operator 모두에 연결돼 있다.
 
-하지만 이 task는 아직 blocked다.
+현재 이 task는 in_progress 상태다.
 
-* `T02-08`의 vector capture export contract가 닫히지 않았다.
-* 따라서 user-specific adapter는 실제 capture 입력 기준으로 gate-open 하지 않는다.
+* `T02-08`의 vector capture export contract와 helper가 먼저 닫혔다.
+* shadow-only adapter가 실제로 연결됐고, 남은 범위는 acceptance/provenance와 gate-open readiness다.
+
+이번 재정리 기준에서 `T07-09`는 아래 두 wave를 담당한다.
+
+* Wave 3. adapter shadow
+* Wave 4. gate-open readiness
 
 ## 아이디어 원본
 
@@ -74,6 +80,8 @@ tutorial vector capture가 들어왔을 때 global tiny baseline 위에 user-spe
 * `T02-08` export contract를 읽어 `adaptation` / `acceptance_eval`에 그대로 연결할 수 있다.
 * `ambiguity` 또는 `hard-negative error` 개선이 있어도 `family flip` 증가 `0`, `dependency violation` `0`을 유지하는 stop condition이 명시된다.
 * shadow-only 상태와 gate-open 이후 상태가 구분돼 있다.
+
+현재 작업 트리 기준으로는 shadow-only adapter 부분까지 반영됐고, acceptance/provenance와 gate-open readiness가 남아 있다.
 
 ## 지금은 보류하지만 자리 남길 요소
 

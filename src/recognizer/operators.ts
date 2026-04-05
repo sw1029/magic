@@ -211,7 +211,8 @@ export function recognizeOverlayStroke(
   const shadow = buildOverlayShadowSummary({
     heuristicCandidates,
     actualCandidates: candidates,
-    actualStatus: status
+    actualStatus: status,
+    profile: context.personalizationProfile
   });
 
   return {

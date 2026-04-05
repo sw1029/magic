@@ -195,6 +195,10 @@ describe("magic recognizer v1.5", () => {
     expect(personalized.canonicalFamily).toBe("earth");
     expect(personalizedMargin).toBeGreaterThan(baselineMargin);
     expect(personalized.topCandidate?.notes.some((note) => note.startsWith("calibrated="))).toBe(true);
+    expect(personalized.shadow?.personalizationStage).toBe("few_shot");
+    expect(personalized.shadow?.personalizationMix).toBeGreaterThan(0);
+    expect(personalized.shadow?.personalizedShadowTopLabel).toBeDefined();
+    expect(personalized.shadow?.personalizedCandidates?.length).toBeGreaterThan(0);
   });
 
   it("does not let earth-biased tutorial prototypes flip a clear fire template", () => {

@@ -9,7 +9,8 @@ import {
   rdpSimplify,
   strokeStraightness
 } from "./geometry";
-import { calculateQualityVector } from "./quality";
+import { createEmptyQualityVector } from "./user-profile";
+import { calculateAdjustedQuality, calculateQualityVector } from "./quality";
 import { GLYPH_TEMPLATES } from "./templates";
 import type {
   AxisLine,
@@ -17,7 +18,8 @@ import type {
   RecognitionCandidate,
   RecognitionFeatures,
   RecognitionResult,
-  StrokeSession
+  StrokeSession,
+  UserInputProfile
 } from "./types";
 
 const TEMPLATE_BUNDLES = GLYPH_TEMPLATES.map((template) => ({
@@ -27,7 +29,7 @@ const TEMPLATE_BUNDLES = GLYPH_TEMPLATES.map((template) => ({
 
 export function recognizeSession(
   session: StrokeSession,
-  options: { sealed: boolean }
+  options: { sealed: boolean; profile?: UserInputProfile }
 ): RecognitionResult {
   const strokes = session.strokes.filter((stroke) => stroke.points.length >= 2);
 
@@ -36,10 +38,11 @@ export function recognizeSession(
   }
 
   const normalized = normalizeStrokes(strokes);
-  const quality = calculateQualityVector(strokes, normalized);
-  const features = deriveFeatures(session, normalized);
+  const rawQuality = calculateQualityVector(strokes, normalized);
+  const { adjustedQuality, qualityAdjustment } = calculateAdjustedQuality(rawQuality, options.profile);
+  const features = deriveFeatures({ ...session, strokes }, normalized);
   const candidates = TEMPLATE_BUNDLES.map((template) =>
-    scoreCandidate(template.family, normalized.normalizedCloud, strokes.length, features, quality)
+    scoreCandidate(template.family, normalized.normalizedCloud, strokes.length, features, rawQuality)
   ).sort((left, right) => right.score - left.score);
 
   const topCandidate = candidates[0];
@@ -62,7 +65,10 @@ export function recognizeSession(
   return {
     status,
     sealed: options.sealed,
-    quality,
+    quality: rawQuality,
+    rawQuality,
+    adjustedQuality,
+    qualityAdjustment,
     features,
     candidates,
     topCandidate,
@@ -363,18 +369,15 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 function emptyResult(sealed: boolean, reason: string): RecognitionResult {
+  const rawQuality = createEmptyQualityVector();
+
   return {
     status: "invalid",
     sealed,
-    quality: {
-      closure: 0,
-      symmetry: 0,
-      smoothness: 0,
-      tempo: 0,
-      overshoot: 0,
-      stability: 0,
-      rotationBias: 0
-    },
+    quality: rawQuality,
+    rawQuality,
+    adjustedQuality: { ...rawQuality },
+    qualityAdjustment: createEmptyQualityVector(),
     features: {
       strokeCount: 0,
       pointCount: 0,

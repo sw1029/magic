@@ -5,8 +5,25 @@ import {
   rdpSimplify,
   pathLength
 } from "./geometry";
+import {
+  QUALITY_VECTOR_KEYS,
+  createEmptyQualityVector,
+  resolveUserComfortBand,
+  subtractQualityVectors
+} from "./user-profile";
 import type { QualityVector, Stroke } from "./types";
 import type { NormalizedBundle } from "./geometry";
+import type { UserInputProfile } from "./types";
+
+const QUALITY_ADJUSTMENT_WEIGHTS: QualityVector = {
+  closure: 0.12,
+  symmetry: 0.04,
+  smoothness: 0.05,
+  tempo: 0.48,
+  overshoot: 0.04,
+  stability: 0.34,
+  rotationBias: 0.28
+};
 
 export function calculateQualityVector(strokes: Stroke[], normalized: NormalizedBundle): QualityVector {
   const totalLength = strokes.reduce((sum, stroke) => sum + pathLength(stroke.points), 0);
@@ -40,6 +57,35 @@ export function calculateQualityVector(strokes: Stroke[], normalized: Normalized
     overshoot,
     stability,
     rotationBias
+  };
+}
+
+export function calculateAdjustedQuality(
+  rawQuality: QualityVector,
+  profile?: UserInputProfile
+): { adjustedQuality: QualityVector; qualityAdjustment: QualityVector } {
+  const comfortBand = resolveUserComfortBand(profile);
+
+  if (comfortBand.adjustmentStrength === 0) {
+    return {
+      adjustedQuality: { ...rawQuality },
+      qualityAdjustment: createEmptyQualityVector()
+    };
+  }
+
+  const adjustedQuality = QUALITY_VECTOR_KEYS.reduce<QualityVector>((accumulator, key) => {
+    const rawValue = rawQuality[key];
+    const comfortCenter = comfortBand.center[key];
+    const comfortWidth = Math.max(comfortBand.band[key], 0.0001);
+    const comfortScore = clamp(1 - Math.abs(rawValue - comfortCenter) / comfortWidth, 0, 1);
+    const metricInfluence = comfortBand.adjustmentStrength * QUALITY_ADJUSTMENT_WEIGHTS[key];
+    accumulator[key] = clamp(rawValue * (1 - metricInfluence) + comfortScore * metricInfluence, 0, 1);
+    return accumulator;
+  }, createEmptyQualityVector());
+
+  return {
+    adjustedQuality,
+    qualityAdjustment: subtractQualityVectors(adjustedQuality, rawQuality)
   };
 }
 

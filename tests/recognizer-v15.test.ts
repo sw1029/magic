@@ -1,0 +1,356 @@
+import { describe, expect, it } from "vitest";
+import { compileSealResult } from "../src/recognizer/compile";
+import { OVERLAY_OPERATOR_TEMPLATES } from "../src/recognizer/operator-templates";
+import { createOverlayReferenceFrame, recognizeOverlayStroke } from "../src/recognizer/operators";
+import { createEmptyUserInputProfile, updateUserInputProfile } from "../src/recognizer/user-profile";
+import { recognizeSession } from "../src/recognizer/recognize";
+import { GLYPH_TEMPLATES } from "../src/recognizer/templates";
+import type { OverlayOperator, OverlayStrokeRecord, Stroke, StrokeSession, UserInputProfile } from "../src/recognizer/types";
+
+describe("magic recognizer v1.5", () => {
+  it("keeps canonical family fixed while adjusted quality reflects the user profile", () => {
+    const session = fromGlyphTemplate("fire", {
+      scale: 190,
+      rotate: 0.22,
+      translate: { x: 300, y: 250 },
+      timeStep: 24
+    });
+    const profile: UserInputProfile = {
+      ...createEmptyUserInputProfile(),
+      sampleCount: 8,
+      averageQuality: {
+        closure: 0.92,
+        symmetry: 0.24,
+        smoothness: 0.88,
+        tempo: 0.12,
+        overshoot: 0.68,
+        stability: 0.3,
+        rotationBias: 0.18
+      }
+    };
+    const result = recognizeSession(session, { sealed: true, profile });
+
+    expect(result.canonicalFamily).toBe("fire");
+    expect(result.rawQuality.tempo).not.toBe(result.adjustedQuality.tempo);
+    expect(result.quality).toEqual(result.rawQuality);
+  });
+
+  it("uses baseline fallback and keeps adjustment weak when sampleCount is low", () => {
+    const session = fromGlyphTemplate("fire", {
+      scale: 184,
+      rotate: 0.18,
+      translate: { x: 300, y: 245 },
+      timeStep: 26
+    });
+    const lowSampleProfile: UserInputProfile = {
+      ...createEmptyUserInputProfile(),
+      sampleCount: 2,
+      averageQuality: {
+        closure: 0.92,
+        symmetry: 0.35,
+        smoothness: 0.78,
+        tempo: 0.32,
+        overshoot: 0.64,
+        stability: 0.4,
+        rotationBias: 0.12
+      }
+    };
+    const highSampleProfile: UserInputProfile = {
+      ...lowSampleProfile,
+      sampleCount: 18
+    };
+
+    const lowSampleResult = recognizeSession(session, { sealed: true, profile: lowSampleProfile });
+    const highSampleResult = recognizeSession(session, { sealed: true, profile: highSampleProfile });
+
+    expect(lowSampleResult.canonicalFamily).toBe("fire");
+    expect(highSampleResult.canonicalFamily).toBe("fire");
+    expect(Math.abs(highSampleResult.adjustedQuality.tempo - highSampleResult.rawQuality.tempo)).toBeGreaterThan(
+      Math.abs(lowSampleResult.adjustedQuality.tempo - lowSampleResult.rawQuality.tempo)
+    );
+    expect(
+      Math.abs(highSampleResult.adjustedQuality.stability - highSampleResult.rawQuality.stability)
+    ).toBeGreaterThan(Math.abs(lowSampleResult.adjustedQuality.stability - lowSampleResult.rawQuality.stability));
+  });
+
+  it("keeps fast and slow inputs in the same family while adjusted tempo becomes more stable", () => {
+    const comfortProfile: UserInputProfile = {
+      ...createEmptyUserInputProfile(),
+      sampleCount: 18,
+      averageQuality: {
+        closure: 0.86,
+        symmetry: 0.48,
+        smoothness: 0.76,
+        tempo: 0.78,
+        overshoot: 0.62,
+        stability: 0.7,
+        rotationBias: 0.2
+      }
+    };
+    const fast = fromGlyphTemplate("fire", {
+      scale: 186,
+      rotate: 0.16,
+      translate: { x: 290, y: 250 },
+      timeStep: 8
+    });
+    const slow = fromGlyphTemplate("fire", {
+      scale: 186,
+      rotate: 0.16,
+      translate: { x: 290, y: 250 },
+      timeStep: 42
+    });
+
+    const fastResult = recognizeSession(fast, { sealed: true, profile: comfortProfile });
+    const slowResult = recognizeSession(slow, { sealed: true, profile: comfortProfile });
+    const rawGap = Math.abs(fastResult.rawQuality.tempo - slowResult.rawQuality.tempo);
+    const adjustedGap = Math.abs(fastResult.adjustedQuality.tempo - slowResult.adjustedQuality.tempo);
+
+    expect(fastResult.canonicalFamily).toBe("fire");
+    expect(slowResult.canonicalFamily).toBe("fire");
+    expect(rawGap).toBeGreaterThan(0.08);
+    expect(adjustedGap).toBeLessThan(rawGap);
+    expect(fastResult.adjustedQuality.tempo).not.toBe(fastResult.rawQuality.tempo);
+    expect(slowResult.adjustedQuality.tempo).not.toBe(slowResult.rawQuality.tempo);
+  });
+
+  it("does not let personalization flip invalid input into recognized", () => {
+    const aggressiveProfile: UserInputProfile = {
+      ...createEmptyUserInputProfile(),
+      sampleCount: 24,
+      averageQuality: {
+        closure: 1,
+        symmetry: 1,
+        smoothness: 1,
+        tempo: 0.8,
+        overshoot: 1,
+        stability: 1,
+        rotationBias: 0
+      }
+    };
+    const session = makeSession([
+      makeStroke(
+        [
+          [260, 120],
+          [410, 430],
+          [120, 430]
+        ],
+        0
+      )
+    ]);
+    const result = recognizeSession(session, { sealed: true, profile: aggressiveProfile });
+
+    expect(result.status).toBe("incomplete");
+    expect(result.canonicalFamily).toBeUndefined();
+  });
+
+  it("recognizes overlay operators and compiles base + overlay + profile delta", () => {
+    const profile = createEmptyUserInputProfile();
+    const baseSession = fromGlyphTemplate("earth", {
+      scale: 220,
+      rotate: -0.34,
+      translate: { x: 300, y: 270 },
+      timeStep: 20
+    });
+    const baseResult = recognizeSession(baseSession, { sealed: true, profile });
+
+    expect(baseResult.canonicalFamily).toBe("earth");
+
+    const profileUpdate = updateUserInputProfile(profile, baseResult);
+    const referenceFrame = createOverlayReferenceFrame(baseSession);
+    const overlayRecords = [
+      recognizeOverlayRecord("void_cut", referenceFrame, [], 118, { x: 470, y: 220 }),
+      recognizeOverlayRecord("martial_axis", referenceFrame, ["void_cut"], 118, { x: 470, y: 360 }),
+      recognizeOverlayRecord("soul_dot", referenceFrame, ["void_cut", "martial_axis"], 24, { x: 240, y: 200 })
+    ];
+    const compiled = compileSealResult(baseResult, overlayRecords, profileUpdate.delta);
+
+    expect(
+      compiled.overlayOperators.map((recognition) => recognition.operator).filter((operator): operator is OverlayOperator => Boolean(operator))
+    ).toEqual(["void_cut", "martial_axis", "soul_dot"]);
+    expect(compiled.baseFamily).toBe("earth");
+    expect(compiled.rawQuality).toEqual(baseResult.rawQuality);
+    expect(compiled.adjustedQuality).toEqual(baseResult.adjustedQuality);
+    expect(compiled.profileDelta?.nextSampleCount).toBe(1);
+  });
+
+  it("only recognizes martial_axis after void_cut is already in the overlay stack", () => {
+    const stroke = fromOverlayTemplate("martial_axis", {
+      scale: 112,
+      rotate: 0,
+      translate: { x: 460, y: 280 }
+    });
+
+    const blocked = recognizeOverlayStroke(stroke, {
+      referenceFrame: createOverlayReferenceFrame(
+        fromGlyphTemplate("earth", {
+          scale: 220,
+          rotate: -0.34,
+          translate: { x: 300, y: 270 },
+          timeStep: 20
+        })
+      ),
+      existingOperators: []
+    });
+    const enabled = recognizeOverlayStroke(stroke, {
+      referenceFrame: createOverlayReferenceFrame(
+        fromGlyphTemplate("earth", {
+          scale: 220,
+          rotate: -0.34,
+          translate: { x: 300, y: 270 },
+          timeStep: 20
+        })
+      ),
+      existingOperators: ["void_cut"]
+    });
+
+    expect(["incomplete", "invalid"]).toContain(blocked.status);
+    expect(blocked.invalidReason).toContain("void_cut");
+    expect(enabled.status).toBe("recognized");
+    expect(enabled.operator).toBe("martial_axis");
+  });
+
+  it("keeps the sealed base family fixed when an invalid overlay is added", () => {
+    const profile = createEmptyUserInputProfile();
+    const baseSession = fromGlyphTemplate("earth", {
+      scale: 220,
+      rotate: -0.34,
+      translate: { x: 300, y: 270 },
+      timeStep: 20
+    });
+    const baseResult = recognizeSession(baseSession, { sealed: true, profile });
+    const invalidOverlayStroke: Stroke = {
+      id: "invalid-overlay",
+      points: [{ x: 512, y: 178, t: 0 }]
+    };
+    const invalidOverlayRecognition = recognizeOverlayStroke(invalidOverlayStroke, {
+      referenceFrame: createOverlayReferenceFrame(baseSession),
+      existingOperators: [],
+      overlaySession: makeSession([invalidOverlayStroke])
+    });
+    const compiled = compileSealResult(
+      baseResult,
+      [{ stroke: invalidOverlayStroke, recognition: invalidOverlayRecognition }],
+      undefined
+    );
+
+    expect(baseResult.canonicalFamily).toBe("earth");
+    expect(invalidOverlayRecognition.status).toBe("invalid");
+    expect(compiled.baseFamily).toBe("earth");
+    expect(compiled.overlayOperators).toHaveLength(0);
+    expect(compiled.rawQuality).toEqual(baseResult.rawQuality);
+  });
+});
+
+function fromGlyphTemplate(
+  family: string,
+  options: {
+    scale: number;
+    rotate: number;
+    translate: { x: number; y: number };
+    noise?: number;
+    timeStep?: number;
+  }
+): StrokeSession {
+  const template = GLYPH_TEMPLATES.find((item) => item.family === family);
+
+  if (!template) {
+    throw new Error(`unknown template family: ${family}`);
+  }
+
+  const strokes = template.strokes.map((stroke, strokeIndex) => ({
+    id: `${family}-${strokeIndex}`,
+    points: stroke.points.map((point, pointIndex) => transformPoint(point, strokeIndex, pointIndex, options))
+  }));
+
+  return makeSession(strokes);
+}
+
+function fromOverlayTemplate(
+  operator: OverlayOperator,
+  options: {
+    scale: number;
+    rotate: number;
+    translate: { x: number; y: number };
+    timeStep?: number;
+  }
+): Stroke {
+  const template = OVERLAY_OPERATOR_TEMPLATES.find((item) => item.operator === operator);
+
+  if (!template) {
+    throw new Error(`unknown overlay operator: ${operator}`);
+  }
+
+  const baseStroke = template.strokes[0];
+
+  return {
+    id: `${operator}-stroke`,
+    points: baseStroke.points.map((point, pointIndex) => transformPoint(point, 0, pointIndex, options))
+  };
+}
+
+function recognizeOverlayRecord(
+  operator: OverlayOperator,
+  referenceFrame: ReturnType<typeof createOverlayReferenceFrame>,
+  existingOperators: OverlayOperator[],
+  scale: number,
+  translate: { x: number; y: number }
+): OverlayStrokeRecord {
+  const stroke = fromOverlayTemplate(operator, {
+    scale,
+    rotate: operator === "void_cut" ? 0.04 : 0,
+    translate
+  });
+  const recognition = recognizeOverlayStroke(stroke, { referenceFrame, existingOperators });
+
+  expect(recognition.status).toBe("recognized");
+  expect(recognition.operator).toBe(operator);
+
+  return { stroke, recognition };
+}
+
+function transformPoint(
+  point: { x: number; y: number; t: number },
+  strokeIndex: number,
+  pointIndex: number,
+  options: {
+    scale: number;
+    rotate: number;
+    translate: { x: number; y: number };
+    noise?: number;
+    timeStep?: number;
+  }
+): { x: number; y: number; t: number } {
+  const jitter = options.noise ?? 0;
+  const cosine = Math.cos(options.rotate);
+  const sine = Math.sin(options.rotate);
+  const nx = point.x + Math.sin(pointIndex + strokeIndex * 1.7) * jitter;
+  const ny = point.y + Math.cos(pointIndex * 1.3 + strokeIndex) * jitter;
+  const rotatedX = nx * cosine - ny * sine;
+  const rotatedY = nx * sine + ny * cosine;
+
+  return {
+    x: rotatedX * options.scale + options.translate.x,
+    y: rotatedY * options.scale + options.translate.y,
+    t: (strokeIndex * 240 + pointIndex) * (options.timeStep ?? 16)
+  };
+}
+
+function makeSession(strokes: Stroke[]): StrokeSession {
+  const timestamps = strokes.flatMap((stroke) => stroke.points.map((point) => point.t));
+  return {
+    strokes,
+    startedAt: Math.min(...timestamps, 0),
+    endedAt: Math.max(...timestamps, 0)
+  };
+}
+
+function makeStroke(points: Array<[number, number]>, offset: number, step = 16): Stroke {
+  return {
+    id: `stroke-${offset}`,
+    points: points.map(([x, y], index) => ({
+      x,
+      y,
+      t: offset + index * step
+    }))
+  };
+}

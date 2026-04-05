@@ -1,14 +1,15 @@
-# Magic Recognizer V1
+# Magic Recognizer V1.5
 
-기본 5문양을 웹 캔버스에서 그리고, `seal` 시점에 canonical 결과와 품질 벡터를 확정하는 초기 마법진 인식체계 프로토타입입니다.
+기본 5문양 base seal recognizer를 유지하면서, 같은 캔버스에서 overlay operator를 누적하고 `final seal`로 compile 결과를 확정하는 마법진 인식체계 프로토타입입니다.
 
 현재 범위:
 
 * 웹 캔버스 입력
-* 기본 5문양 인식
-* draw 중 후보 preview
-* `seal` 후 최종 결과 확정
-* 품질 벡터 표시
+* 기본 5문양 base family 인식
+* user input profile 누적
+* raw quality / adjusted quality 분리
+* base seal 이후 overlay operator stack 인식
+* `final seal` compile 결과 표시
 * JSON 로그 export
 * 문서 상태 동기화 검증
 
@@ -86,23 +87,81 @@ npm run build
 
 ## 데모 사용 방법
 
+현재 Web UI에는 두 층이 함께 들어 있습니다.
+
+* core recognizer 기능:
+  * base family 인식
+  * overlay operator stack 인식
+  * raw / adjusted quality 계산
+  * final seal compile
+* HCI 검토용 demo 기능:
+  * `quality vector use` on/off compare
+  * `clean / explain / workshop` 프리셋
+  * why panel
+  * guided scenario
+  * recent seals / quick compare
+
 개발 서버를 띄운 뒤 브라우저에서 아래 순서로 확인합니다.
 
-1. 캔버스에 기본 문양 하나를 그립니다.
-2. 오른쪽 `Preview` 패널에서 live candidate와 status를 봅니다.
-3. 필요하면 `debug overlay`를 켜 둔 상태로 symmetry axis, closure line을 확인합니다.
-4. `Seal` 버튼을 눌러 canonical 결과를 확정합니다.
-5. `Final Result`와 `Quality Vector`를 확인합니다.
-6. `Export Logs`로 JSON 로그를 내려받습니다.
+### 1. 가장 빠른 HCI 시연 순서
+
+1. 상단 `View Preset`에서 `clean`을 먼저 확인합니다.
+2. `Guided Demo Scenario`에서 `빠른 불꽃` 또는 `느린 불꽃`을 선택합니다.
+3. 캔버스에 기본 문양을 그리고 `Seal Base`를 눌러 base family를 고정합니다.
+4. 오른쪽 `Outcome Compare`에서 `quality off / quality on`을 비교합니다.
+5. `explain` 프리셋으로 바꿔 why panel과 quick compare를 함께 확인합니다.
+6. 필요하면 `workshop` 프리셋으로 바꿔 analysis overlay와 detail panel을 엽니다.
+7. `Start Overlay` 이후 같은 캔버스에서 overlay operator를 덧그린 뒤 `Seal Final`로 compile 결과를 확인합니다.
+
+### 2. HCI 검토 포인트
+
+시연 중 아래 문구와 카드가 바로 보여야 합니다.
+
+* `same shape, same family`
+* `quality affects execution, not family`
+* `quality off`는 canonical baseline outcome만 보여 줌
+* `quality on`은 quality vector 기반 outcome delta만 반영
+* why panel은 상태 이유와 quality 영향 설명을 짧은 문장으로 제공
+* quick compare는 현재 시도와 직전 결과를 로그 없이 비교 가능하게 제공
+
+### 3. 버튼과 토글 설명
+
+프리셋:
+
+* `clean`: 설명/분석을 줄이고 draw와 핵심 결과 위주로 봄
+* `explain`: why panel과 quality compare 중심으로 봄
+* `workshop`: analysis overlay와 세부 패널까지 함께 봄
+
+개별 토글:
+
+* `quality vector use`: outcome layer에 quality delta를 반영할지 제어
+* `quality compare`: quality off / on compare card 표시
+* `why panel`: 결과 이유 설명 패널 표시
+* `analysis overlay`: axis, closure, anchor zone, ghost guide 표시
+* `detail panels`: raw / adjusted quality, profile, 로그 같은 세부 패널 표시
 
 버튼 설명:
 
-* `Seal`: 현재 입력을 canonical 결과로 확정
+* `Seal Base`: 현재 base 입력을 canonical family로 확정
+* `Start Overlay`: base seal 이후 overlay 입력 단계를 시작
+* `Seal Final`: base family와 overlay stack을 compile 결과로 고정
 * `Undo`: 마지막 stroke 제거
 * `Reset`: 현재 입력 초기화
 * `Export Logs`: 누적 recognition 로그를 JSON으로 저장
 
-## V1 기준 문양
+브라우저에서 빠르게 확인할 최소 시나리오:
+
+1. `빠른 불꽃` 시나리오를 선택
+2. `clean`에서 불꽃 삼각형을 그림
+2. `Seal Base`
+3. `quality vector use` on/off를 바꾸며 `Outcome Compare` 확인
+4. `explain`으로 전환해 why panel 확인
+5. `Start Overlay`
+6. `steel_brace`, `ice_bar`, `void_cut` 중 하나를 덧그림
+7. `Seal Final`
+8. `quick compare`에서 현재와 직전 결과를 비교
+
+## Base Family
 
 현재 recognizer의 canonical silhouette는 family마다 1개만 사용합니다.
 
@@ -112,11 +171,20 @@ npm run build
 * 물: `단일 원형 폐합 루프`
 * 생명: `줄기 + 상단 분기 rooted Y`
 
+Overlay operator:
+
+* `steel_brace`
+* `electric_fork`
+* `ice_bar`
+* `soul_dot`
+* `void_cut`
+* `martial_axis` (`void_cut` 이후에만 활성화)
+
 주의:
 
-* draw 중에는 의미를 확정하지 않습니다.
-* 최종 결과는 `seal` 시점에만 확정합니다.
-* `물방울`, `동심원 변형`, 복잡한 `새싹` variation은 V1 범위가 아닙니다.
+* base family 판정은 profile이 가져가지 않습니다.
+* overlay는 base seal 이후에만 해석합니다.
+* base stroke는 overlay phase에서 ghost overlay로만 보조합니다.
 
 ## 주요 스크립트
 

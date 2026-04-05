@@ -61,7 +61,8 @@
 ### 7. 웹 기반 입력 검증 데모
 
 * 첫 인식기 검증은 웹 캔버스 데모로 진행한다.
-* 이 데모는 5문양 입력, preview 후보, seal 결과, 품질 벡터, 로그 확인까지 지원해야 한다.
+* 이 데모는 5문양 입력, `Seal Base -> Start Overlay -> Seal Final` 흐름, overlay preview, compiled result, raw / adjusted quality, 로그 확인까지 지원해야 한다.
+* 분석용 debug overlay에서는 symmetry axis, closure line, anchor zone, operator ghost, phase 상태를 확인할 수 있어야 한다.
 
 ---
 

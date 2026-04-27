@@ -19,6 +19,7 @@ interface FamilyPrototypeLike {
   normalizedClouds?: PointSample[][];
   averageFeatures?: Partial<RecognitionFeatures>;
   sampleCount?: number;
+  reliability?: number;
 }
 
 interface ConfusionPairLike {
@@ -58,6 +59,7 @@ export interface OverlayRerankCandidate {
 export interface OverlayOperatorPrototypeSummary {
   operator?: OverlayOperator;
   sampleCount?: number;
+  reliability?: number;
   averageAngleRadians?: number;
   averageScaleRatio?: number;
   averageAnchorZoneId?: OverlayAnchorZoneId;
@@ -84,6 +86,8 @@ export interface OverlayPersonalizationProfile {
   rerankStrength?: number;
   confidenceBias?: number;
   operatorPrototypes?: Partial<Record<OverlayOperator, OverlayOperatorPrototypeSummary>>;
+  operatorThresholdBias?: Partial<Record<OverlayOperator, number>>;
+  operatorPrototypeReliability?: Partial<Record<OverlayOperator, number>>;
   confusionPairs?: ConfusionPairLike[];
   confusionBiases?: OverlayOperatorConfusionBias[];
   recognitionCalibration?: RecognitionCalibrationLike;
@@ -94,7 +98,11 @@ interface ShapeProfileLike {
   tutorialSampleCount?: number;
   familyTutorialSampleCount?: number;
   operatorTutorialSampleCount?: number;
+  validatedTutorialSampleCount?: number;
+  feedbackOnlyTutorialSampleCount?: number;
   familyPrototypes?: Partial<Record<GlyphFamily, FamilyPrototypeLike>>;
+  familyThresholdBias?: Partial<Record<GlyphFamily, number>>;
+  familyPrototypeReliability?: Partial<Record<GlyphFamily, number>>;
   confusionPairs?: ConfusionPairLike[];
   recognitionCalibration?: RecognitionCalibrationLike;
   calibration?: RecognitionCalibrationLike;
@@ -349,11 +357,16 @@ export function rerankOverlayCandidates<T extends OverlayRerankCandidate>(
 
       const prototype = profile?.operatorPrototypes?.[candidate.operator];
       const gate = resolveOverlayRuleGate(candidate.anchorScore, candidate.scaleScore);
+      const prototypeReliability = clamp(
+        prototype?.reliability ?? profile?.operatorPrototypeReliability?.[candidate.operator] ?? 1,
+        0,
+        1
+      );
       const shapeSimilarity = prototype ? computeOverlayShapeSimilarity(candidate, prototype) : 0.5;
       const placementSimilarity = prototype ? computeOverlayPlacementSimilarity(candidate, prototype) : 0.5;
       const pairShift = computeOverlayHardPairShift(candidate, activePair, profile) * gate;
-      const shapeShift = Math.max(shapeSimilarity - 0.5, 0) * rerankStrength * 0.34 * gate;
-      const placementShift = (placementSimilarity - 0.5) * rerankStrength * 0.2 * gate;
+      const shapeShift = Math.max(shapeSimilarity - 0.5, 0) * rerankStrength * 0.34 * gate * prototypeReliability;
+      const placementShift = (placementSimilarity - 0.5) * rerankStrength * 0.2 * gate * prototypeReliability;
       const nextScore = clamp(
         candidate.baseScore + clamp(shapeShift + placementShift + pairShift, -MAX_OVERLAY_SCORE_SHIFT, MAX_OVERLAY_SCORE_SHIFT),
         0,
@@ -390,10 +403,13 @@ export function rerankOverlayCandidates<T extends OverlayRerankCandidate>(
 
 export function resolveBasePersonalizationRuntime(profile?: UserInputProfile): PersonalizationRuntimeSummary {
   const shapeProfile = resolveShapeProfile(profile);
-  const tutorialSampleCount = Math.max(
-    shapeProfile?.familyTutorialSampleCount ?? 0,
-    shapeProfile?.tutorialSampleCount ?? 0
-  );
+  const inferredFamilySamples = inferFamilyPrototypeSampleCount(shapeProfile);
+  const tutorialSampleCount =
+    shapeProfile?.familyTutorialSampleCount !== undefined
+      ? shapeProfile.familyTutorialSampleCount
+      : inferredFamilySamples > 0
+        ? Math.max(inferredFamilySamples, shapeProfile?.tutorialSampleCount ?? 0)
+        : 0;
 
   return buildPersonalizationRuntime({
     tutorialSampleCount,
@@ -424,6 +440,39 @@ export function resolveOverlayPersonalizationRuntime(
     weakBiasCap: 0.025,
     strongBiasCap: 0.045
   });
+}
+
+export function resolveBaseEffectiveThresholdBias(
+  profile: UserInputProfile | undefined,
+  family: GlyphFamily | undefined,
+  shadow?: ShadowRuntimeSummary<GlyphFamily>
+): { thresholdBias: number; mlConfidenceGate: number } {
+  const runtime = resolveBasePersonalizationRuntime(profile);
+  const shapeProfile = resolveShapeProfile(profile);
+  const labelBias = family ? shapeProfile?.familyThresholdBias?.[family] : undefined;
+  const selectedBias = clamp(labelBias ?? runtime.thresholdBias, 0, runtime.thresholdBias);
+  const mlConfidenceGate = resolveMlConfidenceGate(shadow);
+
+  return {
+    thresholdBias: roundMetric(selectedBias * mlConfidenceGate),
+    mlConfidenceGate
+  };
+}
+
+export function resolveOverlayEffectiveThresholdBias(
+  profile: OverlayPersonalizationProfile | undefined,
+  operator: OverlayOperator | undefined,
+  shadow?: ShadowRuntimeSummary<OverlayOperator>
+): { thresholdBias: number; mlConfidenceGate: number } {
+  const runtime = resolveOverlayPersonalizationRuntime(profile);
+  const labelBias = operator ? profile?.operatorThresholdBias?.[operator] : undefined;
+  const selectedBias = clamp(labelBias ?? runtime.thresholdBias, 0, runtime.thresholdBias);
+  const mlConfidenceGate = resolveMlConfidenceGate(shadow);
+
+  return {
+    thresholdBias: roundMetric(selectedBias * mlConfidenceGate),
+    mlConfidenceGate
+  };
 }
 
 export function buildBaseShadowSummary(params: {
@@ -1464,6 +1513,31 @@ function resolveShapeProfile(profile?: UserInputProfile): ShapeProfileLike | und
   return profileLike?.tutorialProfile ?? profileLike?.shapeProfile ?? profileLike;
 }
 
+function inferFamilyPrototypeSampleCount(shapeProfile: ShapeProfileLike | undefined): number {
+  if (!shapeProfile?.familyPrototypes) {
+    return 0;
+  }
+
+  return Object.values(shapeProfile.familyPrototypes).reduce(
+    (sum, prototype) => sum + Math.max(prototype?.sampleCount ?? 0, prototype?.normalizedClouds?.length ?? 0),
+    0
+  );
+}
+
+function resolveMlConfidenceGate<TLabel extends string>(shadow?: ShadowRuntimeSummary<TLabel>): number {
+  const confidence = shadow?.personalizedCalibratedConfidence ?? shadow?.calibratedConfidence;
+
+  if (confidence === undefined) {
+    return 1;
+  }
+
+  if (confidence >= 0.62) {
+    return 1;
+  }
+
+  return roundMetric(clamp((confidence - 0.42) / 0.2, 0, 1));
+}
+
 function resolveCalibration(
   profile: UserInputProfile | undefined,
   shapeProfile: ShapeProfileLike | undefined,
@@ -1498,7 +1572,7 @@ function resolvePrototypeSignal(
   }
 
   const sampleCount = Math.max(prototype.sampleCount ?? 0, prototype.normalizedClouds?.length ?? 0);
-  const reliability = clamp(sampleCount / 4, 0, 1);
+  const reliability = clamp((prototype.reliability ?? 1) * clamp(sampleCount / 4, 0, 1), 0, 1);
   const cloudSimilarity = resolveCloudSimilarity(normalizedCloud, prototype.normalizedClouds);
   const featureSimilarity = resolveFeatureSimilarity(features, prototype.averageFeatures);
   const combinedSimilarity =
@@ -1613,4 +1687,8 @@ function featureTolerance(feature: keyof RecognitionFeatures): number {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+function roundMetric(value: number): number {
+  return Number(value.toFixed(4));
 }

@@ -354,6 +354,53 @@ describe("overlay operator personalization rerank", () => {
     expect(candidates[0].operator).toBe("void_cut");
   });
 
+  it("carries validated operator tutorial threshold bias into the overlay personalization profile", () => {
+    let store = createEmptyTutorialProfileStore();
+    const localBaseSession = fromGlyphTemplate("earth", {
+      scale: 220,
+      rotate: -0.34,
+      translate: { x: 300, y: 270 },
+      timeStep: 20
+    });
+    const localReferenceFrame = createOverlayReferenceFrame(localBaseSession);
+
+    for (const variation of [
+      { scale: 118, rotate: 0.04, translate: { x: 470, y: 220 } },
+      { scale: 114, rotate: 0.06, translate: { x: 468, y: 224 } }
+    ]) {
+      const stroke = fromOverlayTemplate("void_cut", variation);
+      store = appendTutorialCapture(store, {
+        kind: "operator",
+        expectedOperator: "void_cut",
+        source: "variation",
+        strokes: [stroke],
+        operatorContext: createTutorialOperatorContext(stroke, {
+          referenceFrame: localReferenceFrame,
+          existingOperators: []
+        }),
+        validation: {
+          reliability: "high",
+          expectedLabel: "void_cut",
+          actualTopLabel: "void_cut",
+          status: "recognized",
+          topScore: 0.84,
+          margin: 0.14,
+          anchorScore: 0.9,
+          scaleScore: 0.86,
+          shapeConfidence: 0.88
+        }
+      });
+    }
+
+    const profile = createTutorialOverlayPersonalizationProfile(store);
+
+    expect(store.shapeProfile.operatorTutorialSampleCount).toBe(2);
+    expect(store.shapeProfile.operatorThresholdBias?.void_cut).toBeGreaterThan(0);
+    expect(store.shapeProfile.operatorPrototypeReliability?.void_cut).toBeGreaterThan(0.95);
+    expect(profile?.operatorThresholdBias?.void_cut).toBe(store.shapeProfile.operatorThresholdBias?.void_cut);
+    expect(profile?.operatorPrototypeReliability?.void_cut).toBeGreaterThan(0.95);
+  });
+
   it("hydrates legacy operator captures without placement metadata", () => {
     const hydrated = hydrateTutorialProfileStore({
       version: "v1.5",

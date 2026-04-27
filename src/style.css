@@ -100,6 +100,55 @@ button.primary {
   justify-items: end;
 }
 
+.app-nav {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 8px;
+  border: 1px solid rgba(23, 49, 59, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 251, 244, 0.72);
+  box-shadow: 0 14px 34px rgba(27, 33, 23, 0.05);
+}
+
+.page-tab {
+  display: grid;
+  place-items: center;
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 0.58rem 0.5rem;
+  background: rgba(23, 49, 59, 0.05);
+  border: 1px solid transparent;
+  font: 700 0.8rem "IBM Plex Mono", "SFMono-Regular", monospace;
+  color: rgba(23, 49, 59, 0.72);
+}
+
+.page-tab.active {
+  background: linear-gradient(135deg, rgba(163, 92, 56, 0.2), rgba(61, 125, 101, 0.16));
+  border-color: rgba(163, 92, 56, 0.2);
+  color: #17313b;
+}
+
+.page-intro {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+  border: 1px solid rgba(23, 49, 59, 0.08);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background:
+    linear-gradient(135deg, rgba(61, 125, 101, 0.08), rgba(191, 115, 75, 0.06)),
+    rgba(255, 251, 244, 0.84);
+}
+
+.page-intro h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
 .promise-stack,
 .promise-inline,
 .fingerprint-row,
@@ -183,7 +232,7 @@ button.primary {
 .narration-strip,
 .demo-rail-card {
   border: 1px solid rgba(23, 49, 59, 0.08);
-  border-radius: 22px;
+  border-radius: 8px;
   padding: 16px 18px;
   background: rgba(255, 251, 244, 0.76);
   box-shadow: 0 18px 48px rgba(27, 33, 23, 0.06);
@@ -217,7 +266,7 @@ button.primary {
   align-items: center;
   margin-bottom: 18px;
   border: 1px solid rgba(23, 49, 59, 0.08);
-  border-radius: 22px;
+  border-radius: 8px;
   padding: 14px 18px;
   background:
     linear-gradient(135deg, rgba(61, 125, 101, 0.08), rgba(191, 115, 75, 0.08)),
@@ -297,10 +346,45 @@ button.primary {
   gap: 18px;
 }
 
+.workspace.analysis-layout {
+  grid-template-columns: 1fr;
+}
+
+.workspace.tutorial-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.78fr);
+  align-items: start;
+}
+
+.workspace.analysis-layout .sidebar {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.workspace.tutorial-layout .sidebar {
+  align-items: start;
+}
+
+.workspace.tutorial-layout #tutorial-card {
+  order: 1;
+}
+
+.workspace.tutorial-layout #tutorial-profile-card {
+  order: 2;
+}
+
+.workspace.tutorial-layout #support-card {
+  order: 3;
+}
+
+.workspace.analysis-layout .card,
+.workspace.tutorial-layout .card {
+  min-width: 0;
+}
+
 .board-panel,
 .card {
   border: 1px solid rgba(23, 49, 59, 0.1);
-  border-radius: 28px;
+  border-radius: 8px;
   background: rgba(255, 251, 244, 0.84);
   box-shadow: 0 24px 80px rgba(27, 33, 23, 0.08);
   backdrop-filter: blur(18px);
@@ -370,7 +454,7 @@ button.primary {
 .canvas-wrap {
   margin-top: 16px;
   overflow: hidden;
-  border-radius: 22px;
+  border-radius: 8px;
   border: 1px solid rgba(23, 49, 59, 0.1);
   background:
     radial-gradient(circle at 25% 20%, rgba(255, 255, 255, 0.82), transparent 35%),
@@ -430,6 +514,23 @@ button.primary {
   padding: 18px 18px 20px;
 }
 
+.analysis-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.analysis-grid.two-up {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detail-panel {
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(23, 49, 59, 0.04);
+  border: 1px solid rgba(23, 49, 59, 0.08);
+}
+
 .status-chip {
   display: inline-flex;
   align-items: center;
@@ -483,7 +584,7 @@ button.primary {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 0.7rem 0.85rem;
   background: rgba(23, 49, 59, 0.05);
 }
@@ -496,7 +597,7 @@ button.primary {
 }
 
 .explain-note {
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 0.8rem 0.9rem;
   background: rgba(23, 49, 59, 0.05);
   border: 1px solid transparent;
@@ -555,7 +656,7 @@ button.primary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.92fr);
   gap: 14px;
-  border-radius: 22px;
+  border-radius: 8px;
   padding: 14px;
   background: rgba(23, 49, 59, 0.04);
   border: 1px solid rgba(23, 49, 59, 0.08);
@@ -574,7 +675,7 @@ button.primary {
 .tutorial-shape-guide {
   display: grid;
   gap: 8px;
-  border-radius: 18px;
+  border-radius: 8px;
   padding: 0.85rem 0.9rem;
   background: rgba(255, 251, 244, 0.82);
   border: 1px solid rgba(23, 49, 59, 0.08);
@@ -627,7 +728,7 @@ button.primary {
   display: grid;
   gap: 4px;
   justify-items: start;
-  border-radius: 18px;
+  border-radius: 8px;
   padding: 0.8rem 0.9rem;
   background: rgba(23, 49, 59, 0.05);
   border: 1px solid rgba(23, 49, 59, 0.08);
@@ -688,7 +789,7 @@ button.primary {
 .personalization-lane {
   display: grid;
   gap: 10px;
-  border-radius: 20px;
+  border-radius: 8px;
   padding: 14px;
   background: rgba(23, 49, 59, 0.04);
   border: 1px solid rgba(23, 49, 59, 0.08);
@@ -700,7 +801,7 @@ button.primary {
 }
 
 .principle-row {
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 0.8rem 0.9rem;
   background: rgba(23, 49, 59, 0.05);
   color: rgba(23, 49, 59, 0.82);
@@ -715,7 +816,7 @@ button.primary {
   grid-template-columns: 88px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
-  border-radius: 18px;
+  border-radius: 8px;
   padding: 0.85rem 0.9rem;
   background: rgba(23, 49, 59, 0.05);
   border: 1px solid rgba(23, 49, 59, 0.08);
@@ -730,7 +831,7 @@ button.primary {
   display: grid;
   place-items: center;
   min-height: 88px;
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(255, 251, 244, 0.92);
   border: 1px solid rgba(23, 49, 59, 0.08);
 }
@@ -771,7 +872,7 @@ button.primary {
 .compare-lane {
   display: grid;
   gap: 12px;
-  border-radius: 20px;
+  border-radius: 8px;
   padding: 14px;
   background: rgba(23, 49, 59, 0.04);
   border: 1px solid rgba(23, 49, 59, 0.08);
@@ -815,7 +916,7 @@ button.primary {
 }
 
 .outcome-row.delta-active {
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 0.55rem 0.65rem 0.65rem;
   background: rgba(196, 145, 39, 0.08);
   border: 1px solid rgba(196, 145, 39, 0.18);
@@ -868,7 +969,7 @@ button.primary {
 .delta-pill,
 .empty-state,
 .recent-seal-card {
-  border-radius: 18px;
+  border-radius: 8px;
   padding: 0.8rem 0.9rem;
   background: rgba(23, 49, 59, 0.05);
 }
@@ -897,7 +998,7 @@ button.primary {
   display: grid;
   gap: 10px;
   padding: 0.95rem 1rem;
-  border-radius: 20px;
+  border-radius: 8px;
   background: linear-gradient(135deg, rgba(61, 125, 101, 0.08), rgba(191, 115, 75, 0.08));
   border: 1px solid rgba(61, 125, 101, 0.16);
 }
@@ -922,7 +1023,7 @@ button.primary {
   display: grid;
   place-items: center;
   min-height: 92px;
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(23, 49, 59, 0.04);
   border: 1px solid rgba(23, 49, 59, 0.08);
 }
@@ -1025,7 +1126,7 @@ button.primary {
   max-height: 360px;
   margin: 16px 0 0;
   padding: 14px;
-  border-radius: 18px;
+  border-radius: 8px;
   background: #182126;
   color: #ecf2ef;
   font: 0.78rem/1.45 "IBM Plex Mono", "SFMono-Regular", monospace;
@@ -1053,6 +1154,10 @@ button.primary {
 }
 
 @media (max-width: 1180px) {
+  .app-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .demo-rail {
     grid-template-columns: 1fr;
   }
@@ -1075,6 +1180,10 @@ button.primary {
 
   .support-strip,
   .personalization-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace.analysis-layout .sidebar {
     grid-template-columns: 1fr;
   }
 }
@@ -1115,12 +1224,22 @@ button.primary {
     align-items: flex-start;
   }
 
+  .page-intro {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .app-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .quality-panels {
     grid-template-columns: 1fr;
   }
 
   .compare-grid,
   .compare-delta-row,
+  .analysis-grid.two-up,
   .personalization-grid {
     grid-template-columns: 1fr;
   }

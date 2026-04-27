@@ -22,6 +22,7 @@ import type {
   TutorialCapture,
   TutorialBaseSnapshot,
   TutorialCaptureSource,
+  TutorialCaptureValidation,
   TutorialOperatorContext,
   TutorialProfileStore,
   UserInputProfile,
@@ -39,6 +40,7 @@ export interface TutorialCaptureInput {
   timestamp?: number;
   baseSnapshot?: TutorialBaseSnapshot;
   operatorContext?: TutorialOperatorContext;
+  validation?: TutorialCaptureValidation;
 }
 
 export const TUTORIAL_FAMILY_ORDER: GlyphFamily[] = ["wind", "earth", "fire", "water", "life"];
@@ -83,8 +85,14 @@ export function createEmptyUserShapeProfile(updatedAt = Date.now()): UserShapePr
     tutorialSampleCount: 0,
     familyTutorialSampleCount: 0,
     operatorTutorialSampleCount: 0,
+    validatedTutorialSampleCount: 0,
+    feedbackOnlyTutorialSampleCount: 0,
     familyPrototypes: {},
     operatorPrototypes: {},
+    familyThresholdBias: {},
+    operatorThresholdBias: {},
+    familyPrototypeReliability: {},
+    operatorPrototypeReliability: {},
     confusionPairs: [],
     updatedAt
   };
@@ -121,7 +129,8 @@ export function createTutorialCapture(input: TutorialCaptureInput): TutorialCapt
     source: normalizedSource,
     timestamp,
     baseSnapshot: cloneBaseSnapshot(input.baseSnapshot),
-    operatorContext: cloneOperatorContext(input.operatorContext)
+    operatorContext: cloneOperatorContext(input.operatorContext),
+    validation: cloneTutorialCaptureValidation(input.validation)
   };
 }
 
@@ -152,10 +161,11 @@ export function rebuildTutorialProfileStore(
       ...capture,
       strokes: cloneStrokes(capture.strokes),
       baseSnapshot: cloneBaseSnapshot(capture.baseSnapshot),
-      operatorContext: cloneOperatorContext(capture.operatorContext)
+      operatorContext: cloneOperatorContext(capture.operatorContext),
+      validation: cloneTutorialCaptureValidation(capture.validation)
     })),
     shapeProfile,
-    calibration: calculateRecognitionCalibration(shapeProfile, sanitizedCaptures),
+    calibration: calculateRecognitionCalibration(shapeProfile, sanitizedCaptures.filter(isAdaptationCapture)),
     updatedAt: safeUpdatedAt
   };
 }
@@ -219,6 +229,7 @@ export function createTutorialOverlayPersonalizationProfile(
     accumulator[operator as OverlayOperator] = {
       operator: operator as OverlayOperator,
       sampleCount: prototype.sampleCount,
+      reliability: prototype.reliability,
       averageAngleRadians: prototype.averageAngleRadians,
       averageScaleRatio: prototype.averageScaleRatio,
       averageAnchorZoneId: prototype.averageAnchorZoneId,
@@ -244,6 +255,8 @@ export function createTutorialOverlayPersonalizationProfile(
     tutorialSampleCount: sampleCount,
     operatorTutorialSampleCount: sampleCount,
     operatorPrototypes,
+    operatorThresholdBias: safeStore.shapeProfile.operatorThresholdBias,
+    operatorPrototypeReliability: safeStore.shapeProfile.operatorPrototypeReliability,
     recognitionCalibration: safeStore.calibration,
     calibration: safeStore.calibration
   };
@@ -253,12 +266,16 @@ export function calculateRecognitionCalibration(
   profile: UserShapeProfile,
   captures: TutorialCapture[] = []
 ): RecognitionCalibration {
-  if (profile.tutorialSampleCount === 0) {
+  const adaptationSampleCount =
+    profile.validatedTutorialSampleCount ??
+    (profile.familyTutorialSampleCount ?? 0) + (profile.operatorTutorialSampleCount ?? 0);
+
+  if (adaptationSampleCount === 0) {
     return createEmptyRecognitionCalibration();
   }
 
   const sampleMix = clamp(
-    (profile.tutorialSampleCount - MIN_CALIBRATION_SAMPLES) /
+    (adaptationSampleCount - MIN_CALIBRATION_SAMPLES) /
       Math.max(FULL_CALIBRATION_SAMPLES - MIN_CALIBRATION_SAMPLES, 1),
     0,
     1
@@ -281,13 +298,17 @@ export function buildUserShapeProfile(captures: TutorialCapture[], updatedAt = l
     return createEmptyUserShapeProfile(updatedAt > 0 ? updatedAt : Date.now());
   }
 
-  const familyTutorialSampleCount = captures.filter((capture) => capture.kind === "family").length;
-  const operatorTutorialSampleCount = captures.filter((capture) => capture.kind === "operator").length;
+  const adaptationCaptures = captures.filter(isAdaptationCapture);
+  const feedbackOnlyTutorialSampleCount = captures.filter(
+    (capture) => capture.validation?.reliability === "feedback_only"
+  ).length;
+  const familyTutorialSampleCount = adaptationCaptures.filter((capture) => capture.kind === "family").length;
+  const operatorTutorialSampleCount = adaptationCaptures.filter((capture) => capture.kind === "operator").length;
 
   const familyPrototypes = TUTORIAL_FAMILY_ORDER.reduce<UserShapeProfile["familyPrototypes"]>((accumulator, family) => {
     const prototype = buildFamilyPrototype(
       family,
-      captures.filter((capture) => capture.kind === "family" && capture.expectedFamily === family)
+      adaptationCaptures.filter((capture) => capture.kind === "family" && capture.expectedFamily === family)
     );
 
     if (prototype) {
@@ -300,7 +321,7 @@ export function buildUserShapeProfile(captures: TutorialCapture[], updatedAt = l
     (accumulator, operator) => {
       const prototype = buildOperatorPrototype(
         operator,
-        captures.filter((capture) => capture.kind === "operator" && capture.expectedOperator === operator)
+        adaptationCaptures.filter((capture) => capture.kind === "operator" && capture.expectedOperator === operator)
       );
 
       if (prototype) {
@@ -316,8 +337,14 @@ export function buildUserShapeProfile(captures: TutorialCapture[], updatedAt = l
     tutorialSampleCount: captures.length,
     familyTutorialSampleCount,
     operatorTutorialSampleCount,
+    validatedTutorialSampleCount: adaptationCaptures.length,
+    feedbackOnlyTutorialSampleCount,
     familyPrototypes,
     operatorPrototypes,
+    familyThresholdBias: buildFamilyThresholdBiases(adaptationCaptures),
+    operatorThresholdBias: buildOperatorThresholdBiases(adaptationCaptures),
+    familyPrototypeReliability: buildFamilyPrototypeReliability(familyPrototypes),
+    operatorPrototypeReliability: buildOperatorPrototypeReliability(operatorPrototypes),
     confusionPairs: buildConfusionPairs(familyPrototypes, operatorPrototypes),
     updatedAt: updatedAt > 0 ? updatedAt : Date.now()
   };
@@ -339,7 +366,8 @@ function buildFamilyPrototype(
     family,
     normalizedClouds: samples.slice(-MAX_PROTOTYPE_SAMPLES).map((sample) => clonePointCloud(sample.normalizedCloud)),
     averageFeatures: averageRecognitionFeatures(samples.map((sample) => sample.features)),
-    sampleCount: samples.length
+    sampleCount: samples.length,
+    reliability: roundMetric(resolveCaptureSetReliability(captures))
   };
 }
 
@@ -359,6 +387,7 @@ function buildOperatorPrototype(
     operator,
     normalizedClouds: samples.slice(-MAX_PROTOTYPE_SAMPLES).map((sample) => clonePointCloud(sample.normalizedCloud)),
     sampleCount: samples.length,
+    reliability: roundMetric(resolveCaptureSetReliability(captures)),
     averageAngleRadians: averageScalar(samples.map((sample) => sample.angleRadians)),
     averageScaleRatio: averageOptionalScalar(
       captures.map((capture) => capture.operatorContext?.scaleRatio).filter((value): value is number => value !== undefined)
@@ -376,6 +405,123 @@ function buildOperatorPrototype(
     ),
     existingOperatorBiases: buildExistingOperatorBiases(captures)
   };
+}
+
+function buildFamilyThresholdBiases(captures: TutorialCapture[]): Partial<Record<GlyphFamily, number>> {
+  return TUTORIAL_FAMILY_ORDER.reduce<Partial<Record<GlyphFamily, number>>>((accumulator, family) => {
+    const familyCaptures = captures.filter((capture) => capture.kind === "family" && capture.expectedFamily === family);
+    const thresholdCaptures = familyCaptures.filter(hasValidatedDecision);
+    const weightedCount = resolveWeightedCaptureCount(thresholdCaptures);
+
+    if (thresholdCaptures.length >= 2 && weightedCount > 0) {
+      const reliability = resolveCaptureSetReliability(thresholdCaptures);
+      accumulator[family] = roundMetric(
+        clamp((0.006 + clamp((weightedCount - 1) / 7, 0, 1) * 0.016) * reliability, 0, 0.024)
+      );
+    }
+
+    return accumulator;
+  }, {});
+}
+
+function buildOperatorThresholdBiases(captures: TutorialCapture[]): Partial<Record<OverlayOperator, number>> {
+  return TUTORIAL_OPERATOR_ORDER.reduce<Partial<Record<OverlayOperator, number>>>((accumulator, operator) => {
+    const operatorCaptures = captures.filter(
+      (capture) => capture.kind === "operator" && capture.expectedOperator === operator
+    );
+    const thresholdCaptures = operatorCaptures.filter(hasValidatedDecision);
+    const weightedCount = resolveWeightedCaptureCount(thresholdCaptures);
+
+    if (thresholdCaptures.length >= 2 && weightedCount > 0) {
+      const reliability = resolveCaptureSetReliability(thresholdCaptures);
+      accumulator[operator] = roundMetric(
+        clamp((0.005 + clamp((weightedCount - 1) / 5, 0, 1) * 0.015) * reliability, 0, 0.022)
+      );
+    }
+
+    return accumulator;
+  }, {});
+}
+
+function buildFamilyPrototypeReliability(
+  prototypes: UserShapeProfile["familyPrototypes"]
+): Partial<Record<GlyphFamily, number>> {
+  return TUTORIAL_FAMILY_ORDER.reduce<Partial<Record<GlyphFamily, number>>>((accumulator, family) => {
+    const reliability = prototypes[family]?.reliability;
+
+    if (reliability !== undefined) {
+      accumulator[family] = reliability;
+    }
+
+    return accumulator;
+  }, {});
+}
+
+function buildOperatorPrototypeReliability(
+  prototypes: UserShapeProfile["operatorPrototypes"]
+): Partial<Record<OverlayOperator, number>> {
+  return TUTORIAL_OPERATOR_ORDER.reduce<Partial<Record<OverlayOperator, number>>>((accumulator, operator) => {
+    const reliability = prototypes[operator]?.reliability;
+
+    if (reliability !== undefined) {
+      accumulator[operator] = reliability;
+    }
+
+    return accumulator;
+  }, {});
+}
+
+function isAdaptationCapture(capture: TutorialCapture): boolean {
+  return captureAdaptationWeight(capture) > 0;
+}
+
+function hasValidatedDecision(capture: TutorialCapture): boolean {
+  return capture.validation?.reliability === "high" || capture.validation?.reliability === "medium";
+}
+
+function resolveWeightedCaptureCount(captures: TutorialCapture[]): number {
+  return captures.reduce((sum, capture) => sum + captureAdaptationWeight(capture), 0);
+}
+
+function resolveCaptureSetReliability(captures: TutorialCapture[]): number {
+  if (captures.length === 0) {
+    return 0;
+  }
+
+  const weightedCount = resolveWeightedCaptureCount(captures);
+  return clamp(weightedCount / captures.length, 0, 1);
+}
+
+function captureAdaptationWeight(capture: TutorialCapture): number {
+  const validationWeight = resolveValidationReliabilityWeight(capture.validation);
+  const sourceWeight = resolveTutorialSourceWeight(capture.source);
+  return validationWeight * sourceWeight;
+}
+
+function resolveValidationReliabilityWeight(validation: TutorialCaptureValidation | undefined): number {
+  switch (validation?.reliability) {
+    case "high":
+      return 1;
+    case "medium":
+      return 0.65;
+    case "feedback_only":
+      return 0;
+    case "unvalidated":
+    default:
+      return 0.4;
+  }
+}
+
+function resolveTutorialSourceWeight(source: TutorialCaptureSource): number {
+  switch (source) {
+    case "variation":
+      return 1;
+    case "recall":
+      return 0.85;
+    case "trace":
+    default:
+      return 0.55;
+  }
 }
 
 function buildConfusionPairs(
@@ -755,7 +901,8 @@ function coerceTutorialCapture(raw: Partial<TutorialCapture> | undefined): Tutor
       source,
       timestamp,
       baseSnapshot: cloneBaseSnapshot(raw.baseSnapshot),
-      operatorContext: cloneOperatorContext(raw.operatorContext)
+      operatorContext: cloneOperatorContext(raw.operatorContext),
+      validation: cloneTutorialCaptureValidation(raw.validation)
     };
   }
 
@@ -771,7 +918,8 @@ function coerceTutorialCapture(raw: Partial<TutorialCapture> | undefined): Tutor
     source,
     timestamp,
     baseSnapshot: cloneBaseSnapshot(raw.baseSnapshot),
-    operatorContext: cloneOperatorContext(raw.operatorContext)
+    operatorContext: cloneOperatorContext(raw.operatorContext),
+    validation: cloneTutorialCaptureValidation(raw.validation)
   };
 }
 
@@ -782,14 +930,16 @@ function upsertCapture(existing: TutorialCapture[], nextCapture: TutorialCapture
       ...capture,
       strokes: cloneStrokes(capture.strokes),
       baseSnapshot: cloneBaseSnapshot(capture.baseSnapshot),
-      operatorContext: cloneOperatorContext(capture.operatorContext)
+      operatorContext: cloneOperatorContext(capture.operatorContext),
+      validation: cloneTutorialCaptureValidation(capture.validation)
     }));
 
   next.push({
     ...nextCapture,
     strokes: cloneStrokes(nextCapture.strokes),
     baseSnapshot: cloneBaseSnapshot(nextCapture.baseSnapshot),
-    operatorContext: cloneOperatorContext(nextCapture.operatorContext)
+    operatorContext: cloneOperatorContext(nextCapture.operatorContext),
+    validation: cloneTutorialCaptureValidation(nextCapture.validation)
   });
 
   return next.sort((left, right) => left.timestamp - right.timestamp);
@@ -841,6 +991,38 @@ function cloneOperatorContext(context: TutorialOperatorContext | undefined): Tut
   };
 }
 
+function cloneTutorialCaptureValidation(
+  validation: TutorialCaptureValidation | undefined
+): TutorialCaptureValidation | undefined {
+  if (!validation || !isTutorialCaptureReliability(validation.reliability)) {
+    return undefined;
+  }
+
+  return {
+    reliability: validation.reliability,
+    expectedLabel: typeof validation.expectedLabel === "string" ? validation.expectedLabel : "",
+    actualTopLabel: typeof validation.actualTopLabel === "string" ? validation.actualTopLabel : undefined,
+    status: isRecognitionStatus(validation.status) ? validation.status : undefined,
+    topScore: finiteOrUndefined(validation.topScore),
+    margin: finiteOrUndefined(validation.margin),
+    quality: validation.quality
+      ? {
+          closure: finiteOrFallback(validation.quality.closure, 0),
+          symmetry: finiteOrFallback(validation.quality.symmetry, 0),
+          smoothness: finiteOrFallback(validation.quality.smoothness, 0),
+          tempo: finiteOrFallback(validation.quality.tempo, 0),
+          overshoot: finiteOrFallback(validation.quality.overshoot, 0),
+          stability: finiteOrFallback(validation.quality.stability, 0),
+          rotationBias: finiteOrFallback(validation.quality.rotationBias, 0)
+        }
+      : undefined,
+    anchorScore: finiteOrUndefined(validation.anchorScore),
+    scaleScore: finiteOrUndefined(validation.scaleScore),
+    shapeConfidence: finiteOrUndefined(validation.shapeConfidence),
+    blockedBy: isOverlayOperator(validation.blockedBy) ? validation.blockedBy : undefined
+  };
+}
+
 function cloneBounds(bounds: StrokeBounds): StrokeBounds {
   return {
     minX: Number.isFinite(bounds.minX) ? bounds.minX : 0,
@@ -860,6 +1042,14 @@ function isOverlayOperator(value: unknown): value is OverlayOperator {
   return TUTORIAL_OPERATOR_ORDER.includes(value as OverlayOperator);
 }
 
+function isTutorialCaptureReliability(value: unknown): value is TutorialCaptureValidation["reliability"] {
+  return value === "unvalidated" || value === "high" || value === "medium" || value === "feedback_only";
+}
+
+function isRecognitionStatus(value: unknown): value is TutorialCaptureValidation["status"] {
+  return value === "recognized" || value === "ambiguous" || value === "incomplete" || value === "invalid";
+}
+
 function distanceBetween(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -870,4 +1060,12 @@ function clamp(value: number, minimum: number, maximum: number): number {
 
 function roundMetric(value: number): number {
   return Number(value.toFixed(4));
+}
+
+function finiteOrUndefined(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) ? value : undefined;
+}
+
+function finiteOrFallback(value: number | undefined, fallback: number): number {
+  return value !== undefined && Number.isFinite(value) ? value : fallback;
 }

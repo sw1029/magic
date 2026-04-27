@@ -285,6 +285,110 @@ describe("magic recognizer v1.5", () => {
     expect(personalized.canonicalFamily).toBe("earth");
   });
 
+  it("keeps feedback-only tutorial captures out of personalization prototypes", () => {
+    const store = appendTutorialCapture(createEmptyTutorialProfileStore(), {
+      kind: "family",
+      expectedFamily: "fire",
+      source: "variation",
+      strokes: fromGlyphTemplate("earth", {
+        scale: 210,
+        rotate: -0.12,
+        translate: { x: 300, y: 270 },
+        timeStep: 20
+      }).strokes,
+      validation: {
+        reliability: "feedback_only",
+        expectedLabel: "fire",
+        actualTopLabel: "earth",
+        status: "recognized",
+        topScore: 0.9,
+        margin: 0.22
+      }
+    });
+
+    expect(store.captures[0].validation?.reliability).toBe("feedback_only");
+    expect(store.shapeProfile.tutorialSampleCount).toBe(1);
+    expect(store.shapeProfile.familyTutorialSampleCount).toBe(0);
+    expect(store.shapeProfile.feedbackOnlyTutorialSampleCount).toBe(1);
+    expect(store.shapeProfile.familyPrototypes.fire).toBeUndefined();
+    expect(store.calibration.userPrototypeWeight).toBe(0);
+  });
+
+  it("builds label-specific threshold bias only from validated tutorial captures", () => {
+    let store = createEmptyTutorialProfileStore();
+
+    for (const variation of [
+      { scale: 210, rotate: -0.12, translate: { x: 300, y: 270 }, timeStep: 20 },
+      { scale: 218, rotate: -0.18, translate: { x: 300, y: 274 }, timeStep: 21 }
+    ]) {
+      store = appendTutorialCapture(store, {
+        kind: "family",
+        expectedFamily: "earth",
+        source: "variation",
+        strokes: fromGlyphTemplate("earth", variation).strokes,
+        validation: {
+          reliability: "high",
+          expectedLabel: "earth",
+          actualTopLabel: "earth",
+          status: "recognized",
+          topScore: 0.86,
+          margin: 0.18
+        }
+      });
+    }
+
+    expect(store.shapeProfile.familyTutorialSampleCount).toBe(2);
+    expect(store.shapeProfile.familyPrototypes.earth?.sampleCount).toBe(2);
+    expect(store.shapeProfile.familyPrototypeReliability?.earth).toBeGreaterThan(0.95);
+    expect(store.shapeProfile.familyThresholdBias?.earth).toBeGreaterThan(0);
+  });
+
+  it("does not let operator-only tutorial captures activate base threshold personalization", () => {
+    let store = createEmptyTutorialProfileStore();
+
+    for (const variation of [
+      { scale: 118, rotate: 0.04, translate: { x: 470, y: 220 } },
+      { scale: 114, rotate: 0.06, translate: { x: 468, y: 224 } },
+      { scale: 120, rotate: 0.02, translate: { x: 472, y: 216 } },
+      { scale: 116, rotate: 0.01, translate: { x: 466, y: 218 } },
+      { scale: 121, rotate: 0.05, translate: { x: 474, y: 222 } },
+      { scale: 117, rotate: 0.03, translate: { x: 469, y: 221 } }
+    ]) {
+      store = appendTutorialCapture(store, {
+        kind: "operator",
+        expectedOperator: "void_cut",
+        source: "variation",
+        strokes: [fromOverlayTemplate("void_cut", variation)],
+        validation: {
+          reliability: "high",
+          expectedLabel: "void_cut",
+          actualTopLabel: "void_cut",
+          status: "recognized",
+          topScore: 0.86,
+          margin: 0.16
+        }
+      });
+    }
+
+    const session = fromGlyphTemplate("fire", {
+      scale: 188,
+      rotate: 0.18,
+      translate: { x: 300, y: 250 },
+      timeStep: 22
+    });
+    const result = recognizeSession(session, {
+      sealed: true,
+      profile: mergeTutorializedUserProfile(createEmptyUserInputProfile(), store)
+    });
+
+    expect(store.shapeProfile.tutorialSampleCount).toBe(6);
+    expect(store.shapeProfile.operatorTutorialSampleCount).toBe(6);
+    expect(store.shapeProfile.familyTutorialSampleCount).toBe(0);
+    expect(result.personalization?.stage).toBe("none");
+    expect(result.personalization?.thresholdBias).toBe(0);
+    expect(result.personalization?.effectiveThresholdBias).toBe(0);
+  });
+
   it("keeps a clear water template fixed even when the tutorial store is biased toward life", () => {
     let store = createEmptyTutorialProfileStore();
 

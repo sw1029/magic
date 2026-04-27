@@ -11,7 +11,12 @@ import {
 } from "./geometry";
 import { createEmptyQualityVector } from "./user-profile";
 import { calculateAdjustedQuality, calculateQualityVector } from "./quality";
-import { buildBaseShadowSummary, rerankBaseCandidates, resolveBasePersonalizationRuntime } from "./rerank";
+import {
+  buildBaseShadowSummary,
+  rerankBaseCandidates,
+  resolveBaseEffectiveThresholdBias,
+  resolveBasePersonalizationRuntime
+} from "./rerank";
 import { GLYPH_TEMPLATES } from "./templates";
 import type {
   AxisLine,
@@ -56,35 +61,39 @@ export function recognizeSession(
 
   const topCandidate = candidates[0];
   const secondCandidate = candidates[1];
-  const margin = topCandidate ? topCandidate.score - (secondCandidate?.score ?? 0) : 0;
-  const recognizedScoreThreshold = 0.7 - personalization.thresholdBias;
-  const recognizedMarginThreshold = Math.max(0.08, 0.15 - personalization.thresholdBias * 0.7);
-  let status: RecognitionResult["status"] = "invalid";
-  let invalidReason = "기준형과 충분히 가깝지 않습니다.";
-
-  if (topCandidate && topCandidate.score >= 0.55 && topCandidate.completenessHint) {
-    status = "incomplete";
-    invalidReason = topCandidate.completenessHint;
-  } else if (topCandidate && topCandidate.score >= recognizedScoreThreshold && margin >= recognizedMarginThreshold) {
-    status = "recognized";
-    invalidReason = "seal 조건을 만족했습니다.";
-  } else if (topCandidate && topCandidate.score >= 0.55) {
-    status = "ambiguous";
-    invalidReason = "여러 기준형의 점수가 가까워 최종 family를 확정하지 않습니다.";
-  }
-
-  const shadow = buildBaseShadowSummary({
+  const initialDecision = resolveBaseRecognitionDecision(topCandidate, secondCandidate, personalization.thresholdBias);
+  const initialShadow = buildBaseShadowSummary({
     heuristicCandidates,
     actualCandidates: candidates,
-    actualStatus: status,
+    actualStatus: initialDecision.status,
     features,
     quality: rawQuality,
     normalizedCloud: normalized.normalizedCloud,
     profile: options.profile
   });
+  const effectiveThreshold = resolveBaseEffectiveThresholdBias(options.profile, topCandidate?.family, initialShadow);
+  const decision = resolveBaseRecognitionDecision(topCandidate, secondCandidate, effectiveThreshold.thresholdBias);
+  const shadow =
+    decision.status === initialDecision.status
+      ? initialShadow
+      : buildBaseShadowSummary({
+          heuristicCandidates,
+          actualCandidates: candidates,
+          actualStatus: decision.status,
+          features,
+          quality: rawQuality,
+          normalizedCloud: normalized.normalizedCloud,
+          profile: options.profile
+        });
+  const personalizationSummary = {
+    ...personalization,
+    effectiveThresholdBias: effectiveThreshold.thresholdBias,
+    mlConfidenceGate: effectiveThreshold.mlConfidenceGate,
+    mlActualGate: effectiveThreshold.mlConfidenceGate < 1 ? "confidence_guard" : "none"
+  } satisfies RecognitionResult["personalization"];
 
   return {
-    status,
+    status: decision.status,
     sealed: options.sealed,
     quality: rawQuality,
     rawQuality,
@@ -93,13 +102,49 @@ export function recognizeSession(
     features,
     candidates,
     topCandidate,
-    canonicalFamily: options.sealed && status === "recognized" ? topCandidate.family : undefined,
-    invalidReason,
+    canonicalFamily: options.sealed && decision.status === "recognized" ? topCandidate?.family : undefined,
+    invalidReason: decision.invalidReason,
     normalizedStrokes: normalized.normalizedStrokes,
-    personalization,
+    personalization: personalizationSummary,
     shadow,
     symmetryAxis: buildSymmetryAxis(normalized.rawCentroid, normalized.rawAngleRadians, normalized.diagonal),
     closureLine: buildClosureLine(strokes)
+  };
+}
+
+function resolveBaseRecognitionDecision(
+  topCandidate: RecognitionCandidate | undefined,
+  secondCandidate: RecognitionCandidate | undefined,
+  thresholdBias: number
+): Pick<RecognitionResult, "status" | "invalidReason"> {
+  const margin = topCandidate ? topCandidate.score - (secondCandidate?.score ?? 0) : 0;
+  const recognizedScoreThreshold = 0.7 - thresholdBias;
+  const recognizedMarginThreshold = Math.max(0.08, 0.15 - thresholdBias * 0.7);
+
+  if (topCandidate && topCandidate.score >= 0.55 && topCandidate.completenessHint) {
+    return {
+      status: "incomplete",
+      invalidReason: topCandidate.completenessHint
+    };
+  }
+
+  if (topCandidate && topCandidate.score >= recognizedScoreThreshold && margin >= recognizedMarginThreshold) {
+    return {
+      status: "recognized",
+      invalidReason: "seal 조건을 만족했습니다."
+    };
+  }
+
+  if (topCandidate && topCandidate.score >= 0.55) {
+    return {
+      status: "ambiguous",
+      invalidReason: "여러 기준형의 점수가 가까워 최종 family를 확정하지 않습니다."
+    };
+  }
+
+  return {
+    status: "invalid",
+    invalidReason: "기준형과 충분히 가깝지 않습니다."
   };
 }
 

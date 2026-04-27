@@ -14,6 +14,7 @@ import { OVERLAY_OPERATOR_TEMPLATES, type OverlayOperatorTemplate } from "./oper
 import {
   buildOverlayShadowSummary,
   rerankOverlayCandidates,
+  resolveOverlayEffectiveThresholdBias,
   resolveOverlayPersonalizationRuntime,
   type OverlayPersonalizationProfile,
   type OverlayRerankCandidate
@@ -151,82 +152,64 @@ export function recognizeOverlayStroke(
     }
   );
   const topCandidate = candidates[0];
-  const voidCutCandidate = candidates.find((candidate) => candidate.operator === "void_cut");
-  const martialAxisCandidate = candidates.find((candidate) => candidate.operator === "martial_axis");
-  const secondCandidate = candidates[1];
-  const margin = topCandidate ? topCandidate.score - (secondCandidate?.score ?? 0) : 0;
-  const recognizedScoreThreshold = 0.74 - personalization.thresholdBias;
-  const recognizedShapeThreshold = Math.max(0.44, 0.54 - personalization.thresholdBias * 0.7);
-  const recognizedMarginThreshold = Math.max(0.03, 0.05 - personalization.thresholdBias * 0.4);
-  let status: OverlayRecognition["status"] = "invalid";
-  let operator: OverlayOperator | undefined;
-  let invalidReason = "overlay operator 기준형과 충분히 가깝지 않습니다.";
-
-  const martialAxisIsCompetitive =
-    Boolean(martialAxisCandidate?.score) &&
-    martialAxisCandidate!.score >= 0.62 &&
-    martialAxisCandidate!.shapeConfidence >= 0.56 &&
-    martialAxisCandidate!.scaleScore >= 0.34 &&
-    martialAxisCandidate!.score >= (topCandidate?.score ?? 0) - 0.03;
-  const voidCutIsCompetitive =
-    Boolean(voidCutCandidate?.score) &&
-    voidCutCandidate!.score >= 0.72 &&
-    voidCutCandidate!.shapeConfidence >= 0.56 &&
-    voidCutCandidate!.scaleScore >= 0.34 &&
-    voidCutCandidate!.score >= (topCandidate?.score ?? 0) - 0.03;
-
-  if (martialAxisIsCompetitive && martialAxisCandidate) {
-    if (martialAxisCandidate.blockedBy) {
-      status = "incomplete";
-      invalidReason = `martial_axis는 ${martialAxisCandidate.blockedBy} 이후에만 활성화됩니다.`;
-    } else {
-      status = "recognized";
-      operator = "martial_axis";
-      invalidReason = "martial_axis operator가 stack에 추가되었습니다.";
-    }
-  } else if (voidCutIsCompetitive) {
-    status = "recognized";
-    operator = "void_cut";
-    invalidReason = "void_cut operator가 stack에 추가되었습니다.";
-  } else if (topCandidate?.blockedBy && topCandidate.score >= 0.62) {
-    status = "incomplete";
-    invalidReason = `martial_axis는 ${topCandidate.blockedBy} 이후에만 활성화됩니다.`;
-  } else if (topCandidate?.completenessHint && topCandidate.score >= 0.52 && topCandidate.shapeConfidence >= 0.46) {
-    status = "incomplete";
-    invalidReason = topCandidate.completenessHint;
-  } else if (
-    topCandidate?.score >= recognizedScoreThreshold &&
-    topCandidate.shapeConfidence >= recognizedShapeThreshold &&
-    topCandidate.scaleScore >= 0.34 &&
-    margin >= recognizedMarginThreshold
-  ) {
-    status = "recognized";
-    operator = topCandidate.operator;
-    invalidReason = `${topCandidate.operator} operator가 stack에 추가되었습니다.`;
-  } else if (topCandidate?.score >= 0.56 && topCandidate.shapeConfidence >= 0.4) {
-    status = "ambiguous";
-    invalidReason = "overlay operator 후보가 겹쳐 최종 stack에 추가하지 않습니다.";
-  }
-
-  const shadow = buildOverlayShadowSummary({
+  const initialDecision = resolveOverlayRecognitionDecision(candidates, personalization.thresholdBias);
+  const initialShadow = buildOverlayShadowSummary({
     heuristicCandidates,
     actualCandidates: candidates,
-    actualStatus: status,
+    actualStatus: initialDecision.status,
     profile: context.personalizationProfile
   });
+  const effectiveThreshold = resolveOverlayEffectiveThresholdBias(
+    context.personalizationProfile,
+    initialDecision.operator ?? topCandidate?.operator,
+    initialShadow
+  );
+  let decision = resolveOverlayRecognitionDecision(candidates, effectiveThreshold.thresholdBias);
+  let shadow =
+    decision.status === initialDecision.status
+      ? initialShadow
+      : buildOverlayShadowSummary({
+          heuristicCandidates,
+          actualCandidates: candidates,
+          actualStatus: decision.status,
+          profile: context.personalizationProfile
+        });
+  const suppressionDecision = applyOverlayMlSuppressionGate(decision, shadow, topCandidate);
+
+  if (suppressionDecision !== decision) {
+    decision = suppressionDecision;
+    shadow = buildOverlayShadowSummary({
+      heuristicCandidates,
+      actualCandidates: candidates,
+      actualStatus: decision.status,
+      profile: context.personalizationProfile
+    });
+  }
+
+  const personalizationSummary = {
+    ...personalization,
+    effectiveThresholdBias: effectiveThreshold.thresholdBias,
+    mlConfidenceGate: effectiveThreshold.mlConfidenceGate,
+    mlActualGate:
+      decision.mlSuppressed === true
+        ? "suppression"
+        : effectiveThreshold.mlConfidenceGate < 1
+          ? "confidence_guard"
+          : "none"
+  } satisfies OverlayRecognition["personalization"];
 
   return {
     strokeId: stroke.id,
-    status,
-    operator,
+    status: decision.status,
+    operator: decision.operator,
     candidates,
     topCandidate,
-    invalidReason,
+    invalidReason: decision.invalidReason,
     normalizedStrokes: normalized.normalizedStrokes,
     bounds,
     debugAxis: buildDebugAxis(stroke),
     anchorZoneId: topCandidate?.anchorZoneId,
-    personalization,
+    personalization: personalizationSummary,
     shadow
   };
 }
@@ -260,6 +243,134 @@ export function createTutorialOperatorContext(
     anchorScore: placementAnchor.score,
     scaleRatio: features.scaleRatio,
     angleRadians: features.angleRadians
+  };
+}
+
+interface OverlayDecision {
+  status: OverlayRecognition["status"];
+  operator?: OverlayOperator;
+  invalidReason: string;
+  mlSuppressed?: boolean;
+}
+
+function resolveOverlayRecognitionDecision(
+  candidates: OverlayScoredCandidate[],
+  thresholdBias: number
+): OverlayDecision {
+  const topCandidate = candidates[0];
+  const voidCutCandidate = candidates.find((candidate) => candidate.operator === "void_cut");
+  const martialAxisCandidate = candidates.find((candidate) => candidate.operator === "martial_axis");
+  const secondCandidate = candidates[1];
+  const margin = topCandidate ? topCandidate.score - (secondCandidate?.score ?? 0) : 0;
+  const recognizedScoreThreshold = 0.74 - thresholdBias;
+  const recognizedShapeThreshold = Math.max(0.44, 0.54 - thresholdBias * 0.7);
+  const recognizedMarginThreshold = Math.max(0.03, 0.05 - thresholdBias * 0.4);
+
+  const martialAxisIsCompetitive =
+    Boolean(martialAxisCandidate?.score) &&
+    martialAxisCandidate!.score >= 0.62 &&
+    martialAxisCandidate!.shapeConfidence >= 0.56 &&
+    martialAxisCandidate!.scaleScore >= 0.34 &&
+    martialAxisCandidate!.score >= (topCandidate?.score ?? 0) - 0.03;
+  const voidCutIsCompetitive =
+    Boolean(voidCutCandidate?.score) &&
+    voidCutCandidate!.score >= 0.72 &&
+    voidCutCandidate!.shapeConfidence >= 0.56 &&
+    voidCutCandidate!.scaleScore >= 0.34 &&
+    voidCutCandidate!.score >= (topCandidate?.score ?? 0) - 0.03;
+
+  if (martialAxisIsCompetitive && martialAxisCandidate) {
+    if (martialAxisCandidate.blockedBy) {
+      return {
+        status: "incomplete",
+        invalidReason: `martial_axis는 ${martialAxisCandidate.blockedBy} 이후에만 활성화됩니다.`
+      };
+    }
+
+    return {
+      status: "recognized",
+      operator: "martial_axis",
+      invalidReason: "martial_axis operator가 stack에 추가되었습니다."
+    };
+  }
+
+  if (voidCutIsCompetitive) {
+    return {
+      status: "recognized",
+      operator: "void_cut",
+      invalidReason: "void_cut operator가 stack에 추가되었습니다."
+    };
+  }
+
+  if (topCandidate?.blockedBy && topCandidate.score >= 0.62) {
+    return {
+      status: "incomplete",
+      invalidReason: `martial_axis는 ${topCandidate.blockedBy} 이후에만 활성화됩니다.`
+    };
+  }
+
+  if (topCandidate?.completenessHint && topCandidate.score >= 0.52 && topCandidate.shapeConfidence >= 0.46) {
+    return {
+      status: "incomplete",
+      invalidReason: topCandidate.completenessHint
+    };
+  }
+
+  if (
+    topCandidate?.score >= recognizedScoreThreshold &&
+    topCandidate.shapeConfidence >= recognizedShapeThreshold &&
+    topCandidate.scaleScore >= 0.34 &&
+    margin >= recognizedMarginThreshold
+  ) {
+    return {
+      status: "recognized",
+      operator: topCandidate.operator,
+      invalidReason: `${topCandidate.operator} operator가 stack에 추가되었습니다.`
+    };
+  }
+
+  if (topCandidate?.score >= 0.56 && topCandidate.shapeConfidence >= 0.4) {
+    return {
+      status: "ambiguous",
+      invalidReason: "overlay operator 후보가 겹쳐 최종 stack에 추가하지 않습니다."
+    };
+  }
+
+  return {
+    status: "invalid",
+    invalidReason: "overlay operator 기준형과 충분히 가깝지 않습니다."
+  };
+}
+
+function applyOverlayMlSuppressionGate(
+  decision: OverlayDecision,
+  shadow: OverlayRecognition["shadow"],
+  topCandidate: OverlayScoredCandidate | undefined
+): OverlayDecision {
+  if (decision.status !== "recognized" || !decision.operator || !topCandidate || !shadow) {
+    return decision;
+  }
+
+  const candidateProbability =
+    shadow.personalizedCandidates?.find((candidate) => candidate.label === decision.operator)?.probability ??
+    shadow.candidates.find((candidate) => candidate.label === decision.operator)?.probability ??
+    shadow.personalizedCalibratedConfidence ??
+    shadow.calibratedConfidence;
+  const shadowStatus = shadow.personalizedShadowStatus ?? shadow.shadowStatus;
+
+  if (
+    candidateProbability === undefined ||
+    candidateProbability >= 0.08 ||
+    shadowStatus !== "invalid" ||
+    topCandidate.score >= 0.78
+  ) {
+    return decision;
+  }
+
+  return {
+    status: topCandidate.score >= 0.62 ? "ambiguous" : "invalid",
+    invalidReason: "ML suppression gate가 false positive 위험을 감지해 stack에 추가하지 않습니다.",
+    mlSuppressed: true
   };
 }
 

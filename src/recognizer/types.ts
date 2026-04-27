@@ -21,6 +21,7 @@ export type OverlayAnchorZoneId =
 export type RecognitionStatus = "recognized" | "ambiguous" | "incomplete" | "invalid";
 export type RitualPhase = "base" | "overlay" | "final";
 export type TutorialPersonalizationStage = "none" | "few_shot" | "enough_shot";
+export type TutorialCaptureReliability = "unvalidated" | "high" | "medium" | "feedback_only";
 
 export interface PointSample {
   x: number;
@@ -107,6 +108,9 @@ export interface PersonalizationRuntimeSummary {
   stage: TutorialPersonalizationStage;
   featureInjectionMix: number;
   thresholdBias: number;
+  effectiveThresholdBias?: number;
+  mlConfidenceGate?: number;
+  mlActualGate?: "none" | "confidence_guard" | "suppression";
 }
 
 export interface ShadowScoreCandidate<TLabel extends string = string> {
@@ -180,6 +184,21 @@ export interface TutorialCapture {
   timestamp: number;
   baseSnapshot?: TutorialBaseSnapshot;
   operatorContext?: TutorialOperatorContext;
+  validation?: TutorialCaptureValidation;
+}
+
+export interface TutorialCaptureValidation {
+  reliability: TutorialCaptureReliability;
+  expectedLabel: string;
+  actualTopLabel?: string;
+  status?: RecognitionStatus;
+  topScore?: number;
+  margin?: number;
+  quality?: QualityVector;
+  anchorScore?: number;
+  scaleScore?: number;
+  shapeConfidence?: number;
+  blockedBy?: OverlayOperator;
 }
 
 export interface TutorialBaseSnapshot {
@@ -204,12 +223,14 @@ export interface FamilyPrototype {
   normalizedClouds: PointSample[][];
   averageFeatures: Partial<RecognitionFeatures>;
   sampleCount: number;
+  reliability?: number;
 }
 
 export interface OperatorPrototype {
   operator: OverlayOperator;
   normalizedClouds: PointSample[][];
   sampleCount: number;
+  reliability?: number;
   averageAngleRadians?: number;
   averageScaleRatio?: number;
   averageAnchorZoneId?: OverlayAnchorZoneId;
@@ -230,8 +251,14 @@ export interface UserShapeProfile {
   tutorialSampleCount: number;
   familyTutorialSampleCount?: number;
   operatorTutorialSampleCount?: number;
+  validatedTutorialSampleCount?: number;
+  feedbackOnlyTutorialSampleCount?: number;
   familyPrototypes: Partial<Record<GlyphFamily, FamilyPrototype>>;
   operatorPrototypes: Partial<Record<OverlayOperator, OperatorPrototype>>;
+  familyThresholdBias?: Partial<Record<GlyphFamily, number>>;
+  operatorThresholdBias?: Partial<Record<OverlayOperator, number>>;
+  familyPrototypeReliability?: Partial<Record<GlyphFamily, number>>;
+  operatorPrototypeReliability?: Partial<Record<OverlayOperator, number>>;
   confusionPairs: TutorialConfusionPair[];
   updatedAt: number;
 }

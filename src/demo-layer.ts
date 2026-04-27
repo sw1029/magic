@@ -1,4 +1,5 @@
 export type DemoViewPreset = "clean" | "explain" | "workshop";
+export type DemoPage = "test" | "tutorial" | "ml" | "quality" | "guide" | "logs";
 export type GuidedDemoScenarioId =
   | "same_shape_fast"
   | "same_shape_slow"
@@ -7,6 +8,7 @@ export type GuidedDemoScenarioId =
 
 export interface DemoViewState {
   viewPreset: DemoViewPreset;
+  activePage: DemoPage;
   analysisOverlay: boolean;
   qualityInfluence: boolean;
   explainResult: boolean;
@@ -32,27 +34,27 @@ export interface GuidedDemoScenario {
 export const GUIDED_DEMO_SCENARIOS: GuidedDemoScenario[] = [
   {
     id: "same_shape_fast",
-    label: "same shape / fast",
-    title: "같은 모양, 빠른 tempo",
-    prompt: "같은 family silhouette를 빠르게 그려서 quality on/off가 결과층만 바꾸고 family는 유지되는지 보여줍니다."
+    label: "빠른 불꽃",
+    title: "같은 모양, 빠른 입력",
+    prompt: "같은 기본 모양을 빠르게 그려서 품질 반영이 결과감만 바꾸고 종류는 유지되는지 보여줍니다."
   },
   {
     id: "same_shape_slow",
-    label: "same shape / slow",
-    title: "같은 모양, 느린 tempo",
-    prompt: "같은 모양을 천천히 반복해서 output과 risk fingerprint만 달라지고 spell type은 그대로인지 설명합니다."
+    label: "느린 불꽃",
+    title: "같은 모양, 느린 입력",
+    prompt: "같은 모양을 천천히 반복해서 결과감과 위험 신호만 달라지고 종류는 그대로인지 설명합니다."
   },
   {
     id: "closure_leak",
-    label: "closure leak",
-    title: "closure leak 시나리오",
-    prompt: "도형 끝을 일부러 열어 incomplete 상태와 why panel의 status 설명을 보여줍니다."
+    label: "끝이 열린 모양",
+    title: "끝이 열린 모양",
+    prompt: "도형 끝을 일부러 열어 미완성 상태와 이유 설명을 보여줍니다."
   },
   {
     id: "rotation_bias",
-    label: "rotation bias",
-    title: "rotation bias 시나리오",
-    prompt: "같은 family를 기울여 그리고 analysis overlay로 axis, ghost guide, risk 변화를 함께 설명합니다."
+    label: "기울어진 모양",
+    title: "기울어진 모양",
+    prompt: "같은 종류를 기울여 그리고 분석 안내선으로 축, 보조 가이드, 위험도 변화를 함께 설명합니다."
   }
 ];
 
@@ -60,6 +62,7 @@ export function createDemoViewState(preset: DemoViewPreset = "clean"): DemoViewS
   return applyDemoViewPreset(
     {
       viewPreset: preset,
+      activePage: "test",
       analysisOverlay: false,
       qualityInfluence: true,
       explainResult: false,

@@ -51,6 +51,7 @@ import type {
   TutorialCapture,
   TutorialBaseSnapshot,
   TutorialCaptureSource,
+  TutorialCaptureValidation,
   TutorialOperatorContext,
   TutorialProfileStore,
   UserInputProfile,
@@ -58,6 +59,7 @@ import type {
   UserShapeProfile
 } from "./recognizer/types";
 import type {
+  DemoPage,
   DemoViewState,
   DemoViewPreset,
   GuidedDemoScenarioId
@@ -75,6 +77,49 @@ const CANVAS_HEIGHT = 620;
 const PROFILE_STORAGE_KEY = "magic-recognizer-v1_5-profile";
 const TUTORIAL_PROFILE_STORAGE_KEY = "magic-recognizer-v1_5-tutorial-profile";
 const RECENT_SEAL_LIMIT = 6;
+const WEB_UI_PAGES: Array<{
+  id: DemoPage;
+  label: string;
+  title: string;
+  copy: string;
+}> = [
+  {
+    id: "test",
+    label: "실제 테스트",
+    title: "실제 테스트",
+    copy: "캔버스 입력과 실제 판정만 집중해서 확인합니다."
+  },
+  {
+    id: "tutorial",
+    label: "따라 그리기",
+    title: "따라 그리기 연습",
+    copy: "캔버스와 단계 안내를 함께 보며 연습 입력, 내 손모양 반영, 전후 비교를 진행합니다."
+  },
+  {
+    id: "ml",
+    label: "보조 판독",
+    title: "보조 판독",
+    copy: "ML이 현재 입력을 어떻게 다시 보고, 실제 인식 기준 조정에 쓰였는지 확인합니다."
+  },
+  {
+    id: "quality",
+    label: "품질 벡터",
+    title: "품질 벡터",
+    copy: "원본 품질값과 필체 보정 후 값을 비교합니다."
+  },
+  {
+    id: "guide",
+    label: "가이드",
+    title: "가이드라인",
+    copy: "모범 선례와 HCI 설명 기준을 확인합니다."
+  },
+  {
+    id: "logs",
+    label: "로그",
+    title: "기록",
+    copy: "최근 결과, 연습 요약, 판정 JSON을 검증합니다."
+  }
+];
 const SCENARIO_APPEAL: Record<
   GuidedDemoScenarioId,
   { label: string; title: string; prompt: string; narration: string }
@@ -92,18 +137,23 @@ const SCENARIO_APPEAL: Record<
     narration: "같은 불꽃 모양을 더 느리게 그려 빠른 불꽃과 결과감만 달라진다는 점을 비교하세요."
   },
   closure_leak: {
-    label: "closure leak",
-    title: "closure leak",
+    label: "끝이 열린 모양",
+    title: "끝이 열린 모양",
     prompt: "끝을 일부러 닫지 않아 왜 미완성으로 남는지 이유 설명 패널에서 바로 보여줍니다.",
     narration: "도형 끝을 열어 둔 채 기본 모양 고정을 눌러 닫힘이 부족하면 미완성으로 남는 흐름을 보여주세요."
   },
   rotation_bias: {
-    label: "rotation bias",
-    title: "rotation bias",
+    label: "기울어진 모양",
+    title: "기울어진 모양",
     prompt: "같은 모양을 기울여 그린 뒤 분석 안내선과 이유 설명으로 위험도 변화만 함께 설명합니다.",
     narration: "같은 모양을 기울여 그린 뒤 분석 안내선을 켜고 기울기가 결과 위험도에만 개입하는 모습을 설명하세요."
   }
 };
+
+export function resolveWebUiPageFromHash(hash: string): DemoPage {
+  const normalized = hash.replace(/^#\/?/, "").split(/[/?]/)[0];
+  return WEB_UI_PAGES.some((page) => page.id === normalized) ? (normalized as DemoPage) : "test";
+}
 
 interface CanvasRenderState {
   phase: RitualPhase;
@@ -126,6 +176,7 @@ type TutorialCaptureRequest =
       strokes?: Stroke[];
       id?: string;
       timestamp?: number;
+      validation?: TutorialCaptureValidation;
     }
   | {
       kind: "operator";
@@ -134,6 +185,7 @@ type TutorialCaptureRequest =
       strokes?: Stroke[];
       id?: string;
       timestamp?: number;
+      validation?: TutorialCaptureValidation;
     };
 
 interface TutorialOnboardingHook {
@@ -185,8 +237,8 @@ export function mountApp(root: HTMLDivElement): void {
         </div>
         <div class="hero-side">
           <div class="promise-stack">
-            <span class="promise-badge">same shape, same family</span>
-            <span class="promise-badge subtle">quality affects execution, not family</span>
+            <span class="promise-badge">같은 모양은 같은 종류</span>
+            <span class="promise-badge subtle">품질은 결과감만 조정</span>
           </div>
           <div class="legend">
             <span>기본 모양: 바람 / 땅 / 불꽃 / 물 / 생명</span>
@@ -195,15 +247,32 @@ export function mountApp(root: HTMLDivElement): void {
           </div>
         </div>
       </header>
+      <nav class="app-nav" aria-label="데모 페이지">
+        ${WEB_UI_PAGES.map(
+          (page) => `
+            <button class="page-tab" type="button" data-page-id="${page.id}">
+              <span>${page.label}</span>
+            </button>
+          `
+        ).join("")}
+      </nav>
+      <section class="page-intro">
+        <div>
+          <p class="panel-label">현재 페이지</p>
+          <h2 id="page-title">실제 테스트</h2>
+          <p id="page-copy" class="strip-copy">캔버스 입력과 실제 판정만 집중해서 확인합니다.</p>
+        </div>
+        <div id="page-summary-badges" class="promise-inline"></div>
+      </section>
       <section class="demo-rail">
         <div class="demo-rail-card demo-controls-card demo-rail-wide">
           <div class="control-stack">
             <div>
-              <p class="panel-label">View Preset</p>
+              <p class="panel-label">보기 방식</p>
               <div class="chip-row">
-                <button id="preset-clean-button" class="chip-button">clean</button>
-                <button id="preset-explain-button" class="chip-button">explain</button>
-                <button id="preset-workshop-button" class="chip-button">workshop</button>
+                <button id="preset-clean-button" class="chip-button">간단히</button>
+                <button id="preset-explain-button" class="chip-button">설명 포함</button>
+                <button id="preset-workshop-button" class="chip-button">검증용</button>
               </div>
             </div>
             <div class="control-divider"></div>
@@ -252,7 +321,7 @@ export function mountApp(root: HTMLDivElement): void {
               <p class="panel-label">시연 시나리오</p>
               <h3 id="scenario-title">빠른 불꽃</h3>
             </div>
-              <span id="preset-chip" class="status-chip status-ready">clean</span>
+              <span id="preset-chip" class="status-chip status-ready">간단히</span>
           </div>
           <div class="chip-row scenario-row">
             ${scenarioButtons}
@@ -272,13 +341,13 @@ export function mountApp(root: HTMLDivElement): void {
         <div>
           <p class="panel-label">보조 판독 상태</p>
           <p id="support-strip-copy" class="strip-copy">
-            같은 모양은 같은 종류로 유지한 채, 보조 판독과 입력 습관 반영은 시험 계산으로만 비교합니다.
+            같은 모양은 같은 종류로 유지한 채, 보조 판독과 입력 습관 반영은 참고 계산으로만 비교합니다.
           </p>
         </div>
         <div id="support-strip-badges" class="promise-inline"></div>
       </section>
       <main class="workspace">
-        <section class="board-panel">
+        <section id="board-panel" class="board-panel">
           <div class="board-head">
             <div>
               <p class="panel-label">진행 단계</p>
@@ -319,14 +388,14 @@ export function mountApp(root: HTMLDivElement): void {
           </div>
         </section>
         <aside class="sidebar">
-          <section class="card">
+          <section id="base-card" class="card">
             <p class="panel-label">기본 모양 판정</p>
             <h3 id="base-family">대기 중</h3>
             <p id="base-status" class="status-chip status-invalid">미인식</p>
             <p id="base-reason" class="card-copy">아직 기본 모양 입력이 없습니다.</p>
             <ol id="candidate-list" class="candidate-list"></ol>
           </section>
-          <section class="card">
+          <section id="overlay-preview-card" class="card">
             <p class="panel-label">추가 효과 미리보기</p>
             <h3 id="overlay-preview-title">추가 효과 전</h3>
             <p id="overlay-preview-status" class="status-chip status-waiting">대기</p>
@@ -334,14 +403,14 @@ export function mountApp(root: HTMLDivElement): void {
             <div id="overlay-preview-meta" class="summary-grid"></div>
             <ol id="overlay-preview-candidates" class="candidate-list"></ol>
           </section>
-          <section class="card">
+          <section id="overlay-records-card" class="card">
             <p class="panel-label">추가 효과 기록</p>
             <h3 id="overlay-title">추가 효과 0개</h3>
             <p id="overlay-status" class="status-chip status-waiting">대기</p>
             <p id="overlay-reason" class="card-copy">추가 효과를 그릴 때마다 기록이 쌓입니다.</p>
             <ol id="overlay-list" class="candidate-list"></ol>
           </section>
-          <section class="card">
+          <section id="compile-card" class="card">
             <p class="panel-label">최종 결과</p>
             <h3 id="compile-title">최종 결과 전</h3>
             <p id="compile-status" class="status-chip status-waiting">대기</p>
@@ -360,8 +429,8 @@ export function mountApp(root: HTMLDivElement): void {
               같은 모양은 같은 종류로 유지하고, 품질 반영 전후의 결과감만 비교합니다.
             </p>
             <div class="promise-inline">
-              <span class="inline-guarantee">same shape, same family</span>
-              <span class="inline-guarantee">quality affects execution, not family</span>
+              <span class="inline-guarantee">같은 모양은 같은 종류</span>
+              <span class="inline-guarantee">품질은 결과감만 조정</span>
             </div>
             <div id="outcome-compare" class="compare-grid"></div>
           </section>
@@ -380,7 +449,7 @@ export function mountApp(root: HTMLDivElement): void {
             <div class="split-head">
               <div>
                 <p class="panel-label">핵심 비교</p>
-                <h3 id="support-title">현재 판정과 시험 계산</h3>
+                <h3 id="support-title">현재 판정과 참고 계산</h3>
               </div>
               <span id="support-status" class="status-chip status-waiting">대기</span>
             </div>
@@ -401,6 +470,29 @@ export function mountApp(root: HTMLDivElement): void {
               <div id="tutorial-compare-metrics" class="summary-grid"></div>
             </div>
           </section>
+          <section id="ml-runtime-card" class="card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">보조 판독</p>
+                <h3>인식 기준과 실제 반영</h3>
+              </div>
+              <span id="ml-runtime-status" class="status-chip status-waiting">대기</span>
+            </div>
+            <p id="ml-runtime-copy" class="card-copy">
+              보조 판독이 현재 입력을 어떻게 다시 보고, 인식 기준 조정이 실제로 쓰였는지 보여 줍니다.
+            </p>
+            <div id="ml-runtime-summary" class="summary-grid"></div>
+            <div class="analysis-grid two-up">
+              <section class="detail-panel">
+                <p class="mini-label">기본 모양</p>
+                <div id="ml-base-rows" class="metric-list"></div>
+              </section>
+              <section class="detail-panel">
+                <p class="mini-label">추가 효과</p>
+                <div id="ml-operator-rows" class="metric-list"></div>
+              </section>
+            </div>
+          </section>
           <section id="tutorial-card" class="card">
             <div class="split-head">
               <div>
@@ -417,10 +509,24 @@ export function mountApp(root: HTMLDivElement): void {
             <div id="tutorial-step-list" class="tutorial-step-list"></div>
             <div class="tutorial-actions">
               <button id="tutorial-start-button">연습 시작</button>
-              <button id="tutorial-capture-button" class="primary">현재 입력 저장</button>
-              <button id="tutorial-result-button">연습 결과 보기</button>
+              <button id="tutorial-capture-button" class="primary">연습에 저장</button>
+              <button id="tutorial-result-button">변화 확인</button>
               <button id="tutorial-clear-button">연습 지우기</button>
             </div>
+          </section>
+          <section id="tutorial-profile-card" class="card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">저장된 연습</p>
+                <h3>내 손모양 반영 상태</h3>
+              </div>
+              <span id="tutorial-validation-status" class="status-chip status-waiting">대기</span>
+            </div>
+            <p id="tutorial-validation-copy" class="card-copy">
+              잘 맞게 저장된 연습만 내 손모양 기준과 인식 기준 조정에 반영합니다.
+            </p>
+            <div id="tutorial-validation-summary" class="summary-grid"></div>
+            <div id="tutorial-validation-details" class="metric-list"></div>
           </section>
           <section id="principles-card" class="card">
             <div class="split-head">
@@ -504,6 +610,12 @@ export function mountApp(root: HTMLDivElement): void {
   }
 
   const ctx = context;
+  const workspace = select<HTMLElement>(root, ".workspace");
+  const pageTitle = select<HTMLElement>(root, "#page-title");
+  const pageCopy = select<HTMLParagraphElement>(root, "#page-copy");
+  const pageSummaryBadges = select<HTMLDivElement>(root, "#page-summary-badges");
+  const pageNavButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-page-id]"));
+  const boardPanel = select<HTMLElement>(root, "#board-panel");
   const sealBaseButton = select<HTMLButtonElement>(root, "#seal-base-button");
   const startOverlayButton = select<HTMLButtonElement>(root, "#start-overlay-button");
   const sealFinalButton = select<HTMLButtonElement>(root, "#seal-final-button");
@@ -536,19 +648,23 @@ export function mountApp(root: HTMLDivElement): void {
   const phaseBase = select<HTMLElement>(root, "#phase-base");
   const phaseOverlay = select<HTMLElement>(root, "#phase-overlay");
   const phaseFinal = select<HTMLElement>(root, "#phase-final");
+  const baseCard = select<HTMLElement>(root, "#base-card");
   const baseFamily = select<HTMLElement>(root, "#base-family");
   const baseStatus = select<HTMLElement>(root, "#base-status");
   const baseReason = select<HTMLElement>(root, "#base-reason");
   const candidateList = select<HTMLOListElement>(root, "#candidate-list");
+  const overlayPreviewCard = select<HTMLElement>(root, "#overlay-preview-card");
   const overlayPreviewTitle = select<HTMLElement>(root, "#overlay-preview-title");
   const overlayPreviewStatus = select<HTMLElement>(root, "#overlay-preview-status");
   const overlayPreviewReason = select<HTMLElement>(root, "#overlay-preview-reason");
   const overlayPreviewMeta = select<HTMLDivElement>(root, "#overlay-preview-meta");
   const overlayPreviewCandidates = select<HTMLOListElement>(root, "#overlay-preview-candidates");
+  const overlayRecordsCard = select<HTMLElement>(root, "#overlay-records-card");
   const overlayTitle = select<HTMLElement>(root, "#overlay-title");
   const overlayStatus = select<HTMLElement>(root, "#overlay-status");
   const overlayReason = select<HTMLElement>(root, "#overlay-reason");
   const overlayList = select<HTMLOListElement>(root, "#overlay-list");
+  const compileCard = select<HTMLElement>(root, "#compile-card");
   const compileTitle = select<HTMLElement>(root, "#compile-title");
   const compileStatus = select<HTMLElement>(root, "#compile-status");
   const compileReason = select<HTMLElement>(root, "#compile-reason");
@@ -573,6 +689,12 @@ export function mountApp(root: HTMLDivElement): void {
   const insightPracticeTab = select<HTMLButtonElement>(root, "#insight-practice-tab");
   const insightAssistPanel = select<HTMLDivElement>(root, "#insight-assist-panel");
   const insightPracticePanel = select<HTMLDivElement>(root, "#insight-practice-panel");
+  const mlRuntimeCard = select<HTMLElement>(root, "#ml-runtime-card");
+  const mlRuntimeStatus = select<HTMLElement>(root, "#ml-runtime-status");
+  const mlRuntimeCopy = select<HTMLParagraphElement>(root, "#ml-runtime-copy");
+  const mlRuntimeSummary = select<HTMLDivElement>(root, "#ml-runtime-summary");
+  const mlBaseRows = select<HTMLDivElement>(root, "#ml-base-rows");
+  const mlOperatorRows = select<HTMLDivElement>(root, "#ml-operator-rows");
   const tutorialCard = select<HTMLElement>(root, "#tutorial-card");
   const tutorialTitle = select<HTMLElement>(root, "#tutorial-title");
   const tutorialStatus = select<HTMLElement>(root, "#tutorial-status");
@@ -584,6 +706,11 @@ export function mountApp(root: HTMLDivElement): void {
   const tutorialCaptureButton = select<HTMLButtonElement>(root, "#tutorial-capture-button");
   const tutorialResultButton = select<HTMLButtonElement>(root, "#tutorial-result-button");
   const tutorialClearButton = select<HTMLButtonElement>(root, "#tutorial-clear-button");
+  const tutorialProfileCard = select<HTMLElement>(root, "#tutorial-profile-card");
+  const tutorialValidationStatus = select<HTMLElement>(root, "#tutorial-validation-status");
+  const tutorialValidationCopy = select<HTMLParagraphElement>(root, "#tutorial-validation-copy");
+  const tutorialValidationSummary = select<HTMLDivElement>(root, "#tutorial-validation-summary");
+  const tutorialValidationDetails = select<HTMLDivElement>(root, "#tutorial-validation-details");
   const personalizationCompare = select<HTMLDivElement>(root, "#personalization-compare");
   const personalizationEffects = select<HTMLDivElement>(root, "#personalization-effects");
   const tutorialCompareGrid = select<HTMLDivElement>(root, "#tutorial-compare-grid");
@@ -617,7 +744,10 @@ export function mountApp(root: HTMLDivElement): void {
 
   let phase: RitualPhase = "base";
   let overlayAuthoringStarted = false;
-  let demoView = resolvePresetView(createDemoViewState("clean"), "clean");
+  let demoView: DemoViewState = {
+    ...resolvePresetView(createDemoViewState("clean"), "clean"),
+    activePage: resolveWebUiPageFromHash(window.location.hash)
+  };
   let userProfile = loadUserInputProfile();
   let tutorialProfileStore = loadTutorialProfileStore();
   let latestProfileDelta: UserInputProfileDelta | undefined;
@@ -641,6 +771,9 @@ export function mountApp(root: HTMLDivElement): void {
   let tutorialBeforeSnapshot: TutorialComparisonSnapshot | null = null;
   let tutorialAfterSnapshot: TutorialComparisonSnapshot | null = null;
   let insightTab: "assist" | "practice" = "assist";
+  if (demoView.activePage === "tutorial") {
+    insightTab = "practice";
+  }
   const setTutorialProfileStore = (nextStore: TutorialProfileStore): void => {
     tutorialProfileStore = nextStore;
     syncTutorialHookMetadata(root, nextStore);
@@ -888,6 +1021,22 @@ export function mountApp(root: HTMLDivElement): void {
     applyPreset("workshop");
   });
 
+  for (const button of pageNavButtons) {
+    button.addEventListener("click", () => {
+      const page = resolvePageId(button.dataset.pageId);
+
+      if (!page) {
+        return;
+      }
+
+      navigateToPage(page);
+    });
+  }
+
+  window.addEventListener("hashchange", () => {
+    setActivePage(resolveWebUiPageFromHash(window.location.hash), false);
+  });
+
   qualityToggle.addEventListener("change", () => {
     demoView = {
       ...demoView,
@@ -1074,6 +1223,41 @@ export function mountApp(root: HTMLDivElement): void {
     render();
   }
 
+  function navigateToPage(page: DemoPage): void {
+    const targetHash = `#/${page}`;
+
+    if (window.location.hash === targetHash) {
+      setActivePage(page, false);
+      return;
+    }
+
+    window.location.hash = targetHash;
+  }
+
+  function setActivePage(page: DemoPage, syncHash: boolean): void {
+    demoView = {
+      ...demoView,
+      activePage: page
+    };
+
+    if (page === "tutorial") {
+      insightTab = "practice";
+    } else if (page === "ml") {
+      insightTab = "assist";
+    }
+
+    if (syncHash && window.location.hash !== `#/${page}`) {
+      window.location.hash = `/${page}`;
+      return;
+    }
+
+    render();
+  }
+
+  function resolvePageId(value: string | undefined): DemoPage | undefined {
+    return WEB_UI_PAGES.find((page) => page.id === value)?.id;
+  }
+
   render();
 
   function sealBasePhase(): void {
@@ -1258,7 +1442,7 @@ export function mountApp(root: HTMLDivElement): void {
     personalizationToggle.checked = demoView.showPersonalizationPanel;
     tutorialToggle.checked = demoView.showTutorialFlowPanel;
     exemplarToggle.checked = demoView.showExemplarPanel;
-    presetChip.textContent = demoView.viewPreset;
+    presetChip.textContent = viewPresetLabel(demoView.viewPreset);
     presetChip.className = `status-chip status-${demoView.viewPreset === "workshop" ? "authoring" : "ready"}`;
     scenarioTitle.textContent = scenario.title;
     scenarioCopy.textContent = scenario.prompt;
@@ -1267,17 +1451,7 @@ export function mountApp(root: HTMLDivElement): void {
     supportStripBadges.innerHTML = personalizationModel.stripBadges;
     syncScenarioButtons(scenarioChipButtons, demoView.selectedScenarioId);
 
-    const showExtendedPanels = demoView.viewPreset === "workshop";
-    outcomeCard.hidden = !demoView.compareMode;
-    whyCard.hidden = !demoView.explainResult;
-    qualityCard.hidden = !demoView.showQualitySplit;
-    recentSealsCard.hidden = !demoView.showRecentSeals || !showExtendedPanels;
-    supportCard.hidden = !demoView.showPersonalizationPanel;
-    tutorialCard.hidden = !demoView.showTutorialFlowPanel;
-    principlesCard.hidden = !demoView.showPersonalizationPanel && !demoView.showExemplarPanel;
-    exemplarCard.hidden = true;
-    profileCard.hidden = !demoView.showProfilePanel || !showExtendedPanels;
-    logCard.hidden = !demoView.showLogViewer;
+    syncPageLayout(demoView.activePage, baseDisplay, overlayLive, tutorialProfileStore);
 
     phaseTitle.textContent = phaseTitleFor(phase, baseSealed, overlayAuthoringStarted);
     phaseCopy.textContent = phaseCopyFor(phase, baseSealed, overlayAuthoringStarted, compiledResult);
@@ -1415,7 +1589,7 @@ export function mountApp(root: HTMLDivElement): void {
         : "품질 반영을 끈 상태에서는 모양 판정과 기본 결과감만 설명합니다.";
     whyList.innerHTML = renderWhyPanel(baseDisplay, compare, demoView.qualityInfluence, overlayLive, compilePreview);
 
-    supportTitle.textContent = insightTab === "assist" ? "현재 판정과 시험 계산" : tutorialModel.compareTitle;
+    supportTitle.textContent = insightTab === "assist" ? "현재 판정과 참고 계산" : tutorialModel.compareTitle;
     supportStatus.textContent = insightTab === "assist" ? personalizationModel.cardStatusLabel : tutorialModel.compareStatusLabel;
     supportStatus.className = `status-chip status-${insightTab === "assist" ? personalizationModel.cardStatusTone : tutorialModel.compareStatusTone}`;
     supportCopy.textContent = insightTab === "assist" ? personalizationModel.compareCopy : tutorialModel.compareCopy;
@@ -1444,7 +1618,7 @@ export function mountApp(root: HTMLDivElement): void {
     readingGuideTitle.textContent = "설명 기준과 모범 선례";
     readingGuideCopy.textContent = "같은 모양은 같은 종류로 유지한 채, 화면에서 무엇을 기준으로 읽는지와 안정적인 예시를 함께 보여 줍니다.";
     principlesList.innerHTML = renderHciPrinciples();
-    readingGuideExemplar.hidden = !demoView.showExemplarPanel;
+    readingGuideExemplar.hidden = demoView.activePage === "guide" ? false : !demoView.showExemplarPanel;
     exemplarTitle.textContent = personalizationModel.exemplarTitle;
     exemplarCopy.textContent = personalizationModel.exemplarCopy;
     exemplarGrid.innerHTML = personalizationModel.exemplarGrid;
@@ -1478,17 +1652,108 @@ export function mountApp(root: HTMLDivElement): void {
     logCount.textContent = `${logs.length}건`;
     logViewer.textContent = JSON.stringify(logs, null, 2);
     canvasHint.textContent =
-      !baseSealed
-        ? "1. 기본 모양을 그린 뒤 먼저 종류를 고정합니다."
-        : phase === "base"
-          ? `2. 모양이 고정됐습니다. ${scenario.title} 시나리오에 맞춰 품질 전후 비교나 추가 효과 그리기를 보여줍니다.`
-          : phase === "overlay"
-            ? "3. 추가 효과 선은 그대로 그리고, 분석 안내선은 보조로만 겹칩니다."
-            : "4. 최종 결과가 고정됐습니다. 다음 입력을 시작하면 새 시도가 열립니다.";
+      demoView.activePage === "tutorial"
+        ? buildTutorialCanvasHint(TUTORIAL_DEMO_STEPS[tutorialStepIndex] ?? TUTORIAL_DEMO_STEPS[0], {
+            phase,
+            baseSealed,
+            overlayAuthoringStarted
+          })
+        : !baseSealed
+          ? "1. 기본 모양을 그린 뒤 먼저 종류를 고정합니다."
+          : phase === "base"
+            ? `2. 모양이 고정됐습니다. ${scenario.title} 시나리오에 맞춰 품질 전후 비교나 추가 효과 그리기를 보여줍니다.`
+            : phase === "overlay"
+              ? "3. 추가 효과 선은 그대로 그리고, 분석 안내선은 보조로만 겹칩니다."
+              : "4. 최종 결과가 고정됐습니다. 다음 입력을 시작하면 새 시도가 열립니다.";
     analysisCopy.textContent = demoView.analysisOverlay
       ? "분석 안내선을 켜면 축선, 닫힘 보조선, 위치 힌트, 가이드 모양이 보이지만 원본 선은 그대로 유지됩니다."
       : "분석 안내선을 끄면 핵심 결과만 남기고 보조선은 숨깁니다.";
     analysisLegend.innerHTML = renderAnalysisLegend(demoView.analysisOverlay);
+  }
+
+  function syncPageLayout(
+    page: DemoPage,
+    baseDisplay: RecognitionResult,
+    overlayLive: OverlayRecognition | null,
+    store: TutorialProfileStore
+  ): void {
+    const meta = WEB_UI_PAGES.find((item) => item.id === page) ?? WEB_UI_PAGES[0];
+    const mlMetadata = buildTinyMlRuntimeMetadata(baseDisplay, overlayLive);
+
+    const workspaceLayout = page === "test" ? "test-layout" : page === "tutorial" ? "tutorial-layout" : "analysis-layout";
+
+    root.dataset.activePage = page;
+    workspace.className = ["workspace", workspaceLayout].join(" ");
+    pageTitle.textContent = meta.title;
+    pageCopy.textContent = meta.copy;
+    pageSummaryBadges.innerHTML = renderPageSummaryBadges(page, baseDisplay, overlayLive, store);
+
+    for (const button of pageNavButtons) {
+      const active = button.dataset.pageId === page;
+      button.className = ["page-tab", active ? "active" : ""].filter(Boolean).join(" ");
+      button.setAttribute("aria-current", active ? "page" : "false");
+    }
+
+    boardPanel.hidden = page !== "test" && page !== "tutorial";
+    baseCard.hidden = page !== "test";
+    overlayPreviewCard.hidden = page !== "test";
+    overlayRecordsCard.hidden = page !== "test";
+    compileCard.hidden = page !== "test";
+    outcomeCard.hidden = page !== "quality";
+    whyCard.hidden = page !== "guide";
+    supportCard.hidden = page !== "ml" && page !== "tutorial";
+    mlRuntimeCard.hidden = page !== "ml";
+    tutorialCard.hidden = page !== "tutorial";
+    tutorialProfileCard.hidden = page !== "tutorial";
+    principlesCard.hidden = page !== "guide";
+    exemplarCard.hidden = true;
+    qualityCard.hidden = page !== "quality";
+    recentSealsCard.hidden = page !== "logs";
+    profileCard.hidden = page !== "logs";
+    logCard.hidden = page !== "logs";
+
+    mlRuntimeStatus.textContent =
+      mlMetadata.tinyMlBaseArtifacts === "ready" || mlMetadata.tinyMlOperatorArtifacts === "ready" ? "연결됨" : "대기";
+    mlRuntimeStatus.className = `status-chip status-${
+      mlMetadata.tinyMlBaseArtifacts === "ready" || mlMetadata.tinyMlOperatorArtifacts === "ready" ? "recognized" : "waiting"
+    }`;
+    mlRuntimeCopy.textContent =
+      mlMetadata.baseMlActualGate !== "none" || mlMetadata.operatorMlActualGate !== "none"
+        ? "현재 입력에서 보조 판독이 실제 인식 기준 또는 오인식 차단에 개입했습니다."
+        : "현재 입력에서는 보조 판독이 참고 계산과 인식 기준 상태만 제공합니다.";
+    mlRuntimeSummary.innerHTML = renderSummaryRows([
+      ["기능 목록", readinessLabel(mlMetadata.tinyMlFeatureSpec)],
+      ["기본 모양 모델", readinessLabel(mlMetadata.tinyMlBaseArtifacts)],
+      ["추가 효과 모델", readinessLabel(mlMetadata.tinyMlOperatorArtifacts)]
+    ]);
+    mlBaseRows.innerHTML = renderMlRows([
+      ["현재 판정", `${metadataFamilyLabel(mlMetadata.baseActualFamily)} / ${statusLabel(mlMetadata.baseActualStatus as RecognitionResult["status"] | "waiting")}`],
+      ["보조 판독 변화", `${booleanChangeLabel(mlMetadata.baseShadowDecisionChanged)} / ${booleanChangeLabel(mlMetadata.baseShadowStatusChanged)}`],
+      ["연습 반영 후보", mlMetadata.basePersonalizedShadowTopLabel],
+      ["인식 기준", `${mlMetadata.baseThresholdBias} -> ${mlMetadata.baseEffectiveThresholdBias}`],
+      ["믿음도 조절", mlMetadata.baseMlConfidenceGate],
+      ["실제 반영", gateLabel(mlMetadata.baseMlActualGate)]
+    ]);
+    mlOperatorRows.innerHTML = renderMlRows([
+      ["현재 판정", `${metadataOperatorLabel(mlMetadata.operatorActualLabel)} / ${statusLabel(mlMetadata.operatorActualStatus as RecognitionResult["status"] | "waiting")}`],
+      ["보조 판독 변화", `${booleanChangeLabel(mlMetadata.operatorShadowDecisionChanged)} / ${booleanChangeLabel(mlMetadata.operatorShadowStatusChanged)}`],
+      ["연습 반영 후보", mlMetadata.operatorPersonalizedShadowTopLabel],
+      ["인식 기준", `${mlMetadata.operatorThresholdBias} -> ${mlMetadata.operatorEffectiveThresholdBias}`],
+      ["믿음도 조절", mlMetadata.operatorMlConfidenceGate],
+      ["실제 반영", gateLabel(mlMetadata.operatorMlActualGate)]
+    ]);
+
+    tutorialValidationStatus.textContent =
+      (store.shapeProfile.validatedTutorialSampleCount ?? 0) > 0 ? "반영 중" : "대기";
+    tutorialValidationStatus.className = `status-chip status-${
+      (store.shapeProfile.validatedTutorialSampleCount ?? 0) > 0 ? "recognized" : "waiting"
+    }`;
+    tutorialValidationCopy.textContent =
+      (store.shapeProfile.feedbackOnlyTutorialSampleCount ?? 0) > 0
+        ? "참고만 저장된 연습은 기록으로만 남기고 인식 기준에는 반영하지 않습니다."
+        : "잘 맞게 저장된 연습이 쌓이면 내 손모양 기준과 라벨별 인식 기준이 갱신됩니다.";
+    tutorialValidationSummary.innerHTML = renderTutorialValidationSummary(store);
+    tutorialValidationDetails.innerHTML = renderTutorialValidationDetails(store);
   }
 
   function refreshRecognitionState(): void {
@@ -1611,7 +1876,12 @@ export function mountApp(root: HTMLDivElement): void {
 
   function recordTutorialDemoStep(step: (typeof TUTORIAL_DEMO_STEPS)[number]): TutorialCapture | null {
     if (step.kind === "family" && step.expectedFamily) {
-      return tutorialOnboardingHook.captureBaseFamily(step.expectedFamily, step.source);
+      return tutorialOnboardingHook.recordCapture({
+        kind: "family",
+        expectedFamily: step.expectedFamily,
+        source: step.source,
+        validation: buildFamilyTutorialCaptureValidation(step.expectedFamily)
+      });
     }
 
     if (step.kind === "operator" && step.expectedOperator) {
@@ -1625,11 +1895,85 @@ export function mountApp(root: HTMLDivElement): void {
         kind: "operator",
         expectedOperator: step.expectedOperator,
         source: step.source,
-        strokes: [structuredClone(stroke)]
+        strokes: [structuredClone(stroke)],
+        validation: buildOperatorTutorialCaptureValidation(step.expectedOperator, stroke)
       });
     }
 
     return null;
+  }
+
+  function buildFamilyTutorialCaptureValidation(expectedFamily: GlyphFamily): TutorialCaptureValidation {
+    const result = recognizeSession(structuredClone(baseSession), {
+      sealed: true,
+      profile: currentRecognitionProfile()
+    });
+    const topCandidate = result.topCandidate;
+    const secondCandidate = result.candidates[1];
+    const margin = topCandidate ? topCandidate.score - (secondCandidate?.score ?? 0) : 0;
+    const reliability: TutorialCaptureValidation["reliability"] =
+      result.status === "recognized" && result.canonicalFamily === expectedFamily
+        ? "high"
+        : result.status === "ambiguous" && topCandidate?.family === expectedFamily
+          ? "medium"
+          : "feedback_only";
+
+    return {
+      reliability,
+      expectedLabel: expectedFamily,
+      actualTopLabel: topCandidate?.family,
+      status: result.status,
+      topScore: topCandidate?.score,
+      margin,
+      quality: result.rawQuality
+    };
+  }
+
+  function buildOperatorTutorialCaptureValidation(
+    expectedOperator: OverlayOperator,
+    stroke: Stroke
+  ): TutorialCaptureValidation {
+    const latestRecord = overlayRecords[overlayRecords.length - 1];
+    const recognition =
+      latestRecord?.stroke.id === stroke.id
+        ? latestRecord.recognition
+        : recognizeOverlayStroke(
+            stroke,
+            createOverlayContext(
+              baseSession,
+              overlayRecords,
+              overlaySession,
+              createTutorialOverlayPersonalizationProfile(tutorialProfileStore)
+            )
+          );
+    const topCandidate = recognition.topCandidate as
+      | (NonNullable<OverlayRecognition["topCandidate"]> & {
+          anchorScore?: number;
+          scaleScore?: number;
+          shapeConfidence?: number;
+        })
+      | undefined;
+    const secondCandidate = recognition.candidates[1];
+    const margin = topCandidate ? topCandidate.score - (secondCandidate?.score ?? 0) : 0;
+    const reliability: TutorialCaptureValidation["reliability"] =
+      recognition.status === "recognized" && recognition.operator === expectedOperator
+        ? "high"
+        : recognition.status === "ambiguous" && topCandidate?.operator === expectedOperator && !topCandidate.blockedBy
+          ? "medium"
+          : "feedback_only";
+
+    return {
+      reliability,
+      expectedLabel: expectedOperator,
+      actualTopLabel: topCandidate?.operator,
+      status: recognition.status,
+      topScore: topCandidate?.score,
+      margin,
+      anchorScore: topCandidate?.anchorScore,
+      scaleScore: topCandidate?.scaleScore,
+      shapeConfidence: topCandidate?.shapeConfidence,
+      blockedBy: topCandidate?.blockedBy
+    };
   }
 }
 
@@ -1669,6 +2013,36 @@ function buildNarrationCopy(
   }
 
   return baseNarration;
+}
+
+function viewPresetLabel(preset: DemoViewPreset): string {
+  switch (preset) {
+    case "clean":
+      return "간단히";
+    case "explain":
+      return "설명 포함";
+    case "workshop":
+      return "검증용";
+  }
+}
+
+function buildTutorialCanvasHint(
+  step: (typeof TUTORIAL_DEMO_STEPS)[number],
+  state: { phase: RitualPhase; baseSealed: boolean; overlayAuthoringStarted: boolean }
+): string {
+  if (step.kind === "family") {
+    return `${step.shortLabel}: 캔버스에 ${step.shapeSummary}을 그린 뒤 '연습에 저장'을 누르세요.`;
+  }
+
+  if (!state.baseSealed) {
+    return `${step.shortLabel}: 먼저 캔버스에 기본 모양을 그리고 '기본 모양 고정'을 누르세요.`;
+  }
+
+  if (state.phase !== "overlay" || !state.overlayAuthoringStarted) {
+    return `${step.shortLabel}: '추가 효과 그리기'를 누른 뒤 ${step.shapeSummary}을 더해 주세요.`;
+  }
+
+  return `${step.shortLabel}: ${step.shapeSummary}을 그린 뒤 '연습에 저장'을 누르세요.`;
 }
 
 function syncPresetButtons(
@@ -1906,7 +2280,8 @@ function createTutorialOnboardingHook(options: {
       ...request,
       strokes,
       baseSnapshot,
-      operatorContext
+      operatorContext,
+      validation: request.validation
     });
 
     options.setStore(nextStore);
@@ -1971,6 +2346,9 @@ export function buildTinyMlRuntimeMetadata(
     basePersonalizationStage: baseResult?.personalization?.stage ?? "none",
     basePersonalizationMix: baseResult?.shadow?.personalizationMix?.toFixed(3) ?? baseResult?.personalization?.featureInjectionMix.toFixed(3) ?? "0.000",
     baseThresholdBias: baseResult?.personalization?.thresholdBias.toFixed(3) ?? "0.000",
+    baseEffectiveThresholdBias: baseResult?.personalization?.effectiveThresholdBias?.toFixed(3) ?? "0.000",
+    baseMlConfidenceGate: baseResult?.personalization?.mlConfidenceGate?.toFixed(3) ?? "1.000",
+    baseMlActualGate: baseResult?.personalization?.mlActualGate ?? "none",
     baseShadowDecisionChanged: baseResult?.shadow ? String(baseResult.shadow.decisionChanged) : "false",
     baseShadowStatusChanged: baseResult?.shadow ? String(baseResult.shadow.statusChanged) : "false",
     basePersonalizedShadowTopLabel: baseResult?.shadow?.personalizedShadowTopLabel ?? "none",
@@ -1988,6 +2366,9 @@ export function buildTinyMlRuntimeMetadata(
       overlayRecognition?.personalization?.featureInjectionMix.toFixed(3) ??
       "0.000",
     operatorThresholdBias: overlayRecognition?.personalization?.thresholdBias.toFixed(3) ?? "0.000",
+    operatorEffectiveThresholdBias: overlayRecognition?.personalization?.effectiveThresholdBias?.toFixed(3) ?? "0.000",
+    operatorMlConfidenceGate: overlayRecognition?.personalization?.mlConfidenceGate?.toFixed(3) ?? "1.000",
+    operatorMlActualGate: overlayRecognition?.personalization?.mlActualGate ?? "none",
     operatorShadowDecisionChanged: overlayRecognition?.shadow
       ? String(overlayRecognition.shadow.decisionChanged)
       : "false",
@@ -2460,8 +2841,8 @@ function getTutorialStepState(
       tone: ready ? "ready" : "waiting",
       label: ready ? "현재 입력 저장 가능" : "기본 모양 필요",
       copy: ready
-        ? "지금 그린 기본 모양을 연습 입력으로 저장할 수 있습니다."
-        : "먼저 기본 모양을 한 번 그리고 저장 버튼을 눌러 주세요."
+        ? "캔버스에 그린 모양을 바로 연습에 저장할 수 있습니다."
+        : "캔버스에 기본 모양을 한 번 그려 주세요."
     };
   }
 
@@ -2470,7 +2851,7 @@ function getTutorialStepState(
       ready: false,
       tone: "waiting",
       label: "기본 모양 고정 필요",
-      copy: "추가 효과 연습은 기본 모양을 먼저 고정한 뒤에만 열립니다."
+      copy: "캔버스에 기본 모양을 그리고 '기본 모양 고정'을 먼저 눌러 주세요."
     };
   }
 
@@ -2497,8 +2878,8 @@ function getTutorialStepState(
     tone: hasOperatorStroke ? "ready" : "waiting",
     label: hasOperatorStroke ? "현재 입력 저장 가능" : "추가 효과 선 필요",
     copy: hasOperatorStroke
-      ? "방금 그린 추가 효과 한 획을 연습 입력으로 저장할 수 있습니다."
-      : "추가 효과 선을 한 번 그린 뒤 저장 버튼을 눌러 주세요."
+      ? "방금 그린 추가 효과를 연습에 저장할 수 있습니다."
+      : "추가 효과 선을 한 번 그려 주세요."
   };
 }
 
@@ -2541,11 +2922,11 @@ function buildTutorialFlowModel(args: {
   const stepCard = `
     <article class="tutorial-step-focus ${stepState.ready ? "ready" : ""}">
       <div class="tutorial-step-copy">
-        <p class="mini-label">지금 따라 그릴 기준</p>
+        <p class="mini-label">이번에 그릴 것</p>
         <h4>${currentStep.title}</h4>
         <p>${currentStep.instruction}</p>
         <section class="tutorial-shape-guide">
-          <p class="mini-label">무슨 모양을 그리면 되나요?</p>
+          <p class="mini-label">그리는 방법</p>
           <strong>${currentStep.shapeSummary}</strong>
           <div class="tutorial-shape-pills">
             ${currentStep.shapeChecklist
@@ -2591,12 +2972,12 @@ function buildTutorialFlowModel(args: {
   const compare = buildTutorialComparisonDisplay(args.beforeSnapshot, args.afterSnapshot);
 
   return {
-    title: args.tutorialFlowActive ? "연습 입력 진행 중" : "연습 전 비교 준비",
+    title: args.tutorialFlowActive ? "따라 그리기 진행 중" : "따라 그리기 시작",
     statusLabel: args.tutorialFlowActive ? "진행 중" : args.beforeSnapshot ? "준비됨" : "대기",
     statusTone: args.tutorialFlowActive ? "ready" : args.beforeSnapshot ? "recognized" : "waiting",
     copy: args.beforeSnapshot
-      ? "현재 입력을 기준으로 같은 모양을 다시 계산해 연습 전과 연습 후를 비교합니다."
-      : "먼저 현재 입력을 고정해 두면, 연습 후에 같은 입력을 다시 읽어 차이를 비교할 수 있습니다.",
+      ? "지금 그린 입력을 기준으로 연습 전/후 변화를 확인합니다."
+      : "먼저 캔버스에 모양을 그리고 연습을 시작하면 같은 입력을 다시 비교할 수 있습니다.",
     progressBadges: stepBadges,
     stepCard,
     stepList,
@@ -2723,7 +3104,7 @@ function buildTutorialComparisonDisplay(
     title: "같은 입력 전 / 후 비교 완료",
     statusLabel: "비교 가능",
     statusTone: "recognized",
-    copy: "연습 전, 보조 판독 시험 계산, 연습 후 현재 판정을 같은 입력 기준으로 나란히 보여 줍니다.",
+    copy: "연습 전, 보조 판독 참고 계산, 연습 후 현재 판정을 같은 입력 기준으로 나란히 보여 줍니다.",
     grid: compareGrid,
     effects: renderMetricNotes(buildTutorialComparisonEffects(beforeSnapshot, afterSnapshot)),
     metrics: renderSummaryRows(buildTutorialComparisonMetrics(beforeSnapshot, afterSnapshot))
@@ -2823,7 +3204,7 @@ function buildPersonalizationDemoModel(
   const stageTone = stage === "enough_shot" ? "recognized" : stage === "few_shot" ? "ready" : "waiting";
   const shadowReady = runtime.baseShadowAvailable || runtime.operatorShadowAvailable;
   const stripBadges = [
-    renderPromiseBadge(shadowReady ? "보조 판독 시험 계산" : "보조 판독 준비 중", shadowReady),
+    renderPromiseBadge(shadowReady ? "보조 판독 참고 계산" : "보조 판독 준비 중", shadowReady),
     renderPromiseBadge(`연습 입력 ${tutorialSamples}회`, tutorialSamples > 0),
     renderPromiseBadge(personalizationStageLabel(stage), stage !== "none")
   ].join("");
@@ -2840,16 +3221,16 @@ function buildPersonalizationDemoModel(
   return {
     stripCopy:
       tutorialSamples > 0
-        ? "같은 모양은 같은 종류로 유지한 채, 보조 판독과 연습 입력 반영은 시험 계산으로만 비교합니다."
-        : "연습 입력이 아직 없어도 보조 판독 시험 계산은 확인할 수 있지만, 최종 판정은 그대로 유지합니다.",
+        ? "같은 모양은 같은 종류로 유지한 채, 보조 판독과 연습 입력 반영은 참고 계산으로만 비교합니다."
+        : "연습 입력이 아직 없어도 보조 판독 참고 계산은 확인할 수 있지만, 최종 판정은 그대로 유지합니다.",
     stripBadges,
-    cardTitle: shadowReady ? "보조 판독 시험 계산 연결됨" : "보조 판독 준비 전",
+    cardTitle: shadowReady ? "보조 판독 참고 계산 연결됨" : "보조 판독 준비 전",
     cardStatusLabel: stage === "none" ? (shadowReady ? "보조만" : "대기") : "반영 중",
     cardStatusTone: stageTone,
     cardCopy:
       tutorialSamples > 0
         ? "연습 입력은 입력 습관만 반영하고, 종류 의미나 규칙 자체는 바꾸지 않습니다."
-        : "현재는 보조 판독만 시험 계산으로 보이고, 입력 습관 반영은 아직 시작 전입니다.",
+        : "현재는 보조 판독만 참고 계산으로 보이고, 입력 습관 반영은 아직 시작 전입니다.",
     cardBadges: [
       renderPromiseBadge(runtime.baseShadowAvailable ? "기본 모양 보조 판독 준비" : "기본 모양 보조 판독 없음", runtime.baseShadowAvailable),
       renderPromiseBadge(
@@ -2871,11 +3252,11 @@ function buildPersonalizationDemoModel(
     profileCopy:
       tutorialSamples > 0
         ? `기본 모양 ${familySamples}회 / 추가 효과 ${operatorSamples}회 / 현재 단계 ${personalizationStageLabel(stage)}`
-        : "연습 입력이 쌓이면 후보 여유와 위치 신호를 시험 계산에서 먼저 다시 봅니다.",
+        : "연습 입력이 쌓이면 후보 여유와 위치 신호를 참고 계산에서 먼저 다시 봅니다.",
     profileSummary: renderSummaryRows([
       ["가장 최근 반영", formatClockTime(tutorialStore.updatedAt)],
-      ["기본 모양 prototype", `${Object.keys(tutorialStore.shapeProfile.familyPrototypes).length}종`],
-      ["추가 효과 prototype", `${Object.keys(tutorialStore.shapeProfile.operatorPrototypes).length}종`]
+      ["기본 모양 기준", `${Object.keys(tutorialStore.shapeProfile.familyPrototypes).length}종`],
+      ["추가 효과 기준", `${Object.keys(tutorialStore.shapeProfile.operatorPrototypes).length}종`]
     ]),
     profileDetails: renderPracticeDetails(tutorialStore),
     exemplarTitle: "안정적으로 읽히는 기준",
@@ -2895,6 +3276,148 @@ function buildPersonalizationDemoModel(
             .join("")
         : `<div class="empty-state">아직 비교할 모범 선례가 없습니다.</div>`
   };
+}
+
+function renderPageSummaryBadges(
+  page: DemoPage,
+  baseResult: RecognitionResult,
+  overlayRecognition: OverlayRecognition | null,
+  store: TutorialProfileStore
+): string {
+  const baseLabel = readCurrentFamily(baseResult);
+  const overlayLabel = overlayRecognition?.operator ?? overlayRecognition?.topCandidate?.operator ?? null;
+  const samples = store.shapeProfile.tutorialSampleCount;
+  const baseGate = baseResult.personalization?.mlActualGate ?? "none";
+  const overlayGate = overlayRecognition?.personalization?.mlActualGate ?? "none";
+
+  switch (page) {
+    case "tutorial":
+      return [
+        renderPromiseBadge(`연습 입력 ${samples}회`, samples > 0),
+        renderPromiseBadge(`검증 ${store.shapeProfile.validatedTutorialSampleCount ?? 0}회`, (store.shapeProfile.validatedTutorialSampleCount ?? 0) > 0),
+        renderPromiseBadge(`참고 저장 ${store.shapeProfile.feedbackOnlyTutorialSampleCount ?? 0}회`, false)
+      ].join("");
+    case "ml":
+      return [
+        renderPromiseBadge(`기본 모양 반영 ${gateLabel(baseGate)}`, baseGate !== "none"),
+        renderPromiseBadge(`추가 효과 반영 ${gateLabel(overlayGate)}`, overlayGate !== "none"),
+        renderPromiseBadge(`믿음도 ${baseResult.personalization?.mlConfidenceGate?.toFixed(2) ?? "1.00"}`, true)
+      ].join("");
+    case "quality":
+      return [
+        renderPromiseBadge(`닫힘 ${baseResult.rawQuality.closure.toFixed(2)}`, baseResult.rawQuality.closure >= 0.7),
+        renderPromiseBadge(`안정감 ${baseResult.rawQuality.stability.toFixed(2)}`, baseResult.rawQuality.stability >= 0.55),
+        renderPromiseBadge("종류 고정 / 결과감 조정", true)
+      ].join("");
+    case "guide":
+      return [
+        renderPromiseBadge("같은 모양은 같은 종류", true),
+        renderPromiseBadge("ML은 보조 판독", true),
+        renderPromiseBadge("품질은 결과층", true)
+      ].join("");
+    case "logs":
+      return [
+        renderPromiseBadge(`연습 기록 ${samples}회`, samples > 0),
+        renderPromiseBadge(`기본 ${baseLabel ? familyLabel(baseLabel) : "없음"}`, Boolean(baseLabel)),
+        renderPromiseBadge(`추가 ${overlayLabel ? operatorLabel(overlayLabel) : "없음"}`, Boolean(overlayLabel))
+      ].join("");
+    case "test":
+    default:
+      return [
+        renderPromiseBadge(`기본 ${baseLabel ? familyLabel(baseLabel) : "대기"}`, Boolean(baseLabel)),
+        renderPromiseBadge(`추가 ${overlayLabel ? operatorLabel(overlayLabel) : "대기"}`, Boolean(overlayLabel)),
+        renderPromiseBadge(`상태 ${statusLabel(baseResult.status)}`, baseResult.status === "recognized")
+      ].join("");
+  }
+}
+
+function renderMlRows(rows: Array<[string, string]>): string {
+  return rows
+    .map(
+      ([label, value]) => `
+        <div class="metric-row">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function readinessLabel(value: string): string {
+  switch (value) {
+    case "ready":
+      return "준비됨";
+    case "missing":
+      return "없음";
+    default:
+      return value;
+  }
+}
+
+function metadataFamilyLabel(value: string): string {
+  return value === "none" ? "없음" : familyLabel(value);
+}
+
+function metadataOperatorLabel(value: string): string {
+  return value === "none" ? "없음" : operatorLabel(value);
+}
+
+function booleanChangeLabel(value: string): string {
+  switch (value) {
+    case "true":
+      return "변화 있음";
+    case "false":
+      return "변화 없음";
+    default:
+      return value;
+  }
+}
+
+function gateLabel(value: string): string {
+  switch (value) {
+    case "confidence_guard":
+      return "믿음도 낮아 완화 축소";
+    case "suppression":
+      return "오인식 위험 차단";
+    case "none":
+      return "없음";
+    default:
+      return value;
+  }
+}
+
+function renderTutorialValidationSummary(store: TutorialProfileStore): string {
+  return renderSummaryRows([
+    ["전체 연습", `${store.shapeProfile.tutorialSampleCount}회`],
+    ["반영된 연습", `${store.shapeProfile.validatedTutorialSampleCount ?? 0}회`],
+    ["참고만 저장", `${store.shapeProfile.feedbackOnlyTutorialSampleCount ?? 0}회`],
+    ["기본 / 추가", `${store.shapeProfile.familyTutorialSampleCount ?? 0} / ${store.shapeProfile.operatorTutorialSampleCount ?? 0}`]
+  ]);
+}
+
+function renderTutorialValidationDetails(store: TutorialProfileStore): string {
+  const familyBiasRows = Object.entries(store.shapeProfile.familyThresholdBias ?? {}).map(
+    ([family, bias]) => `${familyLabel(family)} 인식 기준 조정 ${Number(bias).toFixed(3)}`
+  );
+  const operatorBiasRows = Object.entries(store.shapeProfile.operatorThresholdBias ?? {}).map(
+    ([operator, bias]) => `${operatorLabel(operator)} 인식 기준 조정 ${Number(bias).toFixed(3)}`
+  );
+  const reliabilityRows = [
+    ...Object.entries(store.shapeProfile.familyPrototypeReliability ?? {}).map(
+      ([family, reliability]) => `${familyLabel(family)} 내 손모양 신뢰도 ${Number(reliability).toFixed(2)}`
+    ),
+    ...Object.entries(store.shapeProfile.operatorPrototypeReliability ?? {}).map(
+      ([operator, reliability]) => `${operatorLabel(operator)} 내 손모양 신뢰도 ${Number(reliability).toFixed(2)}`
+    )
+  ];
+  const rows = [...familyBiasRows, ...operatorBiasRows, ...reliabilityRows].slice(0, 10);
+
+  if (rows.length === 0) {
+    return renderMetricNotes(["아직 라벨별 인식 기준이나 내 손모양 신뢰도가 생성되지 않았습니다."]);
+  }
+
+  return renderMetricNotes(rows);
 }
 
 function renderPromiseBadge(text: string, positive: boolean): string {
@@ -3020,7 +3543,7 @@ function buildShadowLane(
 
   return {
     label,
-    title: "연습 입력을 참고한 시험 계산",
+    title: "연습 입력을 참고한 계산",
     statusLabel: statusLabel(personalizedBaseStatus),
     statusTone: personalizedBaseStatus,
     baseLabel: personalizedBaseLabel ? familyLabel(personalizedBaseLabel) : "변화 없음",
@@ -3062,7 +3585,7 @@ function renderPracticeDetails(store: TutorialProfileStore): string {
 function renderHciPrinciples(): string {
   return [
     "연습 입력 전/후를 같은 화면에서 비교합니다.",
-    "최종 판정과 시험 계산을 나눠 보여 줍니다.",
+    "최종 판정과 참고 계산을 나눠 보여 줍니다.",
     "같은 모양은 같은 종류로 유지합니다.",
     "원본 선은 그대로 두고 설명용 선만 덧댑니다.",
     "추가 효과는 위치와 길이도 함께 봅니다.",
@@ -3134,7 +3657,7 @@ function summarizeShadowEffect(
   const shadow = target?.shadow;
 
   if (!shadow) {
-    return kind === "base" ? "기본 모양은 아직 시험 계산이 없습니다." : "추가 효과는 아직 시험 계산이 없습니다.";
+    return kind === "base" ? "기본 모양은 아직 참고 계산이 없습니다." : "추가 효과는 아직 참고 계산이 없습니다.";
   }
 
   const globalChanged = shadow.decisionChanged || shadow.statusChanged;
@@ -3182,15 +3705,15 @@ function renderQualitySummary(rawQuality: QualityVector, adjustedQuality: Qualit
 
   return `
     <div class="summary-row">
-      <span>raw avg</span>
+      <span>원본 평균</span>
       <strong>${(rawAverage * 100).toFixed(0)}</strong>
     </div>
     <div class="summary-row">
-      <span>adjusted avg</span>
+      <span>보정 평균</span>
       <strong>${(adjustedAverage * 100).toFixed(0)}</strong>
     </div>
     <div class="summary-row">
-      <span>delta</span>
+      <span>차이</span>
       <strong>${formatSigned(adjustedAverage - rawAverage, 3)}</strong>
     </div>
   `;

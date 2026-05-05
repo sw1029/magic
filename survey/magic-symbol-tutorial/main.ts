@@ -861,7 +861,7 @@ function renderPromptGlyph(word: SurveyPromptWord, withEffect: boolean): HTMLEle
   if (ctx) {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, glyph.width, glyph.height);
-    ctx.strokeStyle = withEffect ? effectColor(word) : "#17202a";
+    ctx.strokeStyle = "#17202a";
     ctx.lineWidth = 7;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -1432,13 +1432,3 @@ function tutorialModeInstruction(mode: SurveyCaptureMode): string {
   }
 }
 
-function effectColor(word: SurveyPromptWord): string {
-  switch (word) {
-    case "fire":
-      return "#b3261e";
-    case "water":
-      return "#0b69a3";
-    case "wind":
-      return "#207561";
-  }
-}

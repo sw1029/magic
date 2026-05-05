@@ -1,40 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-// @ts-expect-error runtime script helper has no TypeScript declaration in the app build graph
-const tutorialExportModule = (await import("../scripts/tutorial-dataset/convert-tutorial-captures.mjs")) as {
-  buildTutorialExportPlan: (
-    payload: {
-      version?: string
-      updatedAt?: number
-      userPartitionKey?: string
-      captures: Array<ReturnType<typeof makeFamilyCapture> | ReturnType<typeof makeOperatorCapture>>
-    },
-    options?: {
-      outputPath?: string
-      adaptationOut?: string
-      acceptanceOut?: string
-      manifestOut?: string
-      split?: "adaptation" | "acceptance_eval"
-      userPartitionKey?: string
-      sessionKey?: string
-    }
-  ) => {
-    records: TutorialExportRecord[]
-    manifest: {
-      contractVersion: string
-      exportMode: "locked" | "auto_holdout"
-      lockedSplit: "adaptation" | "acceptance_eval" | null
-      userPartitionKeys: string[]
-      sessionKeys: string[]
-      counts: {
-        bySplit: Record<string, number>
-      }
-    }
-  }
-  TUTORIAL_EXPORT_CONTRACT_VERSION: string
-}
-
-const { buildTutorialExportPlan, TUTORIAL_EXPORT_CONTRACT_VERSION } = tutorialExportModule
+import {
+  TUTORIAL_EXPORT_CONTRACT_VERSION,
+  buildTutorialExportPlan
+} from "../scripts/tutorial-dataset/convert-tutorial-captures.mjs"
 
 interface TutorialExportRecord {
   kind: "family" | "operator"
@@ -115,10 +84,10 @@ describe("tutorial capture export helper", () => {
   })
 })
 
-function makeFamilyCapture(expectedFamily: string, timestamp: number) {
+function makeFamilyCapture(expectedFamily: "fire" | "water", timestamp: number) {
   return {
     id: `${expectedFamily}-${timestamp}`,
-    kind: "family",
+    kind: "family" as const,
     expectedFamily,
     strokes: [
       {
@@ -130,15 +99,15 @@ function makeFamilyCapture(expectedFamily: string, timestamp: number) {
         ]
       }
     ],
-    source: "trace",
+    source: "trace" as const,
     timestamp
   }
 }
 
-function makeOperatorCapture(expectedOperator: string, timestamp: number) {
+function makeOperatorCapture(expectedOperator: "void_cut" | "ice_bar", timestamp: number) {
   return {
     id: `${expectedOperator}-${timestamp}`,
-    kind: "operator",
+    kind: "operator" as const,
     expectedOperator,
     strokes: [
       {
@@ -149,7 +118,7 @@ function makeOperatorCapture(expectedOperator: string, timestamp: number) {
         ]
       }
     ],
-    source: "variation",
+    source: "variation" as const,
     timestamp,
     baseSnapshot: {
       centroid: { x: 10, y: 10 },
@@ -159,9 +128,9 @@ function makeOperatorCapture(expectedOperator: string, timestamp: number) {
     },
     operatorContext: {
       stackIndex: 1,
-      existingOperators: ["void_cut"],
+      existingOperators: ["void_cut" as const],
       strokeBounds: { minX: 0, maxX: 12, minY: -12, maxY: 0, width: 12, height: 12 },
-      anchorZoneId: "upper_right",
+      anchorZoneId: "upper_right" as const,
       anchorScore: 0.84,
       scaleRatio: 0.33,
       angleRadians: -0.78

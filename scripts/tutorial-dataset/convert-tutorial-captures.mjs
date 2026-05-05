@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { pathToFileURL } from "node:url"
 import { writeFile } from "node:fs/promises"
 

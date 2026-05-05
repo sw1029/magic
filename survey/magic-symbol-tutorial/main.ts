@@ -263,7 +263,9 @@ function renderGuessStage(): HTMLElement {
     const play = button("효과음 재생");
     play.addEventListener("click", () => {
       state.effectPlayed = true;
-      void playSoundEffect(targetWord);
+      void playSoundEffect(targetWord).catch((error: unknown) => {
+        console.warn("sound effect playback failed", error);
+      });
       render();
     });
     prompt.append(play);
@@ -899,7 +901,14 @@ function drawCanonicalGlyph(ctx: CanvasRenderingContext2D, word: SurveyPromptWor
 }
 
 async function playSoundEffect(word: SurveyPromptWord): Promise<void> {
-  audioContext ??= new AudioContext();
+  const AudioContextConstructor = window.AudioContext ?? getWebkitAudioContext();
+
+  if (!AudioContextConstructor) {
+    console.warn("AudioContext is not available in this browser.");
+    return;
+  }
+
+  audioContext ??= new AudioContextConstructor();
   const ctx = audioContext;
   if (ctx.state === "suspended") {
     await ctx.resume();
@@ -918,6 +927,10 @@ async function playSoundEffect(word: SurveyPromptWord): Promise<void> {
   }
 
   playWindSound(ctx, now);
+}
+
+function getWebkitAudioContext(): typeof AudioContext | undefined {
+  return (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
 }
 
 function playFireSound(ctx: AudioContext, now: number): void {

@@ -10,6 +10,7 @@ export const MAX_BODY_BYTES = 32 * 1024;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 const SURVEY_PROMPT_WORDS = ["fire", "water", "wind"];
+const SURVEY_GUESS_WORDS = ["fire", "water", "wind", "tree", "stone", "lightning"];
 const SURVEY_CAPTURE_MODES = ["ideal", "fast", "comfortable"];
 const FORBIDDEN_DRAWING_FIELDS = [
   "strokes",
@@ -654,7 +655,7 @@ function validateGuessTrials(value, errors) {
 
     rejectForbiddenGuessTrialFields(item, `wordGuessTrials[${index}]`, errors);
     validatePromptWord(item.targetWord, `wordGuessTrials[${index}].targetWord`, errors);
-    validatePromptWord(item.answer, `wordGuessTrials[${index}].answer`, errors);
+    validateGuessWord(item.answer, `wordGuessTrials[${index}].answer`, errors);
     validateNumber(item.reactionMs, `wordGuessTrials[${index}].reactionMs`, 0, 600000, errors);
 
     if (typeof item.hintsEnabled !== "boolean") {
@@ -727,6 +728,12 @@ function validateLikert(value, path, errors) {
 
 function validatePromptWord(value, path, errors) {
   if (!SURVEY_PROMPT_WORDS.includes(value)) {
+    errors.push(`${path} is invalid`);
+  }
+}
+
+function validateGuessWord(value, path, errors) {
+  if (!SURVEY_GUESS_WORDS.includes(value)) {
     errors.push(`${path} is invalid`);
   }
 }

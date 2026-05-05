@@ -5,6 +5,9 @@ export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v3";
 export const SURVEY_PROMPT_WORDS = ["fire", "water", "wind"] as const;
 export type SurveyPromptWord = (typeof SURVEY_PROMPT_WORDS)[number];
 
+export const SURVEY_GUESS_WORDS = ["fire", "water", "wind", "tree", "stone", "lightning"] as const;
+export type SurveyGuessWord = (typeof SURVEY_GUESS_WORDS)[number];
+
 export const SURVEY_EXPERIMENT_GROUPS = ["shape_only", "scent_effects", "tutorial_quality"] as const;
 export type SurveyExperimentGroup = (typeof SURVEY_EXPERIMENT_GROUPS)[number];
 
@@ -40,7 +43,7 @@ export interface DirectDrawingRecord {
 
 export interface WordGuessTrialRecord {
   targetWord: SurveyPromptWord;
-  answer: SurveyPromptWord;
+  answer: SurveyGuessWord;
   reactionMs: number;
   hintsEnabled: boolean;
   effectPlayed: boolean;
@@ -111,6 +114,21 @@ export function promptWordLabel(word: SurveyPromptWord): string {
       return "물";
     case "wind":
       return "바람";
+  }
+}
+
+export function guessWordLabel(word: SurveyGuessWord): string {
+  switch (word) {
+    case "fire":
+    case "water":
+    case "wind":
+      return promptWordLabel(word);
+    case "tree":
+      return "나무";
+    case "stone":
+      return "돌";
+    case "lightning":
+      return "번개";
   }
 }
 
@@ -250,7 +268,7 @@ function validateGuessTrials(value: unknown, errors: string[]): void {
     }
     rejectForbiddenGuessTrialFields(item, `wordGuessTrials[${index}]`, errors);
     validatePromptWord(item.targetWord, `wordGuessTrials[${index}].targetWord`, errors);
-    validatePromptWord(item.answer, `wordGuessTrials[${index}].answer`, errors);
+    validateGuessWord(item.answer, `wordGuessTrials[${index}].answer`, errors);
     if (typeof item.hintsEnabled !== "boolean") {
       errors.push(`wordGuessTrials[${index}].hintsEnabled must be boolean`);
     }
@@ -375,6 +393,12 @@ function validateAsciiRows(value: unknown, path: string, errors: string[]): void
 
 function validatePromptWord(value: unknown, path: string, errors: string[]): void {
   if (!SURVEY_PROMPT_WORDS.includes(value as SurveyPromptWord)) {
+    errors.push(`${path} is invalid`);
+  }
+}
+
+function validateGuessWord(value: unknown, path: string, errors: string[]): void {
+  if (!SURVEY_GUESS_WORDS.includes(value as SurveyGuessWord)) {
     errors.push(`${path} is invalid`);
   }
 }

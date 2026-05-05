@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  SURVEY_GUESS_WORDS,
   SURVEY_SCHEMA_VERSION,
   assignExperimentGroup,
   validateSurveyRaffleContactPayload,
@@ -18,6 +19,35 @@ describe("survey response contract", () => {
 
   it("accepts the complete survey payload shape", () => {
     expect(validateSurveyResponsePayload(makePayload())).toEqual([]);
+  });
+
+  it("allows expanded word guess candidates without changing prompt words", () => {
+    expect(SURVEY_GUESS_WORDS.length).toBeGreaterThanOrEqual(6);
+    expect(validateSurveyResponsePayload(makePayload())).toEqual([]);
+    expect(
+      validateSurveyResponsePayload({
+        ...makePayload(),
+        wordGuessTrials: [
+          {
+            ...makePayload().wordGuessTrials[0],
+            answer: "stone"
+          },
+          ...makePayload().wordGuessTrials.slice(1)
+        ]
+      })
+    ).toEqual([]);
+    expect(
+      validateSurveyResponsePayload({
+        ...makePayload(),
+        wordGuessTrials: [
+          {
+            ...makePayload().wordGuessTrials[0],
+            answer: "cloud"
+          },
+          ...makePayload().wordGuessTrials.slice(1)
+        ]
+      })
+    ).toContain("wordGuessTrials[0].answer is invalid");
   });
 
   it("keeps drawing responses free of raw strokes and recognition details", () => {

@@ -1,9 +1,11 @@
 import type { Stroke } from "../../src/recognizer/types";
 import {
   SURVEY_CAPTURE_MODES,
+  SURVEY_GUESS_WORDS,
   SURVEY_PROMPT_WORDS,
   SURVEY_SCHEMA_VERSION,
   experimentGroupLabel,
+  guessWordLabel,
   promptWordLabel,
   validateSurveyRaffleContactPayload,
   validateSurveyResponsePayload
@@ -13,6 +15,7 @@ import type {
   EngineComparisonRecord,
   LikertScore,
   SurveyCaptureMode,
+  SurveyGuessWord,
   SurveyPromptWord,
   SurveyResponsePayload,
   SurveyRaffleContactPayload,
@@ -275,8 +278,8 @@ function renderGuessStage(): HTMLElement {
   side.append(element("p", "eyebrow", "응답"), element("h2", "", "가장 가까운 단어"));
   const choices = element("div", "choice-grid");
 
-  for (const word of SURVEY_PROMPT_WORDS) {
-    const choice = button(promptWordLabel(word));
+  for (const word of SURVEY_GUESS_WORDS) {
+    const choice = button(guessWordLabel(word));
     choice.addEventListener("click", () => saveGuessTrial(word));
     choices.append(choice);
   }
@@ -431,7 +434,7 @@ function saveDirectDrawing(): void {
   render();
 }
 
-function saveGuessTrial(answer: SurveyPromptWord): void {
+function saveGuessTrial(answer: SurveyGuessWord): void {
   const targetWord = SURVEY_PROMPT_WORDS[state.guessIndex];
   state.wordGuessTrials = state.wordGuessTrials.slice(0, state.guessIndex);
   state.wordGuessTrials.push({

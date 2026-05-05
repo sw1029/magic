@@ -69,6 +69,11 @@ interface AppState {
   submitError: string | null;
 }
 
+interface ApiErrorBody {
+  error?: unknown;
+  details?: unknown;
+}
+
 const rootElement = document.querySelector<HTMLDivElement>("#survey-app");
 
 if (!rootElement) {
@@ -557,7 +562,9 @@ async function submitSurvey(): Promise<void> {
     });
 
     if (!response.ok) {
-      throw new Error(`submit failed: ${response.status}`);
+      state.submitError = await describeSurveySubmitFailure(response);
+      render();
+      return;
     }
 
     state.raffleContactSubmitted = await submitRaffleContact(submissionId);
@@ -565,6 +572,43 @@ async function submitSurvey(): Promise<void> {
   } catch {
     state.submitError = "응답 제출에 실패했습니다. API 서버 상태와 네트워크를 확인해 주세요.";
     render();
+  }
+}
+
+async function describeSurveySubmitFailure(response: Response): Promise<string> {
+  let body: ApiErrorBody | null = null;
+
+  try {
+    body = (await response.json()) as ApiErrorBody;
+  } catch {
+    body = null;
+  }
+
+  const errorCode = typeof body?.error === "string" ? body.error : null;
+
+  if (body) {
+    console.warn("survey submit failed", {
+      status: response.status,
+      error: errorCode,
+      details: body.details
+    });
+  }
+
+  switch (errorCode) {
+    case "session_expired":
+      return "세션이 만료되었습니다. 페이지를 새로고침한 뒤 다시 시작해 주세요.";
+    case "csrf_failed":
+      return "보안 확인 값이 맞지 않습니다. 페이지를 새로고침한 뒤 다시 시작해 주세요.";
+    case "validation_failed":
+      return "제출 형식이 서버와 맞지 않습니다. 페이지와 API 서버가 같은 버전인지 확인해 주세요.";
+    case "duplicate_submission":
+      return "이미 제출된 응답입니다.";
+    case "rate_limited":
+      return "요청이 잠시 많습니다. 잠시 후 다시 시도해 주세요.";
+    case "origin_not_allowed":
+      return "현재 접속 주소가 API 서버에서 허용되지 않았습니다. 서버 Origin 설정을 확인해 주세요.";
+    default:
+      return `응답 제출에 실패했습니다. API 서버 상태와 네트워크를 확인해 주세요. (${response.status})`;
   }
 }
 

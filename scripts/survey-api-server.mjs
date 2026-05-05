@@ -1,12 +1,13 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { mkdir, appendFile } from "node:fs/promises";
+import { mkdir, appendFile, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v3";
 export const SURVEY_EXPERIMENT_GROUPS = ["shape_only", "scent_effects", "tutorial_quality"];
 export const MAX_BODY_BYTES = 32 * 1024;
+const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 const SURVEY_PROMPT_WORDS = ["fire", "water", "wind"];
 const SURVEY_CAPTURE_MODES = ["ideal", "fast", "comfortable"];
@@ -32,6 +33,57 @@ const DEFAULT_ALLOWED_ORIGINS = [
 export function assignExperimentGroup(seed) {
   const hash = createHash("sha256").update(String(seed)).digest();
   return SURVEY_EXPERIMENT_GROUPS[hash[0] % SURVEY_EXPERIMENT_GROUPS.length];
+}
+
+export function assignBalancedExperimentGroup(groupCounts, seed) {
+  const counts = createExperimentGroupCounts(groupCounts);
+  let lowestCount = Infinity;
+  const candidates = [];
+
+  for (const group of SURVEY_EXPERIMENT_GROUPS) {
+    const count = counts.get(group) ?? 0;
+
+    if (count < lowestCount) {
+      lowestCount = count;
+      candidates.length = 0;
+      candidates.push(group);
+      continue;
+    }
+
+    if (count === lowestCount) {
+      candidates.push(group);
+    }
+  }
+
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+
+  const hash = createHash("sha256").update(String(seed)).digest();
+  return candidates[hash[0] % candidates.length];
+}
+
+export function countExperimentGroupsFromResponseLog(text) {
+  const counts = createExperimentGroupCounts();
+
+  for (const line of String(text).split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    try {
+      const record = JSON.parse(line);
+      const group = record?.payload?.experimentGroup;
+
+      if (SURVEY_EXPERIMENT_GROUPS.includes(group)) {
+        incrementExperimentGroupCount(counts, group);
+      }
+    } catch {
+      // Ignore a malformed or partially written trailing line rather than blocking new sessions.
+    }
+  }
+
+  return Object.fromEntries(counts);
 }
 
 export function validateSurveyResponsePayload(payload) {
@@ -118,10 +170,15 @@ export function createSurveyApiServer(options = {}) {
   const raffleContactPath = resolve(options.raffleContactPath ?? join(dataDir, "survey-raffle-contacts.ndjson"));
   const allowedOrigins = new Set(options.allowedOrigins ?? readAllowedOrigins());
   const now = options.now ?? (() => Date.now());
+  const completedGroupCounts = createExperimentGroupCounts(options.initialExperimentGroupCounts);
+  const activeGroupCounts = createExperimentGroupCounts();
+  let responseLogCountsLoaded = Boolean(options.initialExperimentGroupCounts);
+  let responseLogCountsPromise = null;
 
   const server = createServer(async (request, response) => {
     try {
       const origin = request.headers.origin;
+      const timestamp = now();
 
       if (!applyCors(request, response, allowedOrigins)) {
         sendJson(response, 403, { error: "origin_not_allowed" });
@@ -134,22 +191,30 @@ export function createSurveyApiServer(options = {}) {
         return;
       }
 
-      if (!checkRateLimit(rateBuckets, clientKey(request), now())) {
+      if (!checkRateLimit(rateBuckets, clientKey(request), timestamp)) {
         sendJson(response, 429, { error: "rate_limited" });
         return;
       }
 
       const url = new URL(request.url ?? "/", "http://localhost");
+      cleanupExpiredSessions(sessions, activeGroupCounts, timestamp);
 
       if (request.method === "GET" && url.pathname === "/api/survey-session") {
+        await ensureResponseLogCountsLoaded();
         const sessionId = randomUUID();
         const csrfToken = randomUUID();
-        const experimentGroup = assignExperimentGroup(sessionId);
+        const experimentGroup = assignBalancedExperimentGroup(
+          mergeExperimentGroupCounts(completedGroupCounts, activeGroupCounts),
+          sessionId
+        );
+        incrementExperimentGroupCount(activeGroupCounts, experimentGroup);
 
         sessions.set(sessionId, {
           csrfToken,
           experimentGroup,
-          createdAt: now(),
+          createdAt: timestamp,
+          assignmentCounted: true,
+          completed: false,
           submissionIds: new Set(),
           raffleContactSubmissionIds: new Set()
         });
@@ -165,7 +230,7 @@ export function createSurveyApiServer(options = {}) {
         const sessionId = readCookie(request.headers.cookie ?? "", "survey_session");
         const session = sessionId ? sessions.get(sessionId) : undefined;
 
-        if (!session || now() - session.createdAt > 2 * 60 * 60 * 1000) {
+        if (!session || timestamp - session.createdAt > SESSION_TTL_MS) {
           sendJson(response, 401, { error: "session_expired" });
           return;
         }
@@ -203,9 +268,10 @@ export function createSurveyApiServer(options = {}) {
         await mkdir(dataDir, { recursive: true });
         await appendFile(
           responsePath,
-          `${JSON.stringify({ receivedAt: new Date(now()).toISOString(), payload })}\n`,
+          `${JSON.stringify({ receivedAt: new Date(timestamp).toISOString(), payload })}\n`,
           "utf8"
         );
+        markSessionCompleted(session, completedGroupCounts, activeGroupCounts);
 
         sendJson(response, 201, { ok: true });
         return;
@@ -215,7 +281,7 @@ export function createSurveyApiServer(options = {}) {
         const sessionId = readCookie(request.headers.cookie ?? "", "survey_session");
         const session = sessionId ? sessions.get(sessionId) : undefined;
 
-        if (!session || now() - session.createdAt > 2 * 60 * 60 * 1000) {
+        if (!session || timestamp - session.createdAt > SESSION_TTL_MS) {
           sendJson(response, 401, { error: "session_expired" });
           return;
         }
@@ -250,7 +316,7 @@ export function createSurveyApiServer(options = {}) {
         await appendFile(
           raffleContactPath,
           `${JSON.stringify({
-            receivedAt: new Date(now()).toISOString(),
+            receivedAt: new Date(timestamp).toISOString(),
             sessionId: payload.sessionId,
             submissionId: payload.submissionId,
             phone: optionalTrimmedString(payload.phone) || undefined,
@@ -283,8 +349,102 @@ export function createSurveyApiServer(options = {}) {
     server,
     sessions,
     responsePath,
-    raffleContactPath
+    raffleContactPath,
+    experimentGroupCounts: {
+      completed: completedGroupCounts,
+      active: activeGroupCounts
+    }
   };
+
+  async function ensureResponseLogCountsLoaded() {
+    if (responseLogCountsLoaded) {
+      return;
+    }
+
+    responseLogCountsPromise ??= readFile(responsePath, "utf8")
+      .then((text) => {
+        const parsedCounts = countExperimentGroupsFromResponseLog(text);
+
+        for (const group of SURVEY_EXPERIMENT_GROUPS) {
+          completedGroupCounts.set(group, parsedCounts[group] ?? 0);
+        }
+      })
+      .catch((error) => {
+        if (error?.code !== "ENOENT") {
+          throw error;
+        }
+      })
+      .finally(() => {
+        responseLogCountsLoaded = true;
+      });
+
+    await responseLogCountsPromise;
+  }
+}
+
+function createExperimentGroupCounts(source = {}) {
+  const counts = new Map();
+
+  for (const group of SURVEY_EXPERIMENT_GROUPS) {
+    const value = source instanceof Map ? source.get(group) : source[group];
+    counts.set(group, sanitizeCount(value));
+  }
+
+  return counts;
+}
+
+function sanitizeCount(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0 ? Math.floor(numberValue) : 0;
+}
+
+function incrementExperimentGroupCount(counts, group) {
+  counts.set(group, (counts.get(group) ?? 0) + 1);
+}
+
+function decrementExperimentGroupCount(counts, group) {
+  counts.set(group, Math.max(0, (counts.get(group) ?? 0) - 1));
+}
+
+function mergeExperimentGroupCounts(...sources) {
+  const merged = createExperimentGroupCounts();
+
+  for (const source of sources) {
+    for (const group of SURVEY_EXPERIMENT_GROUPS) {
+      merged.set(group, (merged.get(group) ?? 0) + (source.get(group) ?? 0));
+    }
+  }
+
+  return merged;
+}
+
+function cleanupExpiredSessions(sessions, activeGroupCounts, timestamp) {
+  for (const [sessionId, session] of sessions) {
+    if (timestamp - session.createdAt <= SESSION_TTL_MS) {
+      continue;
+    }
+
+    if (session.assignmentCounted) {
+      decrementExperimentGroupCount(activeGroupCounts, session.experimentGroup);
+      session.assignmentCounted = false;
+    }
+
+    sessions.delete(sessionId);
+  }
+}
+
+function markSessionCompleted(session, completedGroupCounts, activeGroupCounts) {
+  if (session.completed) {
+    return;
+  }
+
+  if (session.assignmentCounted) {
+    decrementExperimentGroupCount(activeGroupCounts, session.experimentGroup);
+    session.assignmentCounted = false;
+  }
+
+  incrementExperimentGroupCount(completedGroupCounts, session.experimentGroup);
+  session.completed = true;
 }
 
 function readAllowedOrigins() {

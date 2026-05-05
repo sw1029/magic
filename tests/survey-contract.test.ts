@@ -71,6 +71,26 @@ describe("survey response contract", () => {
     expect(payload.wordGuessTrials[0]).not.toHaveProperty("confidence");
   });
 
+  it("requires relative timestamps in drawing trace points", () => {
+    const payload = makePayload();
+
+    expect(payload.directDrawings[0].shapeTrace[0][0]).toEqual([100, 120, 0]);
+    expect(
+      validateSurveyResponsePayload({
+        ...payload,
+        directDrawings: [
+          {
+            ...payload.directDrawings[0],
+            shapeTrace: [[[100, 120]]]
+          },
+          ...payload.directDrawings.slice(1)
+        ]
+      })
+    ).toContain(
+      "directDrawings[0].shapeTrace[0][0] must be [x,y,tMs] integers with x/y 0-1000 and tMs 0-600000"
+    );
+  });
+
   it("rejects contact details in the survey response payload", () => {
     const errors = validateSurveyResponsePayload({
       ...makePayload(),
@@ -161,9 +181,9 @@ export function makePayload(overrides: Partial<SurveyResponsePayload> = {}): Sur
       targetWord: targetWord as "fire" | "water" | "wind",
       shapeTrace: [
         [
-          [100, 120],
-          [360, 520],
-          [620, 120]
+          [100, 120, 0],
+          [360, 520, 320],
+          [620, 120, 780]
         ]
       ],
       elapsedMs: 1200
@@ -180,9 +200,9 @@ export function makePayload(overrides: Partial<SurveyResponsePayload> = {}): Sur
       mode: mode as "ideal" | "fast" | "comfortable",
       shapeTrace: [
         [
-          [100, 120],
-          [360, 520],
-          [620, 120]
+          [100, 120, 0],
+          [360, 520, 260],
+          [620, 120, 650]
         ]
       ],
       elapsedMs: 1000

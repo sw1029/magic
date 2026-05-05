@@ -14,6 +14,7 @@ import type {
   DirectDrawingRecord,
   EngineComparisonRecord,
   LikertScore,
+  ShapeTrace,
   SurveyCaptureMode,
   SurveyGuessWord,
   SurveyPromptWord,
@@ -1123,10 +1124,11 @@ function drawingStatusPanel(context: "draw" | "tutorial"): HTMLElement {
   return panel;
 }
 
-function createShapeTrace(strokes: Stroke[]): Array<Array<[number, number]>> {
-  return strokes
-    .filter((stroke) => stroke.points.length >= 1)
-    .map((stroke) => {
+function createShapeTrace(strokes: Stroke[]): ShapeTrace {
+  const drawableStrokes = strokes.filter((stroke) => stroke.points.length >= 1);
+  const startedAt = drawableStrokes[0]?.points[0]?.t ?? 0;
+
+  return drawableStrokes.map((stroke) => {
       const count = Math.min(stroke.points.length, 32);
 
       return Array.from({ length: count }, (_, index) => {
@@ -1134,7 +1136,8 @@ function createShapeTrace(strokes: Stroke[]): Array<Array<[number, number]>> {
         const point = stroke.points[sourceIndex];
         return [
           Math.round((point.x / CANVAS_WIDTH) * 1000),
-          Math.round((point.y / CANVAS_HEIGHT) * 1000)
+          Math.round((point.y / CANVAS_HEIGHT) * 1000),
+          Math.max(0, Math.round(point.t - startedAt))
         ];
       });
     });

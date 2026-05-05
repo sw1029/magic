@@ -4,9 +4,9 @@ import { mkdir, appendFile, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v3";
+export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v4";
 export const SURVEY_EXPERIMENT_GROUPS = ["shape_only", "scent_effects", "tutorial_quality"];
-export const MAX_BODY_BYTES = 32 * 1024;
+export const MAX_BODY_BYTES = 64 * 1024;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 const SURVEY_PROMPT_WORDS = ["fire", "water", "wind"];
@@ -631,13 +631,25 @@ function validateShapeTrace(value, path, errors) {
     stroke.forEach((point, pointIndex) => {
       if (
         !Array.isArray(point) ||
-        point.length !== 2 ||
-        !point.every((coordinate) => Number.isInteger(coordinate) && coordinate >= 0 && coordinate <= 1000)
+        point.length !== 3 ||
+        !isCoordinate(point[0]) ||
+        !isCoordinate(point[1]) ||
+        !isRelativeTimestamp(point[2])
       ) {
-        errors.push(`${path}[${strokeIndex}][${pointIndex}] must be [x,y] integers between 0 and 1000`);
+        errors.push(
+          `${path}[${strokeIndex}][${pointIndex}] must be [x,y,tMs] integers with x/y 0-1000 and tMs 0-600000`
+        );
       }
     });
   });
+}
+
+function isCoordinate(value) {
+  return Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 1000;
+}
+
+function isRelativeTimestamp(value) {
+  return Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 600000;
 }
 
 function validateGuessTrials(value, errors) {

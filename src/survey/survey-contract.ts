@@ -1,6 +1,6 @@
 import type { GlyphFamily } from "../recognizer/types";
 
-export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v3";
+export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v4";
 
 export const SURVEY_PROMPT_WORDS = ["fire", "water", "wind"] as const;
 export type SurveyPromptWord = (typeof SURVEY_PROMPT_WORDS)[number];
@@ -15,7 +15,8 @@ export const SURVEY_CAPTURE_MODES = ["ideal", "fast", "comfortable"] as const;
 export type SurveyCaptureMode = (typeof SURVEY_CAPTURE_MODES)[number];
 
 export type LikertScore = 1 | 2 | 3 | 4 | 5;
-export type ShapeTrace = Array<Array<[number, number]>>;
+export type ShapeTracePoint = [x: number, y: number, tMs: number];
+export type ShapeTrace = Array<Array<ShapeTracePoint>>;
 
 const FORBIDDEN_DRAWING_FIELDS = [
   "strokes",
@@ -321,13 +322,25 @@ function validateShapeTrace(value: unknown, path: string, errors: string[]): voi
     stroke.forEach((point, pointIndex) => {
       if (
         !Array.isArray(point) ||
-        point.length !== 2 ||
-        !point.every((coordinate) => Number.isInteger(coordinate) && coordinate >= 0 && coordinate <= 1000)
+        point.length !== 3 ||
+        !isCoordinate(point[0]) ||
+        !isCoordinate(point[1]) ||
+        !isRelativeTimestamp(point[2])
       ) {
-        errors.push(`${path}[${strokeIndex}][${pointIndex}] must be [x,y] integers between 0 and 1000`);
+        errors.push(
+          `${path}[${strokeIndex}][${pointIndex}] must be [x,y,tMs] integers with x/y 0-1000 and tMs 0-600000`
+        );
       }
     });
   });
+}
+
+function isCoordinate(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 1000;
+}
+
+function isRelativeTimestamp(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 600000;
 }
 
 function validateEngineComparison(value: unknown, errors: string[]): void {

@@ -9,3 +9,6 @@ tmp
 .tmp
 __pycache__/
 *.pyc
+
+.codex/
+.claude/

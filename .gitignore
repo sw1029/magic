@@ -9,6 +9,3 @@ tmp
 .tmp
 __pycache__/
 *.pyc
-
-*.md
-.codex

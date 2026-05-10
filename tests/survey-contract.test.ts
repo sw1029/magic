@@ -91,6 +91,28 @@ describe("survey response contract", () => {
     );
   });
 
+  it("accepts survey interaction metrics and not-applicable scent ratings", () => {
+    const payload = makePayload();
+
+    expect(payload.selfReport.scentHelpfulness).toBe("not_applicable");
+    expect(payload.interactionMetrics.stageDurationsMs.engine).toBeGreaterThan(0);
+    expect(payload.wordGuessTrials[0].effectPlayCount).toBe(0);
+    expect(payload.engineComparison.understandingAfter).toBe(4);
+    expect(validateSurveyResponsePayload(payload)).toEqual([]);
+    expect(
+      validateSurveyResponsePayload({
+        ...payload,
+        interactionMetrics: {
+          ...payload.interactionMetrics,
+          resetCounts: {
+            ...payload.interactionMetrics.resetCounts,
+            asciiTutorial: -1
+          }
+        }
+      })
+    ).toContain("interactionMetrics.resetCounts.asciiTutorial must be a number between 0 and 200");
+  });
+
   it("rejects contact details in the survey response payload", () => {
     const errors = validateSurveyResponsePayload({
       ...makePayload(),
@@ -193,7 +215,8 @@ export function makePayload(overrides: Partial<SurveyResponsePayload> = {}): Sur
       answer: targetWord as "fire" | "water" | "wind",
       reactionMs: 900,
       hintsEnabled: false,
-      effectPlayed: false
+      effectPlayed: false,
+      effectPlayCount: 0
     })),
     tutorialCaptures: ["ideal", "fast", "comfortable"].map((mode) => ({
       targetWord: "fire",
@@ -208,20 +231,72 @@ export function makePayload(overrides: Partial<SurveyResponsePayload> = {}): Sur
       elapsedMs: 1000
     })),
     engineComparison: {
+      understandingBefore: 2,
+      understandingAfter: 4,
+      taskDifficulty: 3,
       turnTutorialRating: 3,
       contractClarityRating: 4,
       preferredMode: "turn_tutorial",
       interactionSummary: "turn 2: burning 4, charge 0, water 42, ice 0",
       asciiBefore: [...BLANK_50],
-      asciiAfter: [...BLANK_50]
+      asciiAfter: [...BLANK_50],
+      actionLog: [
+        {
+          turn: 1,
+          action: "오른쪽 이동",
+          player: {
+            row: 24,
+            column: 8,
+            facing: "east"
+          },
+          result: "오른쪽으로 한 칸 이동했습니다."
+        }
+      ],
+      goals: [
+        {
+          id: "move",
+          label: "방향 버튼으로 한 칸 이동하기",
+          completed: true,
+          completedTurn: 1
+        },
+        {
+          id: "ignite",
+          label: "불 버튼으로 나무 상태 바꾸기",
+          completed: false
+        },
+        {
+          id: "observe",
+          label: "턴 변화와 하단 로그 확인하기",
+          completed: true,
+          completedTurn: 1
+        }
+      ],
+      actionCount: 1
     },
     selfReport: {
       tutorialInstructionClarity: 4,
       tutorialLearningEfficiency: 4,
-      scentHelpfulness: 3,
+      scentHelpfulness: "not_applicable",
       overallClarity: 4,
       strengths: "clear",
       weaknesses: ""
+    },
+    interactionMetrics: {
+      promptOrder: ["fire", "water", "wind"],
+      stageDurationsMs: {
+        consent: 500,
+        draw: 2300,
+        guess: 1800,
+        tutorial: 2100,
+        engine: 1700,
+        "self-report": 900
+      },
+      previousClicks: 0,
+      resetCounts: {
+        directDrawing: 0,
+        tutorialCapture: 0,
+        asciiTutorial: 0
+      }
     },
     ...overrides
   };

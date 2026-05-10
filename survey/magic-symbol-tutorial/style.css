@@ -303,6 +303,15 @@ button.primary {
   color: #17202a;
 }
 
+.readonly-field {
+  width: 100%;
+  border: 1px solid #dce2e8;
+  border-radius: 8px;
+  padding: 0.65rem;
+  background: #f8fafc;
+  color: #536170;
+}
+
 .raffle-contact {
   display: grid;
   gap: 2px;
@@ -327,6 +336,13 @@ button.primary {
   margin-top: 14px;
 }
 
+.map-view-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
 .ascii-block pre {
   margin: 0;
   border: 1px solid #dce2e8;
@@ -340,9 +356,15 @@ button.primary {
 }
 
 .ascii-block.large pre {
-  max-height: 560px;
+  max-height: 360px;
   font-size: 0.72rem;
   line-height: 1.08;
+}
+
+.ascii-block.focus pre {
+  min-height: 260px;
+  font-size: 1rem;
+  line-height: 1.18;
 }
 
 .error-text {
@@ -378,6 +400,53 @@ button.primary {
 .turn-tutorial {
   display: grid;
   gap: 10px;
+}
+
+.game-goals,
+.action-log-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e0e5ea;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.goal-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.goal-item {
+  display: grid;
+  gap: 4px;
+  min-height: 70px;
+  border: 1px solid #dce2e8;
+  border-radius: 8px;
+  padding: 0.6rem;
+  background: #fbfcfd;
+}
+
+.goal-item.done {
+  border-color: #9bb7aa;
+  background: #f4faf7;
+}
+
+.goal-state {
+  width: fit-content;
+  border: 1px solid #dce2e8;
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+  color: #536170;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.goal-item.done .goal-state {
+  border-color: #9bb7aa;
+  color: #236045;
+  background: #ffffff;
 }
 
 .turn-control-group {
@@ -443,6 +512,16 @@ button.primary {
   color: #4f5d6b;
 }
 
+.action-log {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #4f5d6b;
+}
+
+.action-log li + li {
+  margin-top: 4px;
+}
+
 @media (max-width: 900px) {
   .survey-header,
   .stage-grid {
@@ -467,6 +546,14 @@ button.primary {
 
   .contract-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .map-view-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .goal-list {
+    grid-template-columns: 1fr;
   }
 
   .contract-item {

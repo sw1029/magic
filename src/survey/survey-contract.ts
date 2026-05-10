@@ -1,6 +1,6 @@
 import type { GlyphFamily } from "../recognizer/types";
 
-export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v4";
+export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v6";
 
 export const SURVEY_PROMPT_WORDS = ["fire", "water", "wind"] as const;
 export type SurveyPromptWord = (typeof SURVEY_PROMPT_WORDS)[number];
@@ -15,8 +15,10 @@ export const SURVEY_CAPTURE_MODES = ["ideal", "fast", "comfortable"] as const;
 export type SurveyCaptureMode = (typeof SURVEY_CAPTURE_MODES)[number];
 
 export type LikertScore = 1 | 2 | 3 | 4 | 5;
+export type LikertOrNotApplicable = LikertScore | "not_applicable";
 export type ShapeTracePoint = [x: number, y: number, tMs: number];
 export type ShapeTrace = Array<Array<ShapeTracePoint>>;
+export type SurveyStageName = "consent" | "draw" | "guess" | "tutorial" | "engine" | "self-report";
 
 const FORBIDDEN_DRAWING_FIELDS = [
   "strokes",
@@ -48,6 +50,7 @@ export interface WordGuessTrialRecord {
   reactionMs: number;
   hintsEnabled: boolean;
   effectPlayed: boolean;
+  effectPlayCount: number;
 }
 
 export interface TutorialCaptureRecord {
@@ -58,21 +61,56 @@ export interface TutorialCaptureRecord {
 }
 
 export interface EngineComparisonRecord {
+  understandingBefore: LikertScore;
+  understandingAfter: LikertScore;
+  taskDifficulty: LikertScore;
   turnTutorialRating: LikertScore;
   contractClarityRating: LikertScore;
   preferredMode: "turn_tutorial" | "contract_notes" | "same";
   interactionSummary: string;
   asciiBefore: string[];
   asciiAfter: string[];
+  actionLog: AsciiActionLogRecord[];
+  goals: AsciiGoalRecord[];
+  actionCount: number;
 }
 
 export interface SurveySelfReportRecord {
   tutorialInstructionClarity: LikertScore;
   tutorialLearningEfficiency: LikertScore;
-  scentHelpfulness: LikertScore;
+  scentHelpfulness: LikertOrNotApplicable;
   overallClarity: LikertScore;
   strengths: string;
   weaknesses: string;
+}
+
+export interface AsciiActionLogRecord {
+  turn: number;
+  action: string;
+  player: {
+    row: number;
+    column: number;
+    facing: string;
+  };
+  result: string;
+}
+
+export interface AsciiGoalRecord {
+  id: "move" | "ignite" | "observe";
+  label: string;
+  completed: boolean;
+  completedTurn?: number;
+}
+
+export interface SurveyInteractionMetricsRecord {
+  promptOrder: SurveyPromptWord[];
+  stageDurationsMs: Partial<Record<SurveyStageName, number>>;
+  previousClicks: number;
+  resetCounts: {
+    directDrawing: number;
+    tutorialCapture: number;
+    asciiTutorial: number;
+  };
 }
 
 export interface SurveyResponsePayload {
@@ -86,6 +124,7 @@ export interface SurveyResponsePayload {
   tutorialCaptures: TutorialCaptureRecord[];
   engineComparison: EngineComparisonRecord;
   selfReport: SurveySelfReportRecord;
+  interactionMetrics: SurveyInteractionMetricsRecord;
 }
 
 export interface SurveyRaffleContactPayload {
@@ -192,6 +231,7 @@ export function validateSurveyResponsePayload(value: unknown): string[] {
   validateTutorialCaptures(value.tutorialCaptures, errors);
   validateEngineComparison(value.engineComparison, errors);
   validateSelfReport(value.selfReport, errors);
+  validateInteractionMetrics(value.interactionMetrics, errors);
 
   return errors;
 }
@@ -276,6 +316,7 @@ function validateGuessTrials(value: unknown, errors: string[]): void {
     if (typeof item.effectPlayed !== "boolean") {
       errors.push(`wordGuessTrials[${index}].effectPlayed must be boolean`);
     }
+    validateNumber(item.effectPlayCount, `wordGuessTrials[${index}].effectPlayCount`, 0, 20, errors);
     validateNumber(item.reactionMs, `wordGuessTrials[${index}].reactionMs`, 0, 600000, errors);
   });
 }
@@ -348,6 +389,9 @@ function validateEngineComparison(value: unknown, errors: string[]): void {
     errors.push("engineComparison must be an object");
     return;
   }
+  validateLikert(value.understandingBefore, "engineComparison.understandingBefore", errors);
+  validateLikert(value.understandingAfter, "engineComparison.understandingAfter", errors);
+  validateLikert(value.taskDifficulty, "engineComparison.taskDifficulty", errors);
   validateLikert(value.turnTutorialRating, "engineComparison.turnTutorialRating", errors);
   validateLikert(value.contractClarityRating, "engineComparison.contractClarityRating", errors);
   if (!["turn_tutorial", "contract_notes", "same"].includes(String(value.preferredMode))) {
@@ -356,6 +400,9 @@ function validateEngineComparison(value: unknown, errors: string[]): void {
   validateStringLength(value.interactionSummary, "engineComparison.interactionSummary", 1, 300, errors);
   validateAsciiRows(value.asciiBefore, "engineComparison.asciiBefore", errors);
   validateAsciiRows(value.asciiAfter, "engineComparison.asciiAfter", errors);
+  validateAsciiActionLog(value.actionLog, errors);
+  validateAsciiGoals(value.goals, errors);
+  validateNumber(value.actionCount, "engineComparison.actionCount", 0, 200, errors);
 }
 
 function validateSelfReport(value: unknown, errors: string[]): void {
@@ -367,14 +414,106 @@ function validateSelfReport(value: unknown, errors: string[]): void {
   for (const key of [
     "tutorialInstructionClarity",
     "tutorialLearningEfficiency",
-    "scentHelpfulness",
     "overallClarity"
   ]) {
     validateLikert(value[key], `selfReport.${key}`, errors);
   }
 
+  validateLikertOrNotApplicable(value.scentHelpfulness, "selfReport.scentHelpfulness", errors);
   validateStringLength(value.strengths, "selfReport.strengths", 0, 1000, errors);
   validateStringLength(value.weaknesses, "selfReport.weaknesses", 0, 1000, errors);
+}
+
+function validateAsciiActionLog(value: unknown, errors: string[]): void {
+  if (!Array.isArray(value) || value.length > 120) {
+    errors.push("engineComparison.actionLog must contain 0-120 items");
+    return;
+  }
+
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      errors.push(`engineComparison.actionLog[${index}] must be an object`);
+      return;
+    }
+
+    validateNumber(item.turn, `engineComparison.actionLog[${index}].turn`, 0, 200, errors);
+    validateStringLength(item.action, `engineComparison.actionLog[${index}].action`, 1, 40, errors);
+    validateStringLength(item.result, `engineComparison.actionLog[${index}].result`, 0, 300, errors);
+
+    if (!isRecord(item.player)) {
+      errors.push(`engineComparison.actionLog[${index}].player must be an object`);
+      return;
+    }
+
+    validateNumber(item.player.row, `engineComparison.actionLog[${index}].player.row`, 0, 49, errors);
+    validateNumber(item.player.column, `engineComparison.actionLog[${index}].player.column`, 0, 49, errors);
+    validateStringLength(item.player.facing, `engineComparison.actionLog[${index}].player.facing`, 2, 12, errors);
+  });
+}
+
+function validateAsciiGoals(value: unknown, errors: string[]): void {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 6) {
+    errors.push("engineComparison.goals must contain 1-6 items");
+    return;
+  }
+
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      errors.push(`engineComparison.goals[${index}] must be an object`);
+      return;
+    }
+
+    if (!["move", "ignite", "observe"].includes(String(item.id))) {
+      errors.push(`engineComparison.goals[${index}].id is invalid`);
+    }
+    validateStringLength(item.label, `engineComparison.goals[${index}].label`, 1, 80, errors);
+    if (typeof item.completed !== "boolean") {
+      errors.push(`engineComparison.goals[${index}].completed must be boolean`);
+    }
+    if (item.completedTurn !== undefined) {
+      validateNumber(item.completedTurn, `engineComparison.goals[${index}].completedTurn`, 0, 200, errors);
+    }
+  });
+}
+
+function validateInteractionMetrics(value: unknown, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push("interactionMetrics must be an object");
+    return;
+  }
+
+  if (!Array.isArray(value.promptOrder) || value.promptOrder.length !== SURVEY_PROMPT_WORDS.length) {
+    errors.push("interactionMetrics.promptOrder must include prompt words");
+  } else {
+    for (const word of SURVEY_PROMPT_WORDS) {
+      if (!value.promptOrder.includes(word)) {
+        errors.push(`interactionMetrics.promptOrder missing ${word}`);
+      }
+    }
+  }
+
+  if (!isRecord(value.stageDurationsMs)) {
+    errors.push("interactionMetrics.stageDurationsMs must be an object");
+  } else {
+    for (const [stage, duration] of Object.entries(value.stageDurationsMs)) {
+      if (!["consent", "draw", "guess", "tutorial", "engine", "self-report"].includes(stage)) {
+        errors.push(`interactionMetrics.stageDurationsMs.${stage} is invalid`);
+        continue;
+      }
+      validateNumber(duration, `interactionMetrics.stageDurationsMs.${stage}`, 0, 600000, errors);
+    }
+  }
+
+  validateNumber(value.previousClicks, "interactionMetrics.previousClicks", 0, 200, errors);
+
+  if (!isRecord(value.resetCounts)) {
+    errors.push("interactionMetrics.resetCounts must be an object");
+    return;
+  }
+
+  validateNumber(value.resetCounts.directDrawing, "interactionMetrics.resetCounts.directDrawing", 0, 200, errors);
+  validateNumber(value.resetCounts.tutorialCapture, "interactionMetrics.resetCounts.tutorialCapture", 0, 200, errors);
+  validateNumber(value.resetCounts.asciiTutorial, "interactionMetrics.resetCounts.asciiTutorial", 0, 200, errors);
 }
 
 function rejectForbiddenDrawingFields(value: Record<string, unknown>, path: string, errors: string[]): void {
@@ -426,6 +565,14 @@ function validateLikert(value: unknown, path: string, errors: string[]): void {
   if (![1, 2, 3, 4, 5].includes(Number(value))) {
     errors.push(`${path} must be a 1-5 score`);
   }
+}
+
+function validateLikertOrNotApplicable(value: unknown, path: string, errors: string[]): void {
+  if (value === "not_applicable") {
+    return;
+  }
+
+  validateLikert(value, path, errors);
 }
 
 function validateNumber(value: unknown, path: string, min: number, max: number, errors: string[]): void {

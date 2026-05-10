@@ -4,9 +4,9 @@ import { mkdir, appendFile, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v4";
+export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v6";
 export const SURVEY_EXPERIMENT_GROUPS = ["shape_only", "scent_effects", "tutorial_quality"];
-export const MAX_BODY_BYTES = 64 * 1024;
+export const MAX_BODY_BYTES = 96 * 1024;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 const SURVEY_PROMPT_WORDS = ["fire", "water", "wind"];
@@ -123,6 +123,7 @@ export function validateSurveyResponsePayload(payload) {
   validateTutorialCaptures(payload.tutorialCaptures, errors);
   validateEngineComparison(payload.engineComparison, errors);
   validateSelfReport(payload.selfReport, errors);
+  validateInteractionMetrics(payload.interactionMetrics, errors);
 
   return errors;
 }
@@ -547,6 +548,9 @@ function validateEngineComparison(value, errors) {
     return;
   }
 
+  validateLikert(value.understandingBefore, "engineComparison.understandingBefore", errors);
+  validateLikert(value.understandingAfter, "engineComparison.understandingAfter", errors);
+  validateLikert(value.taskDifficulty, "engineComparison.taskDifficulty", errors);
   validateLikert(value.turnTutorialRating, "engineComparison.turnTutorialRating", errors);
   validateLikert(value.contractClarityRating, "engineComparison.contractClarityRating", errors);
 
@@ -557,6 +561,9 @@ function validateEngineComparison(value, errors) {
   validateStringLength(value.interactionSummary, "engineComparison.interactionSummary", 1, 300, errors);
   validateAsciiRows(value.asciiBefore, "engineComparison.asciiBefore", errors);
   validateAsciiRows(value.asciiAfter, "engineComparison.asciiAfter", errors);
+  validateAsciiActionLog(value.actionLog, errors);
+  validateAsciiGoals(value.goals, errors);
+  validateNumber(value.actionCount, "engineComparison.actionCount", 0, 200, errors);
 }
 
 function validateDirectDrawings(value, errors) {
@@ -677,6 +684,8 @@ function validateGuessTrials(value, errors) {
     if (typeof item.effectPlayed !== "boolean") {
       errors.push(`wordGuessTrials[${index}].effectPlayed must be boolean`);
     }
+
+    validateNumber(item.effectPlayCount, `wordGuessTrials[${index}].effectPlayCount`, 0, 20, errors);
   });
 }
 
@@ -689,14 +698,106 @@ function validateSelfReport(value, errors) {
   for (const key of [
     "tutorialInstructionClarity",
     "tutorialLearningEfficiency",
-    "scentHelpfulness",
     "overallClarity"
   ]) {
     validateLikert(value[key], `selfReport.${key}`, errors);
   }
 
+  validateLikertOrNotApplicable(value.scentHelpfulness, "selfReport.scentHelpfulness", errors);
   validateStringLength(value.strengths, "selfReport.strengths", 0, 1000, errors);
   validateStringLength(value.weaknesses, "selfReport.weaknesses", 0, 1000, errors);
+}
+
+function validateAsciiActionLog(value, errors) {
+  if (!Array.isArray(value) || value.length > 120) {
+    errors.push("engineComparison.actionLog must contain 0-120 items");
+    return;
+  }
+
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      errors.push(`engineComparison.actionLog[${index}] must be an object`);
+      return;
+    }
+
+    validateNumber(item.turn, `engineComparison.actionLog[${index}].turn`, 0, 200, errors);
+    validateStringLength(item.action, `engineComparison.actionLog[${index}].action`, 1, 40, errors);
+    validateStringLength(item.result, `engineComparison.actionLog[${index}].result`, 0, 300, errors);
+
+    if (!isRecord(item.player)) {
+      errors.push(`engineComparison.actionLog[${index}].player must be an object`);
+      return;
+    }
+
+    validateNumber(item.player.row, `engineComparison.actionLog[${index}].player.row`, 0, 49, errors);
+    validateNumber(item.player.column, `engineComparison.actionLog[${index}].player.column`, 0, 49, errors);
+    validateStringLength(item.player.facing, `engineComparison.actionLog[${index}].player.facing`, 2, 12, errors);
+  });
+}
+
+function validateAsciiGoals(value, errors) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 6) {
+    errors.push("engineComparison.goals must contain 1-6 items");
+    return;
+  }
+
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      errors.push(`engineComparison.goals[${index}] must be an object`);
+      return;
+    }
+
+    if (!["move", "ignite", "observe"].includes(String(item.id))) {
+      errors.push(`engineComparison.goals[${index}].id is invalid`);
+    }
+    validateStringLength(item.label, `engineComparison.goals[${index}].label`, 1, 80, errors);
+    if (typeof item.completed !== "boolean") {
+      errors.push(`engineComparison.goals[${index}].completed must be boolean`);
+    }
+    if (item.completedTurn !== undefined) {
+      validateNumber(item.completedTurn, `engineComparison.goals[${index}].completedTurn`, 0, 200, errors);
+    }
+  });
+}
+
+function validateInteractionMetrics(value, errors) {
+  if (!isRecord(value)) {
+    errors.push("interactionMetrics must be an object");
+    return;
+  }
+
+  if (!Array.isArray(value.promptOrder) || value.promptOrder.length !== SURVEY_PROMPT_WORDS.length) {
+    errors.push("interactionMetrics.promptOrder must include prompt words");
+  } else {
+    for (const word of SURVEY_PROMPT_WORDS) {
+      if (!value.promptOrder.includes(word)) {
+        errors.push(`interactionMetrics.promptOrder missing ${word}`);
+      }
+    }
+  }
+
+  if (!isRecord(value.stageDurationsMs)) {
+    errors.push("interactionMetrics.stageDurationsMs must be an object");
+  } else {
+    for (const [stage, duration] of Object.entries(value.stageDurationsMs)) {
+      if (!["consent", "draw", "guess", "tutorial", "engine", "self-report"].includes(stage)) {
+        errors.push(`interactionMetrics.stageDurationsMs.${stage} is invalid`);
+        continue;
+      }
+      validateNumber(duration, `interactionMetrics.stageDurationsMs.${stage}`, 0, 600000, errors);
+    }
+  }
+
+  validateNumber(value.previousClicks, "interactionMetrics.previousClicks", 0, 200, errors);
+
+  if (!isRecord(value.resetCounts)) {
+    errors.push("interactionMetrics.resetCounts must be an object");
+    return;
+  }
+
+  validateNumber(value.resetCounts.directDrawing, "interactionMetrics.resetCounts.directDrawing", 0, 200, errors);
+  validateNumber(value.resetCounts.tutorialCapture, "interactionMetrics.resetCounts.tutorialCapture", 0, 200, errors);
+  validateNumber(value.resetCounts.asciiTutorial, "interactionMetrics.resetCounts.asciiTutorial", 0, 200, errors);
 }
 
 function rejectForbiddenDrawingFields(value, path, errors) {
@@ -736,6 +837,14 @@ function validateLikert(value, path, errors) {
   if (![1, 2, 3, 4, 5].includes(Number(value))) {
     errors.push(`${path} must be a 1-5 score`);
   }
+}
+
+function validateLikertOrNotApplicable(value, path, errors) {
+  if (value === "not_applicable") {
+    return;
+  }
+
+  validateLikert(value, path, errors);
 }
 
 function validatePromptWord(value, path, errors) {

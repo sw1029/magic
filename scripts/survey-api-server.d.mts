@@ -2,10 +2,13 @@ import type { Server } from "node:http";
 
 export const SURVEY_SCHEMA_VERSION: string;
 export const SURVEY_EXPERIMENT_GROUPS: string[];
+export const SURVEY_HCI_PROBE_VARIANTS: string[];
 export const MAX_BODY_BYTES: number;
 export function assignExperimentGroup(seed: string): string;
 export function assignBalancedExperimentGroup(groupCounts: Record<string, number> | Map<string, number>, seed: string): string;
+export function assignBalancedHciProbeVariant(variantCounts: Record<string, number> | Map<string, number>, seed: string): string;
 export function countExperimentGroupsFromResponseLog(text: string): Record<string, number>;
+export function countExperimentCellsFromResponseLog(text: string): Record<string, Record<string, number>>;
 export function validateSurveyResponsePayload(payload: unknown): string[];
 export function validateSurveyRaffleContactPayload(payload: unknown): string[];
 export function createSurveyApiServer(options?: {
@@ -13,6 +16,7 @@ export function createSurveyApiServer(options?: {
   responsePath?: string;
   raffleContactPath?: string;
   initialExperimentGroupCounts?: Record<string, number> | Map<string, number>;
+  initialExperimentCellCounts?: Record<string, Record<string, number>> | Map<string, Map<string, number>>;
   allowedOrigins?: string[];
   now?: () => number;
 }): {
@@ -23,5 +27,9 @@ export function createSurveyApiServer(options?: {
   experimentGroupCounts: {
     completed: Map<string, number>;
     active: Map<string, number>;
+  };
+  experimentCellCounts: {
+    completed: Map<string, Map<string, number>>;
+    active: Map<string, Map<string, number>>;
   };
 };

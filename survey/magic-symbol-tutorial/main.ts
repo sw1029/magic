@@ -2,6 +2,7 @@ import type { Stroke } from "../../src/recognizer/types";
 import {
   SURVEY_CAPTURE_MODES,
   SURVEY_GUESS_WORDS,
+  SURVEY_HCI_PROBE_VARIANTS,
   SURVEY_PROMPT_WORDS,
   SURVEY_SCHEMA_VERSION,
   experimentGroupLabel,
@@ -16,9 +17,11 @@ import type {
   LikertOrNotApplicable,
   LikertScore,
   ShapeTrace,
+  SurveyEffectHeard,
   SurveyInteractionMetricsRecord,
   SurveyCaptureMode,
   SurveyGuessWord,
+  SurveyHciProbeVariant,
   SurveyStageName,
   SurveyPromptWord,
   SurveyResponsePayload,
@@ -79,9 +82,16 @@ interface AppState {
   raffleContactSubmitted: boolean;
   effectPlayed: boolean;
   effectPlayCount: number;
-  engineUnderstandingBefore: LikertScore;
-  engineUnderstandingAfter: LikertScore;
-  engineTaskDifficulty: LikertScore;
+  pendingGuessAnswer: SurveyGuessWord | null;
+  guessConfidence: LikertScore | null;
+  guessEffectHeard: SurveyEffectHeard | null;
+  directExpressionDifficulty: LikertScore | null;
+  directExpressionReason: string;
+  engineUnderstandingBefore: LikertScore | null;
+  engineUnderstandingAfter: LikertScore | null;
+  engineTaskDifficulty: LikertScore | null;
+  engineTurnRating: LikertScore | null;
+  engineContractRating: LikertScore | null;
   submitError: string | null;
 }
 
@@ -135,6 +145,7 @@ function createInitialState(): AppState {
       tutorialLearningEfficiency: 3,
       scentHelpfulness: "not_applicable",
       overallClarity: 3,
+      workloadRating: 3,
       strengths: "",
       weaknesses: ""
     },
@@ -152,9 +163,16 @@ function createInitialState(): AppState {
     raffleContactSubmitted: false,
     effectPlayed: false,
     effectPlayCount: 0,
-    engineUnderstandingBefore: 3,
-    engineUnderstandingAfter: 3,
-    engineTaskDifficulty: 3,
+    pendingGuessAnswer: null,
+    guessConfidence: null,
+    guessEffectHeard: null,
+    directExpressionDifficulty: null,
+    directExpressionReason: "",
+    engineUnderstandingBefore: null,
+    engineUnderstandingAfter: null,
+    engineTaskDifficulty: null,
+    engineTurnRating: null,
+    engineContractRating: null,
     submitError: null
   };
 }
@@ -210,6 +228,7 @@ function createHeader(): HTMLElement {
   meta.append(
     pill(state.session ? "설문 세션" : "세션 대기"),
     pill("익명 세션"),
+    pill("예상 5-8분"),
     pill("외부 에셋 없음")
   );
   header.append(titleWrap, meta);
@@ -297,13 +316,30 @@ function renderDrawingStage(): HTMLElement {
     element("p", "eyebrow", "표현 과제"),
     element("h2", "", `${state.directIndex + 1} / ${SURVEY_PROMPT_WORDS.length}`),
     paragraph(`현재 단어: ${promptWordLabel(word)}`),
-    drawingStatusPanel("draw")
+    drawingStatusPanel("draw"),
+    controlledLikertField(
+      "이 단어를 도형으로 표현하기 얼마나 어려웠나요? (1 쉬움, 5 어려움)",
+      "expression-difficulty",
+      state.directExpressionDifficulty,
+      (value) => {
+        state.directExpressionDifficulty = value;
+        render();
+      }
+    ),
+    textAreaField("왜 이런 모양으로 표현했나요? (선택)", "expression-reason", {
+      value: state.directExpressionReason,
+      rows: 3,
+      maxLength: 240,
+      onInput: (value) => {
+        state.directExpressionReason = value;
+      }
+    })
   );
 
   const reset = button("다시 그리기");
   reset.addEventListener("click", () => resetDrawingFromUser("draw"));
   const next = button(state.directIndex === SURVEY_PROMPT_WORDS.length - 1 ? "표현 저장 완료" : "다음 단어", "primary");
-  next.disabled = state.drawingStrokes.length === 0;
+  next.disabled = state.drawingStrokes.length === 0 || state.directExpressionDifficulty === null;
   next.addEventListener("click", saveDirectDrawing);
   side.append(actions(previousItemButton(), reset, next));
   section.append(board, side);
@@ -342,12 +378,56 @@ function renderGuessStage(): HTMLElement {
   const choices = element("div", "choice-grid");
 
   for (const word of SURVEY_GUESS_WORDS) {
-    const choice = button(guessWordLabel(word));
-    choice.addEventListener("click", () => saveGuessTrial(word));
+    const choice = button(guessWordLabel(word), state.pendingGuessAnswer === word ? "selected-choice" : "");
+    choice.addEventListener("click", () => {
+      state.pendingGuessAnswer = word;
+      render();
+    });
     choices.append(choice);
   }
 
-  side.append(choices, paragraph("선택하면 바로 다음 화면으로 넘어갑니다."), actions(previousItemButton()));
+  side.append(choices, paragraph("단어를 고른 뒤 확신도를 함께 남겨 주세요."));
+
+  if (state.pendingGuessAnswer) {
+    const followup = element("div", "guess-followup");
+    followup.append(
+      paragraph(`선택한 답: ${guessWordLabel(state.pendingGuessAnswer)}`, "friendly-copy"),
+      controlledLikertField("선택한 답에 얼마나 확신이 있나요?", "guess-confidence", state.guessConfidence, (value) => {
+        state.guessConfidence = value;
+        render();
+      })
+    );
+
+    if (hintsEnabled) {
+      followup.append(
+        selectField(
+          "효과음을 실제로 들었나요?",
+          "guess-effect-heard",
+          [
+            ["", "선택하세요"],
+            ["yes", "들었음"],
+            ["no", "잘 들리지 않음"],
+            ["not_applicable", "듣지 않음 / 해당 없음"]
+          ],
+          state.guessEffectHeard ?? "",
+          (value) => {
+            state.guessEffectHeard = isSurveyEffectHeard(value) ? value : null;
+            render();
+          }
+        )
+      );
+    }
+
+    side.append(followup);
+  }
+
+  const save = button(state.guessIndex === SURVEY_PROMPT_WORDS.length - 1 ? "추론 저장 완료" : "다음 추론", "primary");
+  save.disabled =
+    state.pendingGuessAnswer === null ||
+    state.guessConfidence === null ||
+    (hintsEnabled && state.guessEffectHeard === null);
+  save.addEventListener("click", saveGuessTrial);
+  side.append(actions(previousItemButton(), save));
   section.append(prompt, side);
   return section;
 }
@@ -383,8 +463,8 @@ function renderEngineStage(): HTMLElement {
   const env = card("survey-card wide");
   env.append(
     element("p", "eyebrow", "TURN TUTORIAL"),
-    element("h2", "", "50x50 ASCII 턴제 상호작용"),
-    paragraph("버튼을 누르면 한 턴이 진행됩니다. 지형은 그대로 두고, 반응 상태만 화면에 우선 표시됩니다."),
+    element("h2", "", "50x50 턴제 상호작용"),
+    paragraph(engineInstructionCopy()),
     renderAsciiLegend(),
     renderContractList(),
     renderAsciiTutorial()
@@ -398,6 +478,7 @@ function renderEngineStage(): HTMLElement {
     state.engineUnderstandingBefore,
     (value) => {
       state.engineUnderstandingBefore = value;
+      render();
     }
   );
   const understandingAfter = controlledLikertField(
@@ -406,6 +487,7 @@ function renderEngineStage(): HTMLElement {
     state.engineUnderstandingAfter,
     (value) => {
       state.engineUnderstandingAfter = value;
+      render();
     }
   );
   const taskDifficulty = controlledLikertField(
@@ -414,23 +496,53 @@ function renderEngineStage(): HTMLElement {
     state.engineTaskDifficulty,
     (value) => {
       state.engineTaskDifficulty = value;
+      render();
     }
   );
-  const turnRating = likertField("직접 눌러 보는 방식이 규칙 이해에 도움이 됨", "turn-rating");
-  const contractRating = likertField("하단의 짧은 설명이 이해에 도움이 됨", "contract-rating");
+  const turnRating = controlledLikertField("직접 눌러 보는 방식이 규칙 이해에 도움이 됨", "turn-rating", state.engineTurnRating, (value) => {
+    state.engineTurnRating = value;
+    render();
+  });
+  const contractRating = controlledLikertField(
+    "하단 진행 로그가 규칙 이해에 도움이 됨",
+    "contract-rating",
+    state.engineContractRating,
+    (value) => {
+      state.engineContractRating = value;
+      render();
+    }
+  );
   const preferred = selectField("더 도움이 된 단서", "preferred-mode", [
     ["turn_tutorial", "직접 조작"],
-    ["contract_notes", "짧은 규칙 설명"],
+    ["contract_notes", "진행 로그"],
     ["same", "비슷함"]
   ]);
   const next = button("평가 저장", "primary");
+  next.disabled =
+    state.engineUnderstandingBefore === null ||
+    state.engineUnderstandingAfter === null ||
+    state.engineTaskDifficulty === null ||
+    state.engineTurnRating === null ||
+    state.engineContractRating === null;
   next.addEventListener("click", () => {
+    if (
+      state.engineUnderstandingBefore === null ||
+      state.engineUnderstandingAfter === null ||
+      state.engineTaskDifficulty === null ||
+      state.engineTurnRating === null ||
+      state.engineContractRating === null
+    ) {
+      state.submitError = "상호작용 평가 문항을 모두 선택해 주세요.";
+      render();
+      return;
+    }
+
     state.engineComparison = {
-      understandingBefore: readLikert("understanding-before"),
-      understandingAfter: readLikert("understanding-after"),
-      taskDifficulty: readLikert("task-difficulty"),
-      turnTutorialRating: readLikert("turn-rating"),
-      contractClarityRating: readLikert("contract-rating"),
+      understandingBefore: state.engineUnderstandingBefore,
+      understandingAfter: state.engineUnderstandingAfter,
+      taskDifficulty: state.engineTaskDifficulty,
+      turnTutorialRating: state.engineTurnRating,
+      contractClarityRating: state.engineContractRating,
       preferredMode: readSelect("preferred-mode") as EngineComparisonRecord["preferredMode"],
       interactionSummary: summarizeAsciiState(state.asciiTutorial),
       asciiBefore: renderAsciiRows(initialTutorial),
@@ -452,7 +564,7 @@ function renderSelfReportStage(): HTMLElement {
   const scentField =
     state.session?.experimentGroup === "shape_only"
       ? notApplicableField("효과음 단서는 이번 설문에서 제공되지 않았습니다.", "scent-helpfulness")
-      : likertField("효과음 단서가 단어 추론에 도움이 되었나요?", "scent-helpfulness");
+      : scentHelpfulnessField("효과음 단서가 단어 추론에 도움이 되었나요?", "scent-helpfulness");
 
   section.append(
     element("p", "eyebrow", "마무리"),
@@ -461,6 +573,7 @@ function renderSelfReportStage(): HTMLElement {
     likertField("체험형 튜토리얼이 학습 효율을 높였나요?", "tutorial-efficiency"),
     scentField,
     likertField("전체 설문 흐름이 명확했나요?", "overall-clarity"),
+    likertField("전체 설문 부담은 어느 정도였나요? (1 낮음, 5 높음)", "workload-rating"),
     textAreaField("좋았던 점이 있었나요?", "strengths"),
     textAreaField("아쉬웠던 점이 있었나요?", "weaknesses")
   );
@@ -514,13 +627,24 @@ function currentElapsedMs(): number {
 
 function saveDirectDrawing(): void {
   const targetWord = state.promptOrder[state.directIndex] ?? SURVEY_PROMPT_WORDS[state.directIndex];
+
+  if (state.directExpressionDifficulty === null) {
+    state.submitError = "도형 표현 난이도를 선택해 주세요.";
+    render();
+    return;
+  }
+
   state.directDrawings = state.directDrawings.slice(0, state.directIndex);
   state.directDrawings.push({
     targetWord,
     shapeTrace: createShapeTrace(state.drawingStrokes),
-    elapsedMs: Math.round(currentElapsedMs())
+    elapsedMs: Math.round(currentElapsedMs()),
+    expressionDifficulty: state.directExpressionDifficulty,
+    expressionReason: state.directExpressionReason.trim().slice(0, 240)
   });
   state.directIndex += 1;
+  state.directExpressionDifficulty = null;
+  state.directExpressionReason = "";
   clearDrawing(false);
 
   if (state.directIndex >= SURVEY_PROMPT_WORDS.length) {
@@ -532,20 +656,37 @@ function saveDirectDrawing(): void {
   render();
 }
 
-function saveGuessTrial(answer: SurveyGuessWord): void {
+function saveGuessTrial(): void {
   const targetWord = state.promptOrder[state.guessIndex] ?? SURVEY_PROMPT_WORDS[state.guessIndex];
+  const hintsEnabled = state.session?.experimentGroup !== "shape_only";
+
+  if (
+    state.pendingGuessAnswer === null ||
+    state.guessConfidence === null ||
+    (hintsEnabled && state.guessEffectHeard === null)
+  ) {
+    state.submitError = "단어 선택, 확신도, 효과음 청취 여부를 확인해 주세요.";
+    render();
+    return;
+  }
+
   state.wordGuessTrials = state.wordGuessTrials.slice(0, state.guessIndex);
   state.wordGuessTrials.push({
     targetWord,
-    answer,
+    answer: state.pendingGuessAnswer,
+    confidence: state.guessConfidence,
     reactionMs: Math.round(performance.now() - state.trialStartedAt),
-    hintsEnabled: state.session?.experimentGroup !== "shape_only",
+    hintsEnabled,
     effectPlayed: state.effectPlayed,
-    effectPlayCount: state.effectPlayCount
+    effectPlayCount: state.effectPlayCount,
+    effectHeard: hintsEnabled ? (state.guessEffectHeard ?? "not_applicable") : "not_applicable"
   });
   state.guessIndex += 1;
   state.effectPlayed = false;
   state.effectPlayCount = 0;
+  state.pendingGuessAnswer = null;
+  state.guessConfidence = null;
+  state.guessEffectHeard = null;
 
   if (state.guessIndex >= SURVEY_PROMPT_WORDS.length) {
     goToStage(state.session?.experimentGroup === "tutorial_quality" ? "engine" : "tutorial");
@@ -554,6 +695,14 @@ function saveGuessTrial(answer: SurveyGuessWord): void {
 
   state.trialStartedAt = performance.now();
   render();
+}
+
+function engineInstructionCopy(): string {
+  if (state.session?.hciProbeVariant === "goal_scaffold") {
+    return "짧은 목표를 하나씩 달성하면서 하단 진행 로그로 규칙을 확인해 보세요.";
+  }
+
+  return "방향을 정하고 속성 버튼을 눌러 보세요. 자세한 변화는 하단 진행 로그에서 확인합니다.";
 }
 
 function saveTutorialCapture(): void {
@@ -599,7 +748,13 @@ async function startSurvey(): Promise<void> {
       throw new Error(`session request failed: ${response.status}`);
     }
 
-    state.session = (await response.json()) as SurveySession;
+    const session = (await response.json()) as SurveySession;
+
+    if (!isHciProbeVariant(session.hciProbeVariant)) {
+      throw new Error("session hci probe variant is invalid");
+    }
+
+    state.session = session;
     state.promptOrder = createPromptOrder(state.session.sessionId);
     goToStage("draw");
   } catch {
@@ -615,11 +770,30 @@ async function submitSurvey(): Promise<void> {
     return;
   }
 
+  const tutorialInstructionClarity = readLikertOrNull("tutorial-instruction");
+  const tutorialLearningEfficiency = readLikertOrNull("tutorial-efficiency");
+  const overallClarity = readLikertOrNull("overall-clarity");
+  const workloadRating = readLikertOrNull("workload-rating");
+  const scentHelpfulness = readScentHelpfulnessOrNull();
+
+  if (
+    tutorialInstructionClarity === null ||
+    tutorialLearningEfficiency === null ||
+    overallClarity === null ||
+    workloadRating === null ||
+    scentHelpfulness === null
+  ) {
+    state.submitError = "마무리 평가의 1-5 문항을 모두 선택해 주세요.";
+    render();
+    return;
+  }
+
   state.selfReport = {
-    tutorialInstructionClarity: readLikert("tutorial-instruction"),
-    tutorialLearningEfficiency: readLikert("tutorial-efficiency"),
-    scentHelpfulness: readScentHelpfulness(),
-    overallClarity: readLikert("overall-clarity"),
+    tutorialInstructionClarity,
+    tutorialLearningEfficiency,
+    scentHelpfulness,
+    overallClarity,
+    workloadRating,
     strengths: readTextArea("strengths"),
     weaknesses: readTextArea("weaknesses")
   };
@@ -630,6 +804,7 @@ async function submitSurvey(): Promise<void> {
     submissionId,
     sessionId: state.session.sessionId,
     experimentGroup: state.session.experimentGroup,
+    hciProbeVariant: state.session.hciProbeVariant,
     consentAccepted: true,
     directDrawings: state.directDrawings,
     wordGuessTrials: state.wordGuessTrials,
@@ -893,6 +1068,8 @@ function goToPreviousItem(): void {
 function rewindDirectDrawingTo(index: number): void {
   state.directIndex = clampIndex(index, SURVEY_PROMPT_WORDS.length);
   state.directDrawings = state.directDrawings.slice(0, state.directIndex);
+  state.directExpressionDifficulty = null;
+  state.directExpressionReason = "";
   goToStage("draw");
 }
 
@@ -901,6 +1078,9 @@ function rewindGuessTo(index: number): void {
   state.wordGuessTrials = state.wordGuessTrials.slice(0, state.guessIndex);
   state.effectPlayed = false;
   state.effectPlayCount = 0;
+  state.pendingGuessAnswer = null;
+  state.guessConfidence = null;
+  state.guessEffectHeard = null;
   goToStage("guess");
 }
 
@@ -1107,7 +1287,9 @@ function drawCanonicalGlyph(ctx: CanvasRenderingContext2D, word: SurveyPromptWor
   }
 }
 
-async function playSoundEffect(word: SurveyPromptWord): Promise<void> {
+type SoundEffectKind = SurveyPromptWord | AsciiSpell | "move" | "blocked" | "wait" | "reset";
+
+async function playSoundEffect(kind: SoundEffectKind): Promise<void> {
   const AudioContextConstructor = window.AudioContext ?? getWebkitAudioContext();
 
   if (!AudioContextConstructor) {
@@ -1123,17 +1305,37 @@ async function playSoundEffect(word: SurveyPromptWord): Promise<void> {
 
   const now = ctx.currentTime;
 
-  if (word === "fire") {
+  if (kind === "fire") {
     playFireSound(ctx, now);
     return;
   }
 
-  if (word === "water") {
+  if (kind === "water") {
     playWaterSound(ctx, now);
     return;
   }
 
-  playWindSound(ctx, now);
+  if (kind === "wind") {
+    playWindSound(ctx, now);
+    return;
+  }
+
+  if (kind === "earth" || kind === "blocked") {
+    playEarthSound(ctx, now);
+    return;
+  }
+
+  if (kind === "electric") {
+    playElectricSound(ctx, now);
+    return;
+  }
+
+  if (kind === "ice") {
+    playIceSound(ctx, now);
+    return;
+  }
+
+  playTapSound(ctx, now, kind === "reset" ? 180 : 260);
 }
 
 function getWebkitAudioContext(): typeof AudioContext | undefined {
@@ -1225,6 +1427,83 @@ function playWindSound(ctx: AudioContext, now: number): void {
   wind.stop(now + 0.48);
 }
 
+function playEarthSound(ctx: AudioContext, now: number): void {
+  const thump = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  thump.type = "square";
+  thump.frequency.setValueAtTime(88, now);
+  thump.frequency.exponentialRampToValueAtTime(48, now + 0.16);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.04, now + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+  thump.connect(gain);
+  gain.connect(ctx.destination);
+  thump.start(now);
+  thump.stop(now + 0.2);
+}
+
+function playElectricSound(ctx: AudioContext, now: number): void {
+  const spark = createNoiseSource(ctx, 0.18);
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  const chirp = ctx.createOscillator();
+  const chirpGain = ctx.createGain();
+
+  filter.type = "highpass";
+  filter.frequency.setValueAtTime(2600, now);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.032, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+  chirp.type = "sawtooth";
+  chirp.frequency.setValueAtTime(520, now);
+  chirp.frequency.exponentialRampToValueAtTime(1500, now + 0.08);
+  chirpGain.gain.setValueAtTime(0.0001, now);
+  chirpGain.gain.exponentialRampToValueAtTime(0.02, now + 0.012);
+  chirpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+
+  spark.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  chirp.connect(chirpGain);
+  chirpGain.connect(ctx.destination);
+  spark.start(now);
+  spark.stop(now + 0.18);
+  chirp.start(now);
+  chirp.stop(now + 0.12);
+}
+
+function playIceSound(ctx: AudioContext, now: number): void {
+  const chime = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  chime.type = "triangle";
+  chime.frequency.setValueAtTime(880, now);
+  chime.frequency.exponentialRampToValueAtTime(1320, now + 0.16);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.03, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+  chime.connect(gain);
+  gain.connect(ctx.destination);
+  chime.start(now);
+  chime.stop(now + 0.28);
+}
+
+function playTapSound(ctx: AudioContext, now: number, frequency: number): void {
+  const tap = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  tap.type = "sine";
+  tap.frequency.setValueAtTime(frequency, now);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.025, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+  tap.connect(gain);
+  gain.connect(ctx.destination);
+  tap.start(now);
+  tap.stop(now + 0.1);
+}
+
 function createNoiseSource(ctx: AudioContext, durationSeconds: number): AudioBufferSourceNode {
   const frameCount = Math.max(1, Math.floor(ctx.sampleRate * durationSeconds));
   const buffer = ctx.createBuffer(1, frameCount, ctx.sampleRate);
@@ -1298,29 +1577,40 @@ function renderAsciiTutorial(): HTMLElement {
 
 function renderMapViews(): HTMLElement {
   const wrap = element("div", "map-view-grid");
+  const focus = createAsciiFocusRows(state.asciiTutorial);
   wrap.append(
-    asciiBlock("주변 15x15 view", renderAsciiFocusRows(state.asciiTutorial), "focus"),
-    asciiBlock("전체 50x50 map", renderAsciiRows(state.asciiTutorial), "large")
+    asciiBlock("주변 15x15 view", focus.rows, "focus", {
+      startRow: focus.startRow,
+      startColumn: focus.startColumn,
+      collapsible: false
+    }),
+    asciiBlock("전체 50x50 map", renderAsciiRows(state.asciiTutorial), "large", {
+      startRow: 0,
+      startColumn: 0,
+      collapsible: true
+    })
   );
   return wrap;
 }
 
-function renderAsciiFocusRows(turnState: AsciiTurnState): string[] {
+function createAsciiFocusRows(turnState: AsciiTurnState): { rows: string[]; startRow: number; startColumn: number } {
   const radius = 7;
   const rows = renderAsciiRows(turnState);
   const focused: string[] = [];
+  const startRow = turnState.player.row - radius;
+  const startColumn = turnState.player.column - radius;
 
-  for (let row = turnState.player.row - radius; row <= turnState.player.row + radius; row += 1) {
+  for (let row = startRow; row <= turnState.player.row + radius; row += 1) {
     let line = "";
 
-    for (let column = turnState.player.column - radius; column <= turnState.player.column + radius; column += 1) {
+    for (let column = startColumn; column <= turnState.player.column + radius; column += 1) {
       line += rows[row]?.[column] ?? "#";
     }
 
     focused.push(line);
   }
 
-  return focused;
+  return { rows: focused, startRow, startColumn };
 }
 
 function renderTurnHud(): HTMLElement {
@@ -1377,21 +1667,27 @@ function renderMoveControls(): HTMLElement {
 
 function renderSpellControls(): HTMLElement {
   const group = element("div", "turn-control-group");
-  group.append(element("span", "mini-label", "상호작용"));
+  group.append(element("span", "mini-label", "속성"));
   const controls = element("div", "spell-controls");
-  const spells: AsciiSpell[] = ["fire", "water", "wind", "earth", "life", "electric", "ice", "void"];
+  const spells: AsciiSpell[] = ["fire", "water", "wind", "earth", "ice", "electric"];
 
   for (const spell of spells) {
     const control = button(spellLabel(spell));
+    control.classList.add(`spell-${spell}`);
     control.title = `${spellLabel(spell)}: 현재 바라보는 방향으로 적용`;
     control.addEventListener("click", () => runAsciiAction({ type: "cast", spell }));
     controls.append(control);
   }
 
   const wait = button("대기");
+  wait.classList.add("utility-button");
   wait.addEventListener("click", () => runAsciiAction({ type: "wait" }));
   const reset = button("초기화");
+  reset.classList.add("utility-button");
   reset.addEventListener("click", () => {
+    void playSoundEffect("reset").catch((error: unknown) => {
+      console.warn("sound effect playback failed", error);
+    });
     state.asciiTutorial = createAsciiTutorialState();
     state.asciiActionLog = [];
     state.asciiGoalTurns = {};
@@ -1406,6 +1702,9 @@ function renderSpellControls(): HTMLElement {
 function runAsciiAction(action: AsciiAction): void {
   const previous = state.asciiTutorial;
   const next = advanceAsciiTutorial(previous, action);
+  void playSoundEffect(soundForAsciiAction(action, previous, next)).catch((error: unknown) => {
+    console.warn("sound effect playback failed", error);
+  });
   state.asciiTutorial = next;
   updateAsciiGoals(previous, next, action);
   state.asciiActionLog = [
@@ -1467,26 +1766,37 @@ function actionLabel(action: AsciiAction): string {
   return "대기";
 }
 
+function soundForAsciiAction(action: AsciiAction, previous: AsciiTurnState, next: AsciiTurnState): SoundEffectKind {
+  if (action.type === "cast") {
+    return action.spell;
+  }
+
+  if (action.type === "move") {
+    return previous.player.row === next.player.row && previous.player.column === next.player.column ? "blocked" : "move";
+  }
+
+  return "wait";
+}
+
 function countCharacters(value: string, target: string): number {
   return value.split("").filter((char) => char === target).length;
 }
 
 function renderAsciiLegend(): HTMLElement {
   const legend = element("div", "legend-grid");
-  const items: Array<[string, string]> = [
-    ["^ > v <", "플레이어"],
-    ["t", "나무"],
-    ["f", "불붙음"],
-    ["~ / =", "물 / 얼음"],
-    ["M", "금속"],
-    ["#", "벽"],
-    ["*", "진행 이펙트"],
-    ["w/e/i/s/g/x", "반응 상태"]
+  const items: Array<[string, string, string]> = [
+    ["◆", "^ > v <", "플레이어 위치와 방향"],
+    ["🌲", "t", "나무"],
+    ["🔥", "f", "불붙음"],
+    ["💧", "~ / =", "물 / 얼음"],
+    ["◇", "M", "금속"],
+    ["▣", "#", "벽"],
+    ["✦", "*, w, e, i", "반응 상태는 진행 로그로 확인"]
   ];
 
-  for (const [symbol, label] of items) {
+  for (const [icon, symbol, label] of items) {
     const item = element("span", "legend-item");
-    item.append(element("strong", "", symbol), document.createTextNode(label));
+    item.append(element("span", "legend-icon", icon), element("strong", "", symbol), document.createTextNode(label));
     legend.append(item);
   }
 
@@ -1495,6 +1805,7 @@ function renderAsciiLegend(): HTMLElement {
 
 function renderContractList(): HTMLElement {
   const list = element("div", "contract-list");
+  list.append(element("span", "mini-label", "속성 요약"));
 
   for (const item of ASCII_TUTORIAL_CONTRACTS) {
     const row = element("div", "contract-item");
@@ -1505,13 +1816,85 @@ function renderContractList(): HTMLElement {
   return list;
 }
 
-function asciiBlock(label: string, rows: string[], sizeClass = ""): HTMLElement {
-  const wrap = element("div", ["ascii-block", sizeClass]);
-  wrap.append(element("span", "mini-label", label));
-  const pre = element("pre");
-  pre.textContent = rows.join("\n");
-  wrap.append(pre);
+function asciiBlock(
+  label: string,
+  rows: string[],
+  sizeClass = "",
+  options: { startRow: number; startColumn: number; collapsible: boolean }
+): HTMLElement {
+  const wrap = element(options.collapsible ? "details" : "div", ["ascii-block", sizeClass]);
+  if (options.collapsible) {
+    (wrap as HTMLDetailsElement).open = false;
+    wrap.append(element("summary", "mini-label", label));
+  } else {
+    wrap.append(element("span", "mini-label", label));
+  }
+  wrap.append(renderAsciiGrid(rows, options.startRow, options.startColumn));
   return wrap;
+}
+
+function renderAsciiGrid(rows: string[], startRow: number, startColumn: number): HTMLElement {
+  const grid = element("div", "ascii-grid");
+
+  rows.forEach((line, rowIndex) => {
+    const row = element("div", "ascii-row");
+    Array.from(line).forEach((char, columnIndex) => {
+      const globalRow = startRow + rowIndex;
+      const globalColumn = startColumn + columnIndex;
+      const cell = element("span", cellClasses(char, globalRow, globalColumn), char);
+      row.append(cell);
+    });
+    grid.append(row);
+  });
+
+  return grid;
+}
+
+function cellClasses(char: string, row: number, column: number): string[] {
+  const classes = ["map-cell"];
+
+  if (row === state.asciiTutorial.player.row && column === state.asciiTutorial.player.column) {
+    classes.push("cell-player", `cell-player-${state.asciiTutorial.player.facing}`);
+    return classes;
+  }
+
+  switch (char) {
+    case "#":
+      classes.push("cell-wall");
+      break;
+    case "t":
+      classes.push("cell-tree");
+      break;
+    case "f":
+      classes.push("cell-fire");
+      break;
+    case "~":
+      classes.push("cell-water");
+      break;
+    case "=":
+      classes.push("cell-ice-terrain");
+      break;
+    case "M":
+      classes.push("cell-metal");
+      break;
+    case "*":
+      classes.push("cell-effect");
+      break;
+    case "w":
+      classes.push("cell-wet");
+      break;
+    case "e":
+      classes.push("cell-electric");
+      break;
+    case "i":
+      classes.push("cell-ice");
+      break;
+    case "s":
+      classes.push("cell-steam");
+      break;
+  }
+
+  return classes;
 }
 
 function renderTurnLogs(logs: string[]): HTMLElement {
@@ -1558,18 +1941,35 @@ function metricRows(rows: Array<[string, string]>): HTMLElement {
   return list;
 }
 
-function likertField(label: string, id: string): HTMLElement {
+function likertField(
+  label: string,
+  id: string,
+  value: LikertScore | null = null,
+  onChange?: (value: LikertScore | null) => void
+): HTMLElement {
   const field = element("label", "field");
   field.append(element("span", "", label));
   const select = document.createElement("select");
   select.id = id;
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "선택하세요";
+  placeholder.selected = value === null;
+  placeholder.disabled = true;
+  select.append(placeholder);
 
   for (const score of [1, 2, 3, 4, 5]) {
     const option = document.createElement("option");
     option.value = String(score);
     option.textContent = `${score}`;
-    option.selected = score === 3;
+    option.selected = score === value;
     select.append(option);
+  }
+
+  if (onChange) {
+    select.addEventListener("change", () => {
+      onChange(readLikertOrNull(id));
+    });
   }
 
   field.append(select);
@@ -1579,20 +1979,10 @@ function likertField(label: string, id: string): HTMLElement {
 function controlledLikertField(
   label: string,
   id: string,
-  value: LikertScore,
-  onChange: (value: LikertScore) => void
+  value: LikertScore | null,
+  onChange: (value: LikertScore | null) => void
 ): HTMLElement {
-  const field = likertField(label, id);
-  const select = field.querySelector<HTMLSelectElement>("select");
-
-  if (select) {
-    select.value = String(value);
-    select.addEventListener("change", () => {
-      onChange(readLikert(id));
-    });
-  }
-
-  return field;
+  return likertField(label, id, value, onChange);
 }
 
 function notApplicableField(label: string, id: string): HTMLElement {
@@ -1607,13 +1997,52 @@ function notApplicableField(label: string, id: string): HTMLElement {
   return field;
 }
 
-function textAreaField(label: string, id: string): HTMLElement {
+function scentHelpfulnessField(label: string, id: string): HTMLElement {
+  const field = element("label", "field");
+  field.append(element("span", "", label));
+  const select = document.createElement("select");
+  select.id = id;
+  const heardAnyEffect = state.wordGuessTrials.some((trial) => trial.effectHeard === "yes");
+  const options: Array<[string, string]> = [
+    ...(heardAnyEffect ? ([["", "선택하세요"]] as Array<[string, string]>) : []),
+    ["not_applicable", "듣지 않음 / 해당 없음"],
+    ["1", "1"],
+    ["2", "2"],
+    ["3", "3"],
+    ["4", "4"],
+    ["5", "5"]
+  ];
+
+  for (const [value, text] of options) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = text;
+    option.selected = heardAnyEffect ? value === "" : value === "not_applicable";
+    option.disabled = value === "";
+    select.append(option);
+  }
+
+  field.append(select);
+  return field;
+}
+
+function textAreaField(
+  label: string,
+  id: string,
+  options: { value?: string; rows?: number; maxLength?: number; onInput?: (value: string) => void } = {}
+): HTMLElement {
   const field = element("label", "field");
   field.append(element("span", "", label));
   const textarea = document.createElement("textarea");
   textarea.id = id;
-  textarea.maxLength = 1000;
-  textarea.rows = 4;
+  textarea.maxLength = options.maxLength ?? 1000;
+  textarea.rows = options.rows ?? 4;
+  textarea.value = options.value ?? "";
+  if (options.onInput) {
+    textarea.addEventListener("input", () => {
+      options.onInput?.(textarea.value.slice(0, textarea.maxLength));
+    });
+  }
   field.append(textarea);
   return field;
 }
@@ -1639,17 +2068,30 @@ function textInputField(
   return field;
 }
 
-function selectField(label: string, id: string, options: Array<[string, string]>): HTMLElement {
+function selectField(
+  label: string,
+  id: string,
+  options: Array<[string, string]>,
+  selectedValue?: string,
+  onChange?: (value: string) => void
+): HTMLElement {
   const field = element("label", "field");
   field.append(element("span", "", label));
   const select = document.createElement("select");
   select.id = id;
 
-  for (const [value, text] of options) {
+  for (const [optionValue, text] of options) {
     const option = document.createElement("option");
-    option.value = value;
+    option.value = optionValue;
     option.textContent = text;
+    option.selected = selectedValue !== undefined && optionValue === selectedValue;
     select.append(option);
+  }
+
+  if (onChange) {
+    select.addEventListener("change", () => {
+      onChange(select.value);
+    });
   }
 
   field.append(select);
@@ -1657,20 +2099,40 @@ function selectField(label: string, id: string, options: Array<[string, string]>
 }
 
 function readLikert(id: string): LikertScore {
-  const value = Number(root.querySelector<HTMLSelectElement>(`#${id}`)?.value ?? "3");
-  return [1, 2, 3, 4, 5].includes(value) ? (value as LikertScore) : 3;
+  const value = readLikertOrNull(id);
+  if (value === null) {
+    throw new Error(`${id} is not selected`);
+  }
+  return value;
 }
 
-function readScentHelpfulness(): LikertOrNotApplicable {
+function readLikertOrNull(id: string): LikertScore | null {
+  const value = Number(root.querySelector<HTMLSelectElement>(`#${id}`)?.value ?? "");
+  return [1, 2, 3, 4, 5].includes(value) ? (value as LikertScore) : null;
+}
+
+function readScentHelpfulnessOrNull(): LikertOrNotApplicable | null {
   if (state.session?.experimentGroup === "shape_only") {
     return "not_applicable";
   }
 
-  return readLikert("scent-helpfulness");
+  const value = root.querySelector<HTMLSelectElement>("#scent-helpfulness")?.value ?? "";
+  if (value === "not_applicable") {
+    return "not_applicable";
+  }
+  return readLikertOrNull("scent-helpfulness");
 }
 
 function readSelect(id: string): string {
   return root.querySelector<HTMLSelectElement>(`#${id}`)?.value ?? "";
+}
+
+function isSurveyEffectHeard(value: string): value is SurveyEffectHeard {
+  return value === "yes" || value === "no" || value === "not_applicable";
+}
+
+function isHciProbeVariant(value: string): value is SurveyHciProbeVariant {
+  return SURVEY_HCI_PROBE_VARIANTS.includes(value as SurveyHciProbeVariant);
 }
 
 function readTextArea(id: string): string {

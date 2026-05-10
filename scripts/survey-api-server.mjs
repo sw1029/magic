@@ -4,8 +4,9 @@ import { mkdir, appendFile, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v6";
+export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v8";
 export const SURVEY_EXPERIMENT_GROUPS = ["shape_only", "scent_effects", "tutorial_quality"];
+export const SURVEY_HCI_PROBE_VARIANTS = ["log_discovery", "goal_scaffold"];
 export const MAX_BODY_BYTES = 96 * 1024;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -21,7 +22,7 @@ const FORBIDDEN_DRAWING_FIELDS = [
   "quality",
   "inputNote"
 ];
-const FORBIDDEN_GUESS_TRIAL_FIELDS = ["trialId", "correct", "confidence"];
+const FORBIDDEN_GUESS_TRIAL_FIELDS = ["trialId", "correct"];
 const FORBIDDEN_RESPONSE_FIELDS = ["phone", "email", "raffleContact"];
 
 const DEFAULT_ALLOWED_ORIGINS = [
@@ -64,6 +65,34 @@ export function assignBalancedExperimentGroup(groupCounts, seed) {
   return candidates[hash[0] % candidates.length];
 }
 
+export function assignBalancedHciProbeVariant(variantCounts, seed) {
+  const counts = createHciProbeVariantCounts(variantCounts);
+  let lowestCount = Infinity;
+  const candidates = [];
+
+  for (const variant of SURVEY_HCI_PROBE_VARIANTS) {
+    const count = counts.get(variant) ?? 0;
+
+    if (count < lowestCount) {
+      lowestCount = count;
+      candidates.length = 0;
+      candidates.push(variant);
+      continue;
+    }
+
+    if (count === lowestCount) {
+      candidates.push(variant);
+    }
+  }
+
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+
+  const hash = createHash("sha256").update(String(seed)).digest();
+  return candidates[hash[1] % candidates.length];
+}
+
 export function countExperimentGroupsFromResponseLog(text) {
   const counts = createExperimentGroupCounts();
 
@@ -85,6 +114,30 @@ export function countExperimentGroupsFromResponseLog(text) {
   }
 
   return Object.fromEntries(counts);
+}
+
+export function countExperimentCellsFromResponseLog(text) {
+  const counts = createExperimentCellCounts();
+
+  for (const line of String(text).split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    try {
+      const record = JSON.parse(line);
+      const group = record?.payload?.experimentGroup;
+      const variant = record?.payload?.hciProbeVariant;
+
+      if (SURVEY_EXPERIMENT_GROUPS.includes(group) && SURVEY_HCI_PROBE_VARIANTS.includes(variant)) {
+        incrementExperimentCellCount(counts, group, variant);
+      }
+    } catch {
+      // Ignore a malformed or partially written trailing line rather than blocking new sessions.
+    }
+  }
+
+  return experimentCellCountsToObject(counts);
 }
 
 export function validateSurveyResponsePayload(payload) {
@@ -110,6 +163,10 @@ export function validateSurveyResponsePayload(payload) {
 
   if (!SURVEY_EXPERIMENT_GROUPS.includes(payload.experimentGroup)) {
     errors.push("experimentGroup is invalid");
+  }
+
+  if (!SURVEY_HCI_PROBE_VARIANTS.includes(payload.hciProbeVariant)) {
+    errors.push("hciProbeVariant is invalid");
   }
 
   if (payload.consentAccepted !== true) {
@@ -174,7 +231,9 @@ export function createSurveyApiServer(options = {}) {
   const now = options.now ?? (() => Date.now());
   const completedGroupCounts = createExperimentGroupCounts(options.initialExperimentGroupCounts);
   const activeGroupCounts = createExperimentGroupCounts();
-  let responseLogCountsLoaded = Boolean(options.initialExperimentGroupCounts);
+  const completedCellCounts = createExperimentCellCounts(options.initialExperimentCellCounts);
+  const activeCellCounts = createExperimentCellCounts();
+  let responseLogCountsLoaded = Boolean(options.initialExperimentGroupCounts && options.initialExperimentCellCounts);
   let responseLogCountsPromise = null;
 
   const server = createServer(async (request, response) => {
@@ -199,7 +258,7 @@ export function createSurveyApiServer(options = {}) {
       }
 
       const url = new URL(request.url ?? "/", "http://localhost");
-      cleanupExpiredSessions(sessions, activeGroupCounts, timestamp);
+      cleanupExpiredSessions(sessions, activeGroupCounts, activeCellCounts, timestamp);
 
       if (request.method === "GET" && url.pathname === "/api/survey-session") {
         await ensureResponseLogCountsLoaded();
@@ -209,11 +268,17 @@ export function createSurveyApiServer(options = {}) {
           mergeExperimentGroupCounts(completedGroupCounts, activeGroupCounts),
           sessionId
         );
+        const hciProbeVariant = assignBalancedHciProbeVariant(
+          mergeExperimentCellCountsForGroup(experimentGroup, completedCellCounts, activeCellCounts),
+          sessionId
+        );
         incrementExperimentGroupCount(activeGroupCounts, experimentGroup);
+        incrementExperimentCellCount(activeCellCounts, experimentGroup, hciProbeVariant);
 
         sessions.set(sessionId, {
           csrfToken,
           experimentGroup,
+          hciProbeVariant,
           createdAt: timestamp,
           assignmentCounted: true,
           completed: false,
@@ -224,7 +289,7 @@ export function createSurveyApiServer(options = {}) {
         response.setHeader("Set-Cookie", [
           `survey_session=${sessionId}; HttpOnly; SameSite=Lax; Path=/; Max-Age=7200`
         ]);
-        sendJson(response, 200, { sessionId, csrfToken, experimentGroup });
+        sendJson(response, 200, { sessionId, csrfToken, experimentGroup, hciProbeVariant });
         return;
       }
 
@@ -256,6 +321,10 @@ export function createSurveyApiServer(options = {}) {
           errors.push("experimentGroup does not match session");
         }
 
+        if (payload.hciProbeVariant !== session.hciProbeVariant) {
+          errors.push("hciProbeVariant does not match session");
+        }
+
         if (errors.length > 0) {
           sendJson(response, 400, { error: "validation_failed", details: errors });
           return;
@@ -273,7 +342,7 @@ export function createSurveyApiServer(options = {}) {
           `${JSON.stringify({ receivedAt: new Date(timestamp).toISOString(), payload })}\n`,
           "utf8"
         );
-        markSessionCompleted(session, completedGroupCounts, activeGroupCounts);
+        markSessionCompleted(session, completedGroupCounts, activeGroupCounts, completedCellCounts, activeCellCounts);
 
         sendJson(response, 201, { ok: true });
         return;
@@ -355,6 +424,10 @@ export function createSurveyApiServer(options = {}) {
     experimentGroupCounts: {
       completed: completedGroupCounts,
       active: activeGroupCounts
+    },
+    experimentCellCounts: {
+      completed: completedCellCounts,
+      active: activeCellCounts
     }
   };
 
@@ -366,9 +439,14 @@ export function createSurveyApiServer(options = {}) {
     responseLogCountsPromise ??= readFile(responsePath, "utf8")
       .then((text) => {
         const parsedCounts = countExperimentGroupsFromResponseLog(text);
+        const parsedCellCounts = countExperimentCellsFromResponseLog(text);
 
         for (const group of SURVEY_EXPERIMENT_GROUPS) {
           completedGroupCounts.set(group, parsedCounts[group] ?? 0);
+
+          for (const variant of SURVEY_HCI_PROBE_VARIANTS) {
+            completedCellCounts.get(group)?.set(variant, parsedCellCounts[group]?.[variant] ?? 0);
+          }
         }
       })
       .catch((error) => {
@@ -395,6 +473,38 @@ function createExperimentGroupCounts(source = {}) {
   return counts;
 }
 
+function createHciProbeVariantCounts(source = {}) {
+  const counts = new Map();
+
+  for (const variant of SURVEY_HCI_PROBE_VARIANTS) {
+    const value = source instanceof Map ? source.get(variant) : source[variant];
+    counts.set(variant, sanitizeCount(value));
+  }
+
+  return counts;
+}
+
+function createExperimentCellCounts(source = {}) {
+  const counts = new Map();
+
+  for (const group of SURVEY_EXPERIMENT_GROUPS) {
+    const groupSource = source instanceof Map ? source.get(group) : source[group];
+    counts.set(group, createHciProbeVariantCounts(groupSource));
+  }
+
+  return counts;
+}
+
+function experimentCellCountsToObject(counts) {
+  const result = {};
+
+  for (const group of SURVEY_EXPERIMENT_GROUPS) {
+    result[group] = Object.fromEntries(counts.get(group) ?? createHciProbeVariantCounts());
+  }
+
+  return result;
+}
+
 function sanitizeCount(value) {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) && numberValue > 0 ? Math.floor(numberValue) : 0;
@@ -404,8 +514,18 @@ function incrementExperimentGroupCount(counts, group) {
   counts.set(group, (counts.get(group) ?? 0) + 1);
 }
 
+function incrementExperimentCellCount(counts, group, variant) {
+  const variantCounts = counts.get(group);
+  variantCounts?.set(variant, (variantCounts.get(variant) ?? 0) + 1);
+}
+
 function decrementExperimentGroupCount(counts, group) {
   counts.set(group, Math.max(0, (counts.get(group) ?? 0) - 1));
+}
+
+function decrementExperimentCellCount(counts, group, variant) {
+  const variantCounts = counts.get(group);
+  variantCounts?.set(variant, Math.max(0, (variantCounts.get(variant) ?? 0) - 1));
 }
 
 function mergeExperimentGroupCounts(...sources) {
@@ -420,7 +540,21 @@ function mergeExperimentGroupCounts(...sources) {
   return merged;
 }
 
-function cleanupExpiredSessions(sessions, activeGroupCounts, timestamp) {
+function mergeExperimentCellCountsForGroup(group, ...sources) {
+  const merged = createHciProbeVariantCounts();
+
+  for (const source of sources) {
+    const variantCounts = source.get(group);
+
+    for (const variant of SURVEY_HCI_PROBE_VARIANTS) {
+      merged.set(variant, (merged.get(variant) ?? 0) + (variantCounts?.get(variant) ?? 0));
+    }
+  }
+
+  return merged;
+}
+
+function cleanupExpiredSessions(sessions, activeGroupCounts, activeCellCounts, timestamp) {
   for (const [sessionId, session] of sessions) {
     if (timestamp - session.createdAt <= SESSION_TTL_MS) {
       continue;
@@ -428,6 +562,7 @@ function cleanupExpiredSessions(sessions, activeGroupCounts, timestamp) {
 
     if (session.assignmentCounted) {
       decrementExperimentGroupCount(activeGroupCounts, session.experimentGroup);
+      decrementExperimentCellCount(activeCellCounts, session.experimentGroup, session.hciProbeVariant);
       session.assignmentCounted = false;
     }
 
@@ -435,17 +570,19 @@ function cleanupExpiredSessions(sessions, activeGroupCounts, timestamp) {
   }
 }
 
-function markSessionCompleted(session, completedGroupCounts, activeGroupCounts) {
+function markSessionCompleted(session, completedGroupCounts, activeGroupCounts, completedCellCounts, activeCellCounts) {
   if (session.completed) {
     return;
   }
 
   if (session.assignmentCounted) {
     decrementExperimentGroupCount(activeGroupCounts, session.experimentGroup);
+    decrementExperimentCellCount(activeCellCounts, session.experimentGroup, session.hciProbeVariant);
     session.assignmentCounted = false;
   }
 
   incrementExperimentGroupCount(completedGroupCounts, session.experimentGroup);
+  incrementExperimentCellCount(completedCellCounts, session.experimentGroup, session.hciProbeVariant);
   session.completed = true;
 }
 
@@ -589,6 +726,8 @@ function validateDirectDrawings(value, errors) {
     validatePromptWord(item.targetWord, `directDrawings[${index}].targetWord`, errors);
     validateShapeTrace(item.shapeTrace, `directDrawings[${index}].shapeTrace`, errors);
     validateNumber(item.elapsedMs, `directDrawings[${index}].elapsedMs`, 0, 600000, errors);
+    validateLikert(item.expressionDifficulty, `directDrawings[${index}].expressionDifficulty`, errors);
+    validateStringLength(item.expressionReason, `directDrawings[${index}].expressionReason`, 0, 240, errors);
   });
 }
 
@@ -675,6 +814,7 @@ function validateGuessTrials(value, errors) {
     rejectForbiddenGuessTrialFields(item, `wordGuessTrials[${index}]`, errors);
     validatePromptWord(item.targetWord, `wordGuessTrials[${index}].targetWord`, errors);
     validateGuessWord(item.answer, `wordGuessTrials[${index}].answer`, errors);
+    validateLikert(item.confidence, `wordGuessTrials[${index}].confidence`, errors);
     validateNumber(item.reactionMs, `wordGuessTrials[${index}].reactionMs`, 0, 600000, errors);
 
     if (typeof item.hintsEnabled !== "boolean") {
@@ -686,6 +826,7 @@ function validateGuessTrials(value, errors) {
     }
 
     validateNumber(item.effectPlayCount, `wordGuessTrials[${index}].effectPlayCount`, 0, 20, errors);
+    validateEffectHeard(item.effectHeard, `wordGuessTrials[${index}].effectHeard`, errors);
   });
 }
 
@@ -698,7 +839,8 @@ function validateSelfReport(value, errors) {
   for (const key of [
     "tutorialInstructionClarity",
     "tutorialLearningEfficiency",
-    "overallClarity"
+    "overallClarity",
+    "workloadRating"
   ]) {
     validateLikert(value[key], `selfReport.${key}`, errors);
   }
@@ -845,6 +987,12 @@ function validateLikertOrNotApplicable(value, path, errors) {
   }
 
   validateLikert(value, path, errors);
+}
+
+function validateEffectHeard(value, path, errors) {
+  if (!["yes", "no", "not_applicable"].includes(String(value))) {
+    errors.push(`${path} must be yes, no, or not_applicable`);
+  }
 }
 
 function validatePromptWord(value, path, errors) {

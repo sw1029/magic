@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   SURVEY_GUESS_WORDS,
+  SURVEY_HCI_PROBE_VARIANTS,
   SURVEY_SCHEMA_VERSION,
   assignExperimentGroup,
+  assignHciProbeVariant,
   validateSurveyRaffleContactPayload,
   validateSurveyResponsePayload
 } from "../src/survey/survey-contract";
@@ -15,6 +17,8 @@ describe("survey response contract", () => {
   it("assigns experiment groups deterministically from a session seed", () => {
     expect(assignExperimentGroup("session-a")).toBe(assignExperimentGroup("session-a"));
     expect(["shape_only", "scent_effects", "tutorial_quality"]).toContain(assignExperimentGroup("session-b"));
+    expect(assignHciProbeVariant("session-a")).toBe(assignHciProbeVariant("session-a"));
+    expect(SURVEY_HCI_PROBE_VARIANTS).toContain(assignHciProbeVariant("session-b"));
   });
 
   it("accepts the complete survey payload shape", () => {
@@ -68,7 +72,8 @@ describe("survey response contract", () => {
     expect(payload.tutorialCaptures[0]).not.toHaveProperty("inputNote");
     expect(payload.wordGuessTrials[0]).not.toHaveProperty("trialId");
     expect(payload.wordGuessTrials[0]).not.toHaveProperty("correct");
-    expect(payload.wordGuessTrials[0]).not.toHaveProperty("confidence");
+    expect(payload.wordGuessTrials[0].confidence).toBe(4);
+    expect(payload.wordGuessTrials[0].effectHeard).toBe("not_applicable");
   });
 
   it("requires relative timestamps in drawing trace points", () => {
@@ -198,6 +203,7 @@ export function makePayload(overrides: Partial<SurveyResponsePayload> = {}): Sur
     submissionId: "submission_123456",
     sessionId: "session_1234567890abcdef",
     experimentGroup: "shape_only",
+    hciProbeVariant: "log_discovery",
     consentAccepted: true,
     directDrawings: ["fire", "water", "wind"].map((targetWord) => ({
       targetWord: targetWord as "fire" | "water" | "wind",
@@ -208,15 +214,19 @@ export function makePayload(overrides: Partial<SurveyResponsePayload> = {}): Sur
           [620, 120, 780]
         ]
       ],
-      elapsedMs: 1200
+      elapsedMs: 1200,
+      expressionDifficulty: 3,
+      expressionReason: "triangle motion felt close"
     })),
     wordGuessTrials: ["fire", "water", "wind"].map((targetWord) => ({
       targetWord: targetWord as "fire" | "water" | "wind",
       answer: targetWord as "fire" | "water" | "wind",
       reactionMs: 900,
+      confidence: 4,
       hintsEnabled: false,
       effectPlayed: false,
-      effectPlayCount: 0
+      effectPlayCount: 0,
+      effectHeard: "not_applicable"
     })),
     tutorialCaptures: ["ideal", "fast", "comfortable"].map((mode) => ({
       targetWord: "fire",
@@ -278,6 +288,7 @@ export function makePayload(overrides: Partial<SurveyResponsePayload> = {}): Sur
       tutorialLearningEfficiency: 4,
       scentHelpfulness: "not_applicable",
       overallClarity: 4,
+      workloadRating: 3,
       strengths: "clear",
       weaknesses: ""
     },

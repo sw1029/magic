@@ -9,13 +9,11 @@ export const ASCII_TUTORIAL_CONTRACTS: Array<{
   { spell: "water", label: "물", contract: "불 끄기" },
   { spell: "wind", label: "바람", contract: "밀기/확산" },
   { spell: "earth", label: "땅", contract: "벽 만들기" },
-  { spell: "life", label: "생명", contract: "나무 성장" },
   { spell: "electric", label: "전기", contract: "물/금속 전도" },
-  { spell: "ice", label: "얼음", contract: "물 얼리기" },
-  { spell: "void", label: "절단", contract: "상태 끊기" }
+  { spell: "ice", label: "얼음", contract: "물 얼리기" }
 ];
 
-export type AsciiSpell = "fire" | "water" | "wind" | "earth" | "life" | "electric" | "ice" | "void";
+export type AsciiSpell = "fire" | "water" | "wind" | "earth" | "electric" | "ice";
 export type Direction = "north" | "east" | "south" | "west";
 export type AsciiAction =
   | { type: "cast"; spell: AsciiSpell }
@@ -50,7 +48,7 @@ export function createAsciiTutorialState(): AsciiTurnState {
   const status = makeGrid(EMPTY_STATUS);
 
   return createState(terrain, status, INITIAL_PLAYER, 0, "초기 상태", [
-    "방향 버튼으로 이동하고, 속성 버튼은 바라보는 방향으로 작동합니다."
+    "방향을 정한 뒤 속성 버튼을 누르면 바라보는 줄에 변화가 생깁니다."
   ]);
 }
 
@@ -172,13 +170,13 @@ function movePlayer(terrain: Grid, player: AsciiTurnState["player"], direction: 
   const cell = terrain[next.row]?.[next.column];
 
   if (!cell || cell === "#" || cell === "t" || cell === "M") {
-    logs.push(`${directionLabel(direction)} 방향을 바라봅니다. 앞 칸은 막혀 있습니다.`);
+    logs.push(`${directionLabel(direction)} 방향을 바라봅니다. 앞 칸이 막혀 위치는 그대로입니다.`);
     return;
   }
 
   player.row = next.row;
   player.column = next.column;
-  logs.push(`${directionLabel(direction)}으로 한 칸 이동했습니다.`);
+  logs.push(`이동: 플레이어 표시가 ${directionLabel(direction)}으로 한 칸 이동했습니다.`);
 }
 
 function applySpell(terrain: Grid, status: Grid, player: AsciiTurnState["player"], spell: AsciiSpell, logs: string[]): void {
@@ -195,17 +193,11 @@ function applySpell(terrain: Grid, status: Grid, player: AsciiTurnState["player"
     case "earth":
       castEarth(terrain, status, player, logs);
       return;
-    case "life":
-      castLife(terrain, status, player, logs);
-      return;
     case "electric":
       castElectric(terrain, status, player, logs);
       return;
     case "ice":
       castIce(terrain, status, player, logs);
-      return;
-    case "void":
-      castVoid(status, player, logs);
       return;
   }
 }
@@ -221,20 +213,20 @@ function castFire(terrain: Grid, status: Grid, player: AsciiTurnState["player"],
 
     if (terrainCell === "t") {
       status[position.row][position.column] = "f";
-      logs.push("불: 나무가 f 상태로 바뀝니다.");
+      logs.push("불: 나무(t)에 닿으면 불붙음(f)으로 표시됩니다.");
       continue;
     }
 
     if (terrainCell === "~") {
       status[position.row][position.column] = "s";
-      logs.push("불+물: s 이펙트가 생기고 멈춥니다.");
+      logs.push("불+물: 증기(s)가 생기고 불 진행이 멈춥니다.");
       break;
     }
 
     if (terrainCell === "=") {
       terrain[position.row][position.column] = "~";
       status[position.row][position.column] = "s";
-      logs.push("불+얼음: 얼음이 물로 바뀝니다.");
+      logs.push("불+얼음: 얼음(=)이 물(~)로 녹습니다.");
       continue;
     }
 
@@ -254,13 +246,13 @@ function castWater(terrain: Grid, status: Grid, player: AsciiTurnState["player"]
     if (status[position.row][position.column] === "f") {
       status[position.row][position.column] = "w";
       changed += 1;
-      logs.push("물+불: f 상태가 w로 낮아집니다.");
+      logs.push("물+불: 불붙음(f)이 젖음(w)으로 바뀝니다.");
       continue;
     }
 
     if (terrain[position.row][position.column] === "=") {
       status[position.row][position.column] = "i";
-      logs.push("물+얼음: i 상태가 표시됩니다.");
+      logs.push("물+얼음: 얼음 위에 냉기(i)가 표시됩니다.");
       continue;
     }
 
@@ -269,7 +261,7 @@ function castWater(terrain: Grid, status: Grid, player: AsciiTurnState["player"]
   }
 
   if (changed > 0) {
-    logs.push(`물: ${changed}칸에 w 이펙트가 남습니다.`);
+    logs.push(`물: 진행 경로 ${changed}칸에 젖음(w)이 남습니다.`);
   }
 }
 
@@ -291,7 +283,7 @@ function castWind(terrain: Grid, status: Grid, player: AsciiTurnState["player"],
         terrain[pushed.row][pushed.column] = "~";
         terrain[position.row][position.column] = ".";
         status[pushed.row][pushed.column] = "*";
-        logs.push("바람+물: 물이 한 칸 밀립니다.");
+        logs.push("바람+물: 물(~)이 바라보는 방향으로 한 칸 밀립니다.");
       }
       continue;
     }
@@ -299,7 +291,7 @@ function castWind(terrain: Grid, status: Grid, player: AsciiTurnState["player"],
     status[position.row][position.column] = "*";
   }
 
-  logs.push("바람+불: 이번 턴의 확산 범위가 커집니다.");
+  logs.push("바람+불: 이번 턴에는 불 확산 범위가 넓어집니다.");
 }
 
 function castEarth(terrain: Grid, status: Grid, player: AsciiTurnState["player"], logs: string[]): void {
@@ -317,38 +309,12 @@ function castEarth(terrain: Grid, status: Grid, player: AsciiTurnState["player"]
 
     if (cell === "~") {
       status[position.row][position.column] = "w";
-      logs.push("땅+물: 젖은 흔적이 남습니다.");
+      logs.push("땅+물: 물 위에는 벽 대신 젖음(w)이 남습니다.");
     }
     break;
   }
 
-  logs.push(`땅: 벽 ${placed}칸을 만들었습니다.`);
-}
-
-function castLife(terrain: Grid, status: Grid, player: AsciiTurnState["player"], logs: string[]): void {
-  let grown = 0;
-  let recovered = 0;
-
-  for (const position of rayFromPlayer(player, 7)) {
-    if (status[position.row][position.column] === "f") {
-      status[position.row][position.column] = "g";
-      recovered += 1;
-      continue;
-    }
-
-    if (terrain[position.row][position.column] === "." && hasNeighborTerrain(terrain, position, "~")) {
-      terrain[position.row][position.column] = "t";
-      status[position.row][position.column] = "g";
-      grown += 1;
-      continue;
-    }
-
-    if (terrain[position.row][position.column] === "#") {
-      break;
-    }
-  }
-
-  logs.push(`생명: 성장 ${grown}칸, 회복 ${recovered}칸.`);
+  logs.push(`땅: 빈 칸 ${placed}개를 벽(#)으로 세웁니다.`);
 }
 
 function castElectric(terrain: Grid, status: Grid, player: AsciiTurnState["player"], logs: string[]): void {
@@ -362,14 +328,14 @@ function castElectric(terrain: Grid, status: Grid, player: AsciiTurnState["playe
 
     if (cell === "~" || cell === "M") {
       const charged = chargeConnectedConductors(terrain, status, position);
-      logs.push(`전기: 연결된 물/금속 ${charged}칸이 e로 표시됩니다.`);
+      logs.push(`전기: 연결된 물/금속 ${charged}칸이 전도(e)로 표시됩니다.`);
       return;
     }
 
     status[position.row][position.column] = "*";
   }
 
-  logs.push("전기: 닿은 전도체가 없어 * 이펙트만 남습니다.");
+  logs.push("전기: 닿은 물/금속이 없어 진행 표시(*)만 남습니다.");
 }
 
 function castIce(terrain: Grid, status: Grid, player: AsciiTurnState["player"], logs: string[]): void {
@@ -392,21 +358,7 @@ function castIce(terrain: Grid, status: Grid, player: AsciiTurnState["player"], 
     status[position.row][position.column] = "*";
   }
 
-  logs.push(`얼음: 물 ${frozen}칸을 = 지형으로 고정했습니다.`);
-}
-
-function castVoid(status: Grid, player: AsciiTurnState["player"], logs: string[]): void {
-  let cut = 0;
-
-  for (const position of rayFromPlayer(player, 8)) {
-    if (status[position.row][position.column] !== EMPTY_STATUS) {
-      cut += 1;
-    }
-
-    status[position.row][position.column] = "x";
-  }
-
-  logs.push(`절단: 진행 방향 8칸에 x 표시를 남기고 상태 ${cut}칸을 끊었습니다.`);
+  logs.push(`얼음: 물 ${frozen}칸을 얼음(=) 지형으로 고정합니다.`);
 }
 
 function chargeConnectedConductors(terrain: Grid, status: Grid, start: Position): number {
@@ -466,7 +418,7 @@ function spreadFire(terrain: Grid, status: Grid, logs: string[], limit: number):
   });
 
   if (spread > 0) {
-    logs.push(`불: 인접 나무 ${spread}칸으로 옮겨붙습니다.`);
+    logs.push(`확산: 불붙음(f)이 인접 나무 ${spread}칸으로 번집니다.`);
   }
 }
 
@@ -562,10 +514,6 @@ function playerSymbol(direction: Direction): string {
     case "west":
       return "<";
   }
-}
-
-function hasNeighborTerrain(terrain: Grid, position: Position, target: string): boolean {
-  return neighbors(position).some((neighbor) => terrain[neighbor.row]?.[neighbor.column] === target);
 }
 
 function makeGrid(fill: string): Grid {

@@ -1,6 +1,6 @@
 import type { GlyphFamily } from "../recognizer/types";
 
-export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v6";
+export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v8";
 
 export const SURVEY_PROMPT_WORDS = ["fire", "water", "wind"] as const;
 export type SurveyPromptWord = (typeof SURVEY_PROMPT_WORDS)[number];
@@ -11,11 +11,15 @@ export type SurveyGuessWord = (typeof SURVEY_GUESS_WORDS)[number];
 export const SURVEY_EXPERIMENT_GROUPS = ["shape_only", "scent_effects", "tutorial_quality"] as const;
 export type SurveyExperimentGroup = (typeof SURVEY_EXPERIMENT_GROUPS)[number];
 
+export const SURVEY_HCI_PROBE_VARIANTS = ["log_discovery", "goal_scaffold"] as const;
+export type SurveyHciProbeVariant = (typeof SURVEY_HCI_PROBE_VARIANTS)[number];
+
 export const SURVEY_CAPTURE_MODES = ["ideal", "fast", "comfortable"] as const;
 export type SurveyCaptureMode = (typeof SURVEY_CAPTURE_MODES)[number];
 
 export type LikertScore = 1 | 2 | 3 | 4 | 5;
 export type LikertOrNotApplicable = LikertScore | "not_applicable";
+export type SurveyEffectHeard = "yes" | "no" | "not_applicable";
 export type ShapeTracePoint = [x: number, y: number, tMs: number];
 export type ShapeTrace = Array<Array<ShapeTracePoint>>;
 export type SurveyStageName = "consent" | "draw" | "guess" | "tutorial" | "engine" | "self-report";
@@ -29,28 +33,33 @@ const FORBIDDEN_DRAWING_FIELDS = [
   "quality",
   "inputNote"
 ] as const;
-const FORBIDDEN_GUESS_TRIAL_FIELDS = ["trialId", "correct", "confidence"] as const;
+const FORBIDDEN_GUESS_TRIAL_FIELDS = ["trialId", "correct"] as const;
 const FORBIDDEN_RESPONSE_FIELDS = ["phone", "email", "raffleContact"] as const;
 
 export interface SurveySession {
   sessionId: string;
   csrfToken: string;
   experimentGroup: SurveyExperimentGroup;
+  hciProbeVariant: SurveyHciProbeVariant;
 }
 
 export interface DirectDrawingRecord {
   targetWord: SurveyPromptWord;
   shapeTrace: ShapeTrace;
   elapsedMs: number;
+  expressionDifficulty: LikertScore;
+  expressionReason: string;
 }
 
 export interface WordGuessTrialRecord {
   targetWord: SurveyPromptWord;
   answer: SurveyGuessWord;
+  confidence: LikertScore;
   reactionMs: number;
   hintsEnabled: boolean;
   effectPlayed: boolean;
   effectPlayCount: number;
+  effectHeard: SurveyEffectHeard;
 }
 
 export interface TutorialCaptureRecord {
@@ -80,6 +89,7 @@ export interface SurveySelfReportRecord {
   tutorialLearningEfficiency: LikertScore;
   scentHelpfulness: LikertOrNotApplicable;
   overallClarity: LikertScore;
+  workloadRating: LikertScore;
   strengths: string;
   weaknesses: string;
 }
@@ -118,6 +128,7 @@ export interface SurveyResponsePayload {
   submissionId: string;
   sessionId: string;
   experimentGroup: SurveyExperimentGroup;
+  hciProbeVariant: SurveyHciProbeVariant;
   consentAccepted: boolean;
   directDrawings: DirectDrawingRecord[];
   wordGuessTrials: WordGuessTrialRecord[];
@@ -144,6 +155,17 @@ export function assignExperimentGroup(seed: string): SurveyExperimentGroup {
   }
 
   return SURVEY_EXPERIMENT_GROUPS[Math.abs(hash) % SURVEY_EXPERIMENT_GROUPS.length];
+}
+
+export function assignHciProbeVariant(seed: string): SurveyHciProbeVariant {
+  let hash = 2166136261;
+
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return SURVEY_HCI_PROBE_VARIANTS[Math.abs(hash) % SURVEY_HCI_PROBE_VARIANTS.length];
 }
 
 export function promptWordLabel(word: SurveyPromptWord): string {
@@ -194,6 +216,15 @@ export function experimentGroupLabel(group: SurveyExperimentGroup): string {
   }
 }
 
+export function hciProbeVariantLabel(variant: SurveyHciProbeVariant): string {
+  switch (variant) {
+    case "log_discovery":
+      return "로그 탐색형";
+    case "goal_scaffold":
+      return "목표 스캐폴드형";
+  }
+}
+
 export function validateSurveyResponsePayload(value: unknown): string[] {
   const errors: string[] = [];
 
@@ -217,6 +248,10 @@ export function validateSurveyResponsePayload(value: unknown): string[] {
 
   if (!isExperimentGroup(value.experimentGroup)) {
     errors.push("experimentGroup is invalid");
+  }
+
+  if (!isHciProbeVariant(value.hciProbeVariant)) {
+    errors.push("hciProbeVariant is invalid");
   }
 
   if (value.consentAccepted !== true) {
@@ -293,6 +328,8 @@ function validateDirectDrawings(value: unknown, errors: string[]): void {
     validatePromptWord(item.targetWord, `directDrawings[${index}].targetWord`, errors);
     validateShapeTrace(item.shapeTrace, `directDrawings[${index}].shapeTrace`, errors);
     validateNumber(item.elapsedMs, `directDrawings[${index}].elapsedMs`, 0, 600000, errors);
+    validateLikert(item.expressionDifficulty, `directDrawings[${index}].expressionDifficulty`, errors);
+    validateStringLength(item.expressionReason, `directDrawings[${index}].expressionReason`, 0, 240, errors);
   });
 }
 
@@ -310,6 +347,7 @@ function validateGuessTrials(value: unknown, errors: string[]): void {
     rejectForbiddenGuessTrialFields(item, `wordGuessTrials[${index}]`, errors);
     validatePromptWord(item.targetWord, `wordGuessTrials[${index}].targetWord`, errors);
     validateGuessWord(item.answer, `wordGuessTrials[${index}].answer`, errors);
+    validateLikert(item.confidence, `wordGuessTrials[${index}].confidence`, errors);
     if (typeof item.hintsEnabled !== "boolean") {
       errors.push(`wordGuessTrials[${index}].hintsEnabled must be boolean`);
     }
@@ -317,6 +355,7 @@ function validateGuessTrials(value: unknown, errors: string[]): void {
       errors.push(`wordGuessTrials[${index}].effectPlayed must be boolean`);
     }
     validateNumber(item.effectPlayCount, `wordGuessTrials[${index}].effectPlayCount`, 0, 20, errors);
+    validateEffectHeard(item.effectHeard, `wordGuessTrials[${index}].effectHeard`, errors);
     validateNumber(item.reactionMs, `wordGuessTrials[${index}].reactionMs`, 0, 600000, errors);
   });
 }
@@ -414,7 +453,8 @@ function validateSelfReport(value: unknown, errors: string[]): void {
   for (const key of [
     "tutorialInstructionClarity",
     "tutorialLearningEfficiency",
-    "overallClarity"
+    "overallClarity",
+    "workloadRating"
   ]) {
     validateLikert(value[key], `selfReport.${key}`, errors);
   }
@@ -575,6 +615,12 @@ function validateLikertOrNotApplicable(value: unknown, path: string, errors: str
   validateLikert(value, path, errors);
 }
 
+function validateEffectHeard(value: unknown, path: string, errors: string[]): void {
+  if (!["yes", "no", "not_applicable"].includes(String(value))) {
+    errors.push(`${path} must be yes, no, or not_applicable`);
+  }
+}
+
 function validateNumber(value: unknown, path: string, min: number, max: number, errors: string[]): void {
   if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
     errors.push(`${path} must be a number between ${min} and ${max}`);
@@ -605,6 +651,10 @@ function optionalTrimmedString(value: unknown): string {
 
 function isExperimentGroup(value: unknown): value is SurveyExperimentGroup {
   return SURVEY_EXPERIMENT_GROUPS.includes(value as SurveyExperimentGroup);
+}
+
+function isHciProbeVariant(value: unknown): value is SurveyHciProbeVariant {
+  return SURVEY_HCI_PROBE_VARIANTS.includes(value as SurveyHciProbeVariant);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

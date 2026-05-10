@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   SURVEY_SCHEMA_VERSION,
   assignBalancedExperimentGroup,
+  assignBalancedHciProbeVariant,
+  countExperimentCellsFromResponseLog,
   countExperimentGroupsFromResponseLog,
   createSurveyApiServer,
   validateSurveyRaffleContactPayload,
@@ -39,6 +41,9 @@ describe("survey API server", () => {
         "session-a"
       )
     ).toBe("scent_effects");
+    expect(assignBalancedHciProbeVariant({ log_discovery: 3, goal_scaffold: 1 }, "session-a")).toBe(
+      "goal_scaffold"
+    );
     expect(
       validateSurveyRaffleContactPayload({
         schemaVersion: SURVEY_SCHEMA_VERSION,
@@ -68,17 +73,21 @@ describe("survey API server", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "magic-survey-"));
     const responsePath = join(dataDir, "survey-responses.ndjson");
     const persistedRecords = [
-      makeStoredPayload("shape_only"),
-      makeStoredPayload("shape_only"),
-      makeStoredPayload("shape_only"),
-      makeStoredPayload("scent_effects"),
-      makeStoredPayload("tutorial_quality")
+      makeStoredPayload("shape_only", "log_discovery"),
+      makeStoredPayload("shape_only", "log_discovery"),
+      makeStoredPayload("shape_only", "goal_scaffold"),
+      makeStoredPayload("scent_effects", "log_discovery"),
+      makeStoredPayload("tutorial_quality", "goal_scaffold")
     ];
     await writeFile(responsePath, `${persistedRecords.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
     expect(countExperimentGroupsFromResponseLog(await readFile(responsePath, "utf8"))).toEqual({
       shape_only: 3,
       scent_effects: 1,
       tutorial_quality: 1
+    });
+    expect(countExperimentCellsFromResponseLog(await readFile(responsePath, "utf8")).shape_only).toEqual({
+      log_discovery: 2,
+      goal_scaffold: 1
     });
 
     const api = createSurveyApiServer({
@@ -96,13 +105,17 @@ describe("survey API server", () => {
         const response = await fetch(`${baseUrl}/api/survey-session`, {
           headers: { Origin: "http://localhost:5173" }
         });
-        return (await response.json()) as { experimentGroup: "shape_only" | "scent_effects" | "tutorial_quality" };
+        return (await response.json()) as {
+          experimentGroup: "shape_only" | "scent_effects" | "tutorial_quality";
+          hciProbeVariant: "log_discovery" | "goal_scaffold";
+        };
       })
     );
 
     expect(new Set(sessions.map((session) => session.experimentGroup))).toEqual(
       new Set(["scent_effects", "tutorial_quality"])
     );
+    expect(sessions.every((session) => ["log_discovery", "goal_scaffold"].includes(session.hciProbeVariant))).toBe(true);
     expect(api.experimentGroupCounts.completed.get("shape_only")).toBe(3);
     expect(api.experimentGroupCounts.active.get("shape_only")).toBe(0);
   });
@@ -127,10 +140,12 @@ describe("survey API server", () => {
       sessionId: string;
       csrfToken: string;
       experimentGroup: "shape_only" | "scent_effects" | "tutorial_quality";
+      hciProbeVariant: "log_discovery" | "goal_scaffold";
     };
     const payload = makePayload({
       sessionId: session.sessionId,
-      experimentGroup: session.experimentGroup
+      experimentGroup: session.experimentGroup,
+      hciProbeVariant: session.hciProbeVariant
     });
 
     const csrfFailure = await fetch(`${baseUrl}/api/survey-responses`, {
@@ -210,11 +225,15 @@ describe("survey API server", () => {
   });
 });
 
-function makeStoredPayload(experimentGroup: "shape_only" | "scent_effects" | "tutorial_quality") {
+function makeStoredPayload(
+  experimentGroup: "shape_only" | "scent_effects" | "tutorial_quality",
+  hciProbeVariant: "log_discovery" | "goal_scaffold"
+) {
   return {
     receivedAt: "2026-05-05T00:00:00.000Z",
     payload: makePayload({
-      experimentGroup
+      experimentGroup,
+      hciProbeVariant
     })
   };
 }

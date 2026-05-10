@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ASCII_TUTORIAL_CONTRACTS,
   advanceAsciiTutorial,
   createAsciiTutorialState,
   renderAsciiRows,
@@ -16,6 +17,14 @@ describe("survey ASCII turn tutorial engine", () => {
     expect(state.rows).toHaveLength(50);
     expect(state.rows.every((row) => row.length === 50)).toBe(true);
     expect(renderAsciiRows(state).join("")).toContain(">");
+    expect(ASCII_TUTORIAL_CONTRACTS.map((item) => item.spell)).toEqual([
+      "fire",
+      "water",
+      "wind",
+      "earth",
+      "electric",
+      "ice"
+    ]);
   });
 
   it("moves the player and keeps the facing direction visible in the map", () => {
@@ -37,21 +46,19 @@ describe("survey ASCII turn tutorial engine", () => {
     const fireCount = count(afterFire.rows, "f");
     expect(fireCount).toBeGreaterThan(0);
     expect(count(afterWait.rows, "f")).toBeGreaterThanOrEqual(fireCount);
-    expect(afterFire.log.some((entry) => entry.includes("나무"))).toBe(true);
+    expect(afterFire.log.some((entry) => entry.includes("나무(t)"))).toBe(true);
   });
 
-  it("applies water, electric, ice, and void contracts through facing interactions", () => {
+  it("applies water, electric, and ice contracts through facing interactions", () => {
     const afterFire = advanceAsciiTutorial(createAsciiTutorialState(), { type: "cast", spell: "fire" });
     const afterWater = advanceAsciiTutorial(afterFire, { type: "cast", spell: "water" });
     const afterElectric = advanceAsciiTutorial(afterWater, { type: "cast", spell: "electric" });
     const afterIce = advanceAsciiTutorial(afterElectric, { type: "cast", spell: "ice" });
-    const afterVoid = advanceAsciiTutorial(afterIce, { type: "cast", spell: "void" });
 
-    expect(afterWater.log.some((entry) => entry.includes("물+불"))).toBe(true);
+    expect(afterWater.log.some((entry) => entry.includes("젖음(w)"))).toBe(true);
     expect(afterElectric.rows.join("")).toContain("e");
     expect(afterIce.rows.join("")).toContain("i");
-    expect(afterVoid.log.some((entry) => entry.includes("절단"))).toBe(true);
-    expect(summarizeAsciiState(afterVoid)).toContain("turn");
+    expect(summarizeAsciiState(afterIce)).toContain("turn");
   });
 });
 

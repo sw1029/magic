@@ -33,6 +33,7 @@ const OPERATOR_SUPPORTED_PAIRS = [
 
 export const DATASET_SPLIT_ARTIFACT_VERSION = "tiny-ml-dataset-split-v1"
 export const FEATURE_SPEC_ARTIFACT_VERSION = "tiny-ml-feature-spec-v1"
+export const FEATURE_SPEC_ARTIFACT_VERSION_V2 = "tiny-ml-feature-spec-v2"
 
 export const ML_LAYER_ROLE_DEFINITIONS = Object.freeze({
   public_auxiliary: {
@@ -136,6 +137,26 @@ const BASE_FEATURE_COLUMNS = [
   numericFeature("qualitySmoothness", "smoothness quality scalar", clampRange(0, 1)),
   numericFeature("qualityStability", "stability quality scalar", clampRange(0, 1)),
   numericFeature("qualityRotationBias", "rotation bias quality scalar", clampRange(0, 1))
+]
+
+const BASE_V2_FEATURE_COLUMNS = [
+  numericFeature("gestureScore", "gesture matcher auxiliary score", clampRange(0, 1)),
+  numericFeature("temporalScore", "stroke order and direction temporal similarity", clampRange(0, 1)),
+  numericFeature("velocityMean", "mean stylus velocity from V2 features", log1pClip(4096)),
+  numericFeature("velocityVariance", "velocity variance from V2 features", log1pClip(8192)),
+  numericFeature("pauseCount", "count of long point-to-point pauses", integerClip(0, 16)),
+  numericFeature("curvatureMean", "mean local curvature angle", clampRange(0, Math.PI)),
+  numericFeature("curvatureVariance", "variance of local curvature angle", clampRange(0, Math.PI * Math.PI)),
+  numericFeature("curvatureLowShare", "share of low curvature segments", clampRange(0, 1)),
+  numericFeature("curvatureMidShare", "share of mid curvature segments", clampRange(0, 1)),
+  numericFeature("curvatureHighShare", "share of high curvature segments", clampRange(0, 1)),
+  numericFeature("selfIntersectionCount", "detected self intersections", integerClip(0, 12)),
+  numericFeature("endpointClusterCountV2", "endpoint topology cluster count from V2 features", integerClip(0, 12)),
+  numericFeature("directionChangeCount", "direction token changes in the trajectory signature", integerClip(0, 64)),
+  numericFeature("pressureMean", "mean stylus pressure when available", clampRange(0, 1)),
+  numericFeature("pressureVariance", "stylus pressure variance when available", clampRange(0, 1)),
+  numericFeature("strokeSplitCount", "short stroke split indicator count", integerClip(0, 12)),
+  numericFeature("mergeCandidateCount", "near-endpoint merge candidate count", integerClip(0, 12))
 ]
 
 const OPERATOR_FEATURE_COLUMNS = [
@@ -255,8 +276,10 @@ export function buildTinyMlDatasetSplitManifest({ publicManifest, splitArtifactP
   }
 }
 
-export function buildTinyMlFeatureSpec({ splitArtifactPath } = {}) {
+export function buildTinyMlFeatureSpec({ splitArtifactPath, featureSpecVersion = "v2", cardSignature, datacardRegistrySignature } = {}) {
   const trainingManifest = buildTinyMlTrainingManifest(splitArtifactPath)
+  const baseFeatureColumns =
+    featureSpecVersion === "v1" ? BASE_FEATURE_COLUMNS : [...BASE_FEATURE_COLUMNS, ...BASE_V2_FEATURE_COLUMNS]
   const featureRows = {
     base_candidate_row_v1: {
       id: "base_candidate_row_v1",
@@ -287,7 +310,7 @@ export function buildTinyMlFeatureSpec({ splitArtifactPath } = {}) {
           range: [0, 1]
         })
       ],
-      columns: BASE_FEATURE_COLUMNS,
+      columns: baseFeatureColumns,
       supportedPairs: BASE_SUPPORTED_PAIRS
     },
     operator_candidate_row_v1: {
@@ -330,8 +353,11 @@ export function buildTinyMlFeatureSpec({ splitArtifactPath } = {}) {
   return {
     artifactType: "feature_spec",
     modelType: "feature_spec_manifest",
-    version: "v1",
-    schemaVersion: FEATURE_SPEC_ARTIFACT_VERSION,
+    version: featureSpecVersion === "v1" ? "v1" : "v2",
+    schemaVersion: featureSpecVersion === "v1" ? FEATURE_SPEC_ARTIFACT_VERSION : FEATURE_SPEC_ARTIFACT_VERSION_V2,
+    featureSpecVersion,
+    cardSignature: cardSignature || undefined,
+    datacardRegistrySignature: datacardRegistrySignature || undefined,
     datasetSchemaVersion: DATASET_SCHEMA_VERSION,
     featureOrder: Object.fromEntries(
       Object.entries(featureRows).map(([rowId, row]) => [rowId, row.columns.map((column) => column.name)])
@@ -357,7 +383,14 @@ export function buildTinyMlFeatureSpec({ splitArtifactPath } = {}) {
       canonicalSemanticAuthority: "rules_first",
       baseFamily: {
         directCanonicalPredictionForbidden: true,
-        allowedOutputs: ["rerank_delta", "recognized_confidence", "ambiguity_probability"],
+        allowedOutputs: [
+          "rerank_delta",
+          "recognized_confidence",
+          "ambiguity_probability",
+          "false_positive_suppression",
+          "datacard_custom_promotion_risk"
+        ],
+        incompatibleArtifactMode: "shadow_or_explanation_only",
         acceptance: {
           familyFlipIncrease: 0
         }

@@ -69,34 +69,50 @@ function resolveBestSealCandidate(session: StrokeSession): SealCandidateScore | 
   }
 
   let bestFailed: SealDetection | null = null;
+  const maxCandidateStrokeCount = Math.min(3, strokes.length - 1);
 
-  for (let index = strokes.length - 1; index >= strokes.length - 1; index -= 1) {
-    const stroke = strokes[index];
-    const baseStrokes = strokes.filter((_, strokeIndex) => strokeIndex !== index);
+  for (let groupSize = 1; groupSize <= maxCandidateStrokeCount; groupSize += 1) {
+    const startIndex = strokes.length - groupSize;
+    const ringStrokes = strokes.slice(startIndex);
+    const baseStrokes = strokes.slice(0, startIndex);
     const basePoints = baseStrokes.flatMap((item) => item.points);
 
     if (basePoints.length < 2) {
       continue;
     }
 
-    const geometry = scoreSealStroke(stroke);
+    const geometry = scoreSealStrokeGroup(ringStrokes);
     const baseBounds = boundingBox(basePoints);
     const enclosureMargin = measureEnclosureMargin(geometry.bounds, baseBounds);
     const requiredMargin = Math.max(8, Math.hypot(baseBounds.width, baseBounds.height) * 0.04);
+    const centerAlignment = measureCenterAlignment(geometry.center, baseBounds);
+    const falsePositiveRisk = measureFalsePositiveRisk({
+      closure: geometry.closure,
+      circularity: geometry.circularity,
+      enclosureMargin,
+      requiredMargin,
+      centerAlignment,
+      ringCoverage: geometry.ringCoverage
+    });
     const baseSession = cloneSession({ ...session, strokes: baseStrokes });
     const detection: SealDetection = {
       ok: false,
       ringDetected: false,
-      strokeId: stroke.id,
-      strokeIndex: index,
+      strokeId: ringStrokes[0]?.id,
+      strokeIndex: startIndex,
+      candidateStrokeIds: ringStrokes.map((item) => item.id),
       baseStrokeCount: baseStrokes.length,
       closure: geometry.closure,
       circularity: geometry.circularity,
       enclosureMargin,
+      centerAlignment,
+      ringCoverage: geometry.ringCoverage,
+      multiStroke: ringStrokes.length > 1,
+      falsePositiveRisk,
       reason: ""
     };
 
-    if (stroke.points.length < MIN_SEAL_POINTS) {
+    if (geometry.pointCount < MIN_SEAL_POINTS) {
       bestFailed = preferMoreUsefulFailure(bestFailed, {
         ...detection,
         reason: "seal stroke는 충분한 점을 가진 닫힌 원형이어야 합니다."
@@ -112,10 +128,18 @@ function resolveBestSealCandidate(session: StrokeSession): SealCandidateScore | 
       continue;
     }
 
-    if (geometry.closure < MIN_CLOSURE_SCORE) {
+    if (!geometry.multiStroke && geometry.closure < MIN_CLOSURE_SCORE) {
       bestFailed = preferMoreUsefulFailure(bestFailed, {
         ...detection,
         reason: "seal 원의 시작점과 끝점이 충분히 닫히지 않았습니다."
+      });
+      continue;
+    }
+
+    if (geometry.multiStroke && geometry.ringCoverage < 0.82) {
+      bestFailed = preferMoreUsefulFailure(bestFailed, {
+        ...detection,
+        reason: "seal 테두리를 여러 선으로 그린 경우 전체 원 둘레를 충분히 감싸야 합니다."
       });
       continue;
     }
@@ -136,6 +160,14 @@ function resolveBestSealCandidate(session: StrokeSession): SealCandidateScore | 
       continue;
     }
 
+    if (centerAlignment < 0.45) {
+      bestFailed = preferMoreUsefulFailure(bestFailed, {
+        ...detection,
+        reason: "seal 원의 중심이 기본 도형과 너무 어긋나 있습니다."
+      });
+      continue;
+    }
+
     return {
       baseSession,
       detection: {
@@ -151,13 +183,17 @@ function resolveBestSealCandidate(session: StrokeSession): SealCandidateScore | 
     : null;
 }
 
-function scoreSealStroke(stroke: Stroke): {
+function scoreSealStrokeGroup(strokes: readonly Stroke[]): {
   bounds: StrokeBounds;
   diagonal: number;
   closure: number;
   circularity: number;
+  center: { x: number; y: number };
+  pointCount: number;
+  ringCoverage: number;
+  multiStroke: boolean;
 } {
-  const points = stroke.points;
+  const points = strokes.flatMap((stroke) => stroke.points);
   const bounds = boundingBox(points);
   const diagonal = Math.hypot(bounds.width, bounds.height);
   const first = points[0];
@@ -171,12 +207,17 @@ function scoreSealStroke(stroke: Stroke): {
   const radialScore = clamp(1 - Math.sqrt(variance) / Math.max(meanRadius * 0.38, 1), 0, 1);
   const aspectScore = clamp(1 - Math.abs(bounds.width - bounds.height) / Math.max(bounds.width, bounds.height, 1), 0, 1);
   const circularity = clamp(radialScore * 0.72 + aspectScore * 0.28, 0, 1);
+  const ringCoverage = measureRingCoverage(points, center);
 
   return {
     bounds,
     diagonal,
     closure,
-    circularity
+    circularity,
+    center,
+    pointCount: points.length,
+    ringCoverage,
+    multiStroke: strokes.length > 1
   };
 }
 
@@ -187,6 +228,55 @@ function measureEnclosureMargin(ringBounds: StrokeBounds, baseBounds: StrokeBoun
     baseBounds.minY - ringBounds.minY,
     ringBounds.maxY - baseBounds.maxY
   );
+}
+
+function measureCenterAlignment(ringCenter: { x: number; y: number }, baseBounds: StrokeBounds): number {
+  const baseCenter = {
+    x: (baseBounds.minX + baseBounds.maxX) / 2,
+    y: (baseBounds.minY + baseBounds.maxY) / 2
+  };
+  const baseDiagonal = Math.max(Math.hypot(baseBounds.width, baseBounds.height), 1);
+
+  return clamp(1 - distance(ringCenter, baseCenter) / Math.max(baseDiagonal * 0.48, 1), 0, 1);
+}
+
+function measureRingCoverage(points: readonly Stroke["points"][number][], center: { x: number; y: number }): number {
+  if (points.length < 3) {
+    return 0;
+  }
+
+  const angles = points
+    .map((point) => Math.atan2(point.y - center.y, point.x - center.x))
+    .sort((left, right) => left - right);
+  let maxGap = 0;
+
+  for (let index = 0; index < angles.length; index += 1) {
+    const current = angles[index];
+    const next = index === angles.length - 1 ? angles[0] + Math.PI * 2 : angles[index + 1];
+    maxGap = Math.max(maxGap, next - current);
+  }
+
+  return clamp(1 - maxGap / (Math.PI * 2), 0, 1);
+}
+
+function measureFalsePositiveRisk(values: {
+  closure: number;
+  circularity: number;
+  enclosureMargin: number;
+  requiredMargin: number;
+  centerAlignment: number;
+  ringCoverage: number;
+}): number {
+  const marginScore = clamp(values.enclosureMargin / Math.max(values.requiredMargin, 1), 0, 1);
+  const confidence = Math.min(
+    values.closure,
+    values.circularity,
+    marginScore,
+    values.centerAlignment,
+    values.ringCoverage
+  );
+
+  return roundMetric(1 - confidence);
 }
 
 function preferMoreUsefulFailure(left: SealDetection | null, right: SealDetection): SealDetection {
@@ -224,4 +314,8 @@ function cloneSession(session: StrokeSession): StrokeSession {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+function roundMetric(value: number): number {
+  return Number(value.toFixed(4));
 }

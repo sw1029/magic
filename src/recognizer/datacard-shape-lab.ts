@@ -11,12 +11,16 @@ import {
   strokeStraightness
 } from "./geometry";
 import { listBuiltInFamilyCards, type MagicFamilyCard } from "./datacards";
+import { deriveRecognitionFeatureVectorV2 } from "./feature-v2";
+import { buildGestureRecognitionSignals } from "./gesture-matcher";
 import { recognizeSession } from "./recognize";
 import { recognizeSealedBaseSession } from "./seal";
 import { GLYPH_TEMPLATES } from "./templates";
 import type {
   GlyphFamily,
+  GestureRecognitionSignals,
   PointSample,
+  RecognitionFeatureVectorV2,
   RecognitionResult,
   RecognitionStatus,
   SealDetection,
@@ -29,6 +33,11 @@ export type CustomGlyphFamilyId = `custom:${string}`;
 export type DatacardShapeId = GlyphFamily | CustomGlyphFamilyId;
 export type DatacardShapePresetKind = "built_in" | "custom";
 export type DatacardShapePresetGroup = "basic" | "custom";
+export type DatacardRecognizerActivationStatus =
+  | "metadata"
+  | "shape_definition"
+  | "active_recognizer"
+  | "blocked";
 
 export interface DatacardShapeFeatureHints {
   strokeCount: readonly [number, number];
@@ -66,6 +75,8 @@ export interface DatacardShapeCapture {
   strokes: Stroke[];
   normalizedCloud: PointSample[];
   features: DatacardShapeFeatureVector;
+  featureV2?: RecognitionFeatureVectorV2;
+  gestureSummary?: GestureRecognitionSignals;
   timestamp: number;
 }
 
@@ -84,7 +95,10 @@ export interface DatacardRecognitionCandidate {
   localModelLift: number;
   templateScore: number;
   hintScore: number;
+  gestureScore?: number;
   captureCount: number;
+  activationStatus?: DatacardRecognizerActivationStatus;
+  promotionRisk?: number;
   status: RecognitionStatus;
   reason: string;
 }
@@ -97,6 +111,7 @@ export interface DatacardRecognitionResult {
   sessionUsed: StrokeSession;
   sealDetection?: SealDetection;
   features: DatacardShapeFeatureVector;
+  registry?: DatacardRecognizerRegistry;
 }
 
 export interface DatacardShapeValidationIssue {
@@ -120,6 +135,37 @@ export interface DatacardShapeFeatureVector {
   fillRatio: number;
   parallelism: number;
   rawAngleRadians: number;
+}
+
+export interface DatacardShapeRecognizerProfile {
+  preset: DatacardShapePreset;
+  activationStatus: DatacardRecognizerActivationStatus;
+  activationReasons: readonly string[];
+  replacementFor?: GlyphFamily;
+  operatorCompatible: boolean;
+  captureCount: number;
+  captures: readonly DatacardShapeCapture[];
+  confusionRisk: number;
+  signature: string;
+  featureV2?: RecognitionFeatureVectorV2;
+  gestureSummary?: GestureRecognitionSignals;
+}
+
+export interface DatacardRecognizerRegistry {
+  profiles: readonly DatacardShapeRecognizerProfile[];
+  activeProfiles: readonly DatacardShapeRecognizerProfile[];
+  replacedBy: Partial<Record<GlyphFamily, DatacardShapeId>>;
+  signature: string;
+  createdAt: number;
+}
+
+export interface DatacardShapeCompileOptions {
+  activate?: boolean;
+  qaPassed?: boolean;
+  replacementFor?: GlyphFamily;
+  operatorCompatible?: boolean;
+  builtInConfusionLimit?: number;
+  now?: number;
 }
 
 const CUSTOM_SHAPE_PRESETS: readonly DatacardShapePreset[] = [
@@ -363,6 +409,8 @@ export function appendDatacardShapeCapture(
     strokes: safeStrokes,
     normalizedCloud: normalized?.normalizedCloud.map((point) => ({ ...point })) ?? [],
     features: deriveShapeFeatures(safeStrokes),
+    featureV2: deriveRecognitionFeatureVectorV2(safeStrokes),
+    gestureSummary: resolveCaptureGestureSummary(presetId, safeStrokes),
     timestamp
   };
 
@@ -381,7 +429,9 @@ export function recognizeSessionWithDatacard(
   const prepared = prepareDatacardRecognitionSession(session, baseProfile);
   const features = deriveShapeFeatures(prepared.sessionUsed.strokes);
   const candidates = listDatacardShapePresets()
-    .map((candidatePreset) => scoreDatacardPreset(candidatePreset, prepared.baseResult, prepared.sessionUsed, features, captures))
+    .map((candidatePreset) =>
+      scoreDatacardPreset(candidatePreset, prepared.baseResult, prepared.sessionUsed, features, captures)
+    )
     .sort((left, right) => right.score - left.score);
   const selectedCandidate =
     candidates.find((candidate) => candidate.id === preset.id) ??
@@ -395,6 +445,118 @@ export function recognizeSessionWithDatacard(
     sessionUsed: prepared.sessionUsed,
     sealDetection: prepared.sealDetection,
     features
+  };
+}
+
+export function compileDatacardShapePreset(
+  preset: DatacardShapePreset,
+  captures: DatacardShapeCaptureStore,
+  options: DatacardShapeCompileOptions = {}
+): DatacardShapeRecognizerProfile {
+  const validation = validateDatacardShapePreset(preset);
+  const matchingCaptures = captures.captures.filter((capture) => capture.presetId === preset.id);
+  const confusionRisk = estimateDatacardConfusionRisk(preset);
+  const builtInConfusionLimit = options.builtInConfusionLimit ?? 0.32;
+  const activationReasons: string[] = [];
+  let activationStatus: DatacardRecognizerActivationStatus = "metadata";
+
+  if (!validation.valid) {
+    activationStatus = "blocked";
+    activationReasons.push(...validation.issues.map((issue) => issue.code));
+  } else if (preset.kind === "built_in") {
+    activationStatus = "active_recognizer";
+    activationReasons.push("built_in_family");
+  } else {
+    activationStatus = "shape_definition";
+    activationReasons.push("valid_definition");
+
+    if (preset.definition.exampleTemplate.length === 0) {
+      activationStatus = "blocked";
+      activationReasons.push("missing_template");
+    } else if (confusionRisk > builtInConfusionLimit) {
+      activationReasons.push("confusion_risk_shadow_only");
+    } else if (matchingCaptures.length >= 3 || options.qaPassed || options.activate) {
+      activationStatus = "active_recognizer";
+      activationReasons.push(matchingCaptures.length >= 3 ? "capture_threshold_met" : "qa_override");
+    } else {
+      activationReasons.push("capture_threshold_pending");
+    }
+  }
+
+  return {
+    preset,
+    activationStatus,
+    activationReasons,
+    replacementFor: options.replacementFor,
+    operatorCompatible: options.operatorCompatible ?? preset.kind === "built_in",
+    captureCount: matchingCaptures.length,
+    captures: matchingCaptures.map(cloneDatacardCapture),
+    confusionRisk: roundMetric(confusionRisk),
+    signature: buildDatacardRecognizerSignature(preset, matchingCaptures),
+    featureV2: deriveRecognitionFeatureVectorV2(cloneStrokes(preset.definition.exampleTemplate)),
+    gestureSummary: averageCaptureGestureSummary(matchingCaptures)
+  };
+}
+
+export function createDatacardRecognizerRegistry(
+  presets: readonly DatacardShapePreset[] = listDatacardShapePresets(),
+  captures: DatacardShapeCaptureStore = createEmptyDatacardShapeCaptureStore(),
+  options: DatacardShapeCompileOptions = {}
+): DatacardRecognizerRegistry {
+  const profiles = presets.map((preset) => compileDatacardShapePreset(preset, captures, options));
+  const activeProfiles = profiles.filter((profile) => profile.activationStatus === "active_recognizer");
+  const replacedBy = profiles.reduce<Partial<Record<GlyphFamily, DatacardShapeId>>>((accumulator, profile) => {
+    if (profile.replacementFor && profile.activationStatus === "active_recognizer") {
+      accumulator[profile.replacementFor] = profile.preset.id;
+    }
+
+    return accumulator;
+  }, {});
+  const signature = [
+    "datacard-registry-v1",
+    ...profiles.map((profile) => `${profile.preset.id}:${profile.activationStatus}:${profile.captureCount}`)
+  ].join("|");
+
+  return {
+    profiles,
+    activeProfiles,
+    replacedBy,
+    signature,
+    createdAt: options.now ?? Date.now()
+  };
+}
+
+export function recognizeSessionWithDatacardRegistry(
+  session: StrokeSession,
+  registry: DatacardRecognizerRegistry,
+  options: { selectedPresetId?: DatacardShapeId; baseProfile?: UserInputProfile } = {}
+): DatacardRecognitionResult {
+  const prepared = prepareDatacardRecognitionSession(session, options.baseProfile);
+  const features = deriveShapeFeatures(prepared.sessionUsed.strokes);
+  const syntheticStore: DatacardShapeCaptureStore = {
+    captures: [],
+    updatedAt: registry.createdAt
+  };
+  const candidates = registry.profiles
+    .map((profile) =>
+      scoreDatacardPreset(profile.preset, prepared.baseResult, prepared.sessionUsed, features, syntheticStore, profile)
+    )
+    .sort((left, right) => right.score - left.score);
+  const selectedPresetId = options.selectedPresetId ?? candidates[0]?.id ?? registry.profiles[0]?.preset.id ?? "wind";
+  const selectedCandidate =
+    candidates.find((candidate) => candidate.id === selectedPresetId) ??
+    candidates[0] ??
+    scoreDatacardPreset(listDatacardShapePresets()[0], prepared.baseResult, prepared.sessionUsed, features, syntheticStore);
+
+  return {
+    selectedPresetId,
+    selectedCandidate,
+    candidates,
+    baseResult: prepared.baseResult,
+    sessionUsed: prepared.sessionUsed,
+    sealDetection: prepared.sealDetection,
+    features,
+    registry
   };
 }
 
@@ -435,30 +597,129 @@ function buildBuiltInShapePreset(card: MagicFamilyCard): DatacardShapePreset {
   };
 }
 
+function estimateDatacardConfusionRisk(preset: DatacardShapePreset): number {
+  if (preset.kind === "built_in") {
+    return 0;
+  }
+
+  const templateScores = GLYPH_TEMPLATES.map((template) =>
+    scoreTemplate(preset.definition.exampleTemplate, template.strokes)
+  );
+  const hintOverlap = listBuiltInShapePresets()
+    .map((builtInPreset) => scoreFeatureHintOverlap(preset.definition.features, builtInPreset.definition.features))
+    .sort((left, right) => right - left)[0] ?? 0;
+
+  return clamp((Math.max(...templateScores, 0) * 0.68 + hintOverlap * 0.32) * 0.8, 0, 1);
+}
+
+function scoreFeatureHintOverlap(left: DatacardShapeFeatureHints, right: DatacardShapeFeatureHints): number {
+  const scores = [
+    rangeOverlap(left.strokeCount, right.strokeCount),
+    left.closed === right.closed ? 1 : 0
+  ];
+
+  if (left.corners && right.corners) {
+    scores.push(rangeOverlap(left.corners, right.corners));
+  }
+
+  if (left.endpointClusters && right.endpointClusters) {
+    scores.push(rangeOverlap(left.endpointClusters, right.endpointClusters));
+  }
+
+  if (left.circularity && right.circularity) {
+    scores.push(rangeOverlap(left.circularity, right.circularity));
+  }
+
+  if (left.fillRatio && right.fillRatio) {
+    scores.push(rangeOverlap(left.fillRatio, right.fillRatio));
+  }
+
+  if (left.parallelism && right.parallelism) {
+    scores.push(rangeOverlap(left.parallelism, right.parallelism));
+  }
+
+  return average(scores);
+}
+
+function rangeOverlap(left: readonly [number, number], right: readonly [number, number]): number {
+  const overlap = Math.max(0, Math.min(left[1], right[1]) - Math.max(left[0], right[0]));
+  const union = Math.max(left[1], right[1]) - Math.min(left[0], right[0]);
+  return union <= 0 ? 0 : clamp(overlap / union, 0, 1);
+}
+
+function buildDatacardRecognizerSignature(
+  preset: DatacardShapePreset,
+  captures: readonly DatacardShapeCapture[]
+): string {
+  return [
+    "datacard-shape-v1",
+    preset.id,
+    preset.definition.pattern,
+    preset.definition.exampleTemplate.length,
+    captures.length
+  ].join(":");
+}
+
+function resolveCaptureGestureSummary(
+  presetId: DatacardShapeId,
+  strokes: readonly Stroke[]
+): GestureRecognitionSignals | undefined {
+  const preset = getDatacardShapePresetById(presetId);
+
+  if (!preset) {
+    return undefined;
+  }
+
+  return buildGestureRecognitionSignals(strokes, preset.definition.exampleTemplate);
+}
+
+function averageCaptureGestureSummary(
+  captures: readonly DatacardShapeCapture[]
+): GestureRecognitionSignals | undefined {
+  const gestureSummaries = captures
+    .map((capture) => capture.gestureSummary)
+    .filter((summary): summary is GestureRecognitionSignals => Boolean(summary));
+
+  if (gestureSummaries.length === 0) {
+    return undefined;
+  }
+
+  return {
+    trajectorySimilarity: roundMetric(average(gestureSummaries.map((summary) => summary.trajectorySimilarity))),
+    strokeOrderSimilarity: roundMetric(average(gestureSummaries.map((summary) => summary.strokeOrderSimilarity))),
+    directionSequenceSimilarity: roundMetric(average(gestureSummaries.map((summary) => summary.directionSequenceSimilarity))),
+    gestureScore: roundMetric(average(gestureSummaries.map((summary) => summary.gestureScore))),
+    temporalScore: roundMetric(average(gestureSummaries.map((summary) => summary.temporalScore)))
+  };
+}
+
 function scoreDatacardPreset(
   preset: DatacardShapePreset,
   baseResult: RecognitionResult,
   session: StrokeSession,
   features: DatacardShapeFeatureVector,
-  captures: DatacardShapeCaptureStore
+  captures: DatacardShapeCaptureStore,
+  recognizerProfile?: DatacardShapeRecognizerProfile
 ): DatacardRecognitionCandidate {
   const templateScore = scoreTemplate(session.strokes, preset.definition.exampleTemplate);
   const hintScore = scoreFeatureHints(features, preset.definition.features);
+  const gesture = buildGestureRecognitionSignals(session.strokes, preset.definition.exampleTemplate);
   const baseCandidateScore = preset.builtInFamily
     ? baseResult.candidates.find((candidate) => candidate.family === preset.builtInFamily)?.score
     : undefined;
   const rawBaseline =
     preset.kind === "built_in"
-      ? (baseCandidateScore ?? 0) * 0.64 + templateScore * 0.16 + hintScore * 0.2
-      : templateScore * 0.58 + hintScore * 0.42;
+      ? (baseCandidateScore ?? 0) * 0.58 + templateScore * 0.14 + hintScore * 0.2 + gesture.gestureScore * 0.08
+      : templateScore * 0.42 + hintScore * 0.28 + gesture.gestureScore * 0.3;
   const baselineScore = clamp(preset.kind === "custom" ? rawBaseline * 0.88 : rawBaseline, 0, 1);
-  const matchingCaptures = captures.captures.filter((capture) => capture.presetId === preset.id);
+  const matchingCaptures = recognizerProfile?.captures ?? captures.captures.filter((capture) => capture.presetId === preset.id);
+  const captureCount = recognizerProfile?.captureCount ?? matchingCaptures.length;
   const localModelScore = matchingCaptures.length > 0 ? scoreLocalModel(session.strokes, features, matchingCaptures) : undefined;
   const score =
     localModelScore === undefined
       ? baselineScore
       : clamp(baselineScore * 0.66 + localModelScore * 0.34 + Math.min(matchingCaptures.length, 4) * 0.012, 0, 1);
-  const status = resolveDatacardStatus(score, baselineScore, matchingCaptures.length, session.strokes.length);
+  const status = resolveDatacardStatus(score, baselineScore, captureCount, session.strokes.length);
 
   return {
     id: preset.id,
@@ -470,9 +731,12 @@ function scoreDatacardPreset(
     localModelLift: roundMetric(score - baselineScore),
     templateScore: roundMetric(templateScore),
     hintScore: roundMetric(hintScore),
-    captureCount: matchingCaptures.length,
+    gestureScore: gesture.gestureScore,
+    captureCount,
+    activationStatus: recognizerProfile?.activationStatus ?? (preset.kind === "built_in" ? "active_recognizer" : "shape_definition"),
+    promotionRisk: recognizerProfile ? roundMetric(recognizerProfile.confusionRisk + (recognizerProfile.activationStatus === "active_recognizer" ? 0 : 0.18)) : undefined,
     status,
-    reason: buildDatacardReason(status, preset, score, matchingCaptures.length)
+    reason: buildDatacardReason(status, preset, score, captureCount)
   };
 }
 
@@ -801,6 +1065,22 @@ function cloneStrokes(strokes: readonly Stroke[]): Stroke[] {
     ...stroke,
     points: stroke.points.map((point) => ({ ...point }))
   }));
+}
+
+function cloneDatacardCapture(capture: DatacardShapeCapture): DatacardShapeCapture {
+  return {
+    ...capture,
+    strokes: cloneStrokes(capture.strokes),
+    normalizedCloud: capture.normalizedCloud.map((point) => ({ ...point })),
+    features: { ...capture.features },
+    featureV2: capture.featureV2
+      ? {
+          ...capture.featureV2,
+          curvatureHistogram: [...capture.featureV2.curvatureHistogram] as [number, number, number]
+        }
+      : undefined,
+    gestureSummary: capture.gestureSummary ? { ...capture.gestureSummary } : undefined
+  };
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

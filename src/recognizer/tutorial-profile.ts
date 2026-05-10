@@ -10,18 +10,28 @@ import {
   strokeStraightness
 } from "./geometry";
 import {
+  averageFeatureVectorV2,
+  cloneFeatureVectorV2,
+  deriveRecognitionFeatureVectorV2,
+  varianceFeatureVectorV2
+} from "./feature-v2";
+import { averageGestureRecognitionSignals, buildGestureRecognitionSignals } from "./gesture-matcher";
+import {
   BUILT_IN_MAGIC_FAMILY_LABELS,
   BUILT_IN_MAGIC_OPERATOR_LABELS,
   getBuiltInMagicCardSetSignature
 } from "./datacards";
+import { GLYPH_TEMPLATES } from "./templates";
 import type {
   FamilyPrototype,
+  GestureRecognitionSignals,
   GlyphFamily,
   OperatorPrototype,
   OverlayOperator,
   PointSample,
   RecognitionCalibration,
   RecognitionFeatures,
+  RecognitionFeatureVectorV2,
   Stroke,
   StrokeBounds,
   TutorialCapture,
@@ -183,6 +193,8 @@ export function createTutorialCapture(input: TutorialCaptureInput): TutorialCapt
     expectedFamily: input.kind === "family" ? input.expectedFamily : undefined,
     expectedOperator: input.kind === "operator" ? input.expectedOperator : undefined,
     strokes: cloneStrokes(input.strokes),
+    featureV2: deriveRecognitionFeatureVectorV2(input.strokes),
+    gestureSummary: deriveTutorialGestureSummary(input.kind, input.expectedFamily, input.strokes),
     source: normalizedSource,
     timestamp,
     baseSnapshot: cloneBaseSnapshot(input.baseSnapshot),
@@ -219,6 +231,8 @@ export function rebuildTutorialProfileStore(
     captures: sanitizedCaptures.map((capture) => ({
       ...capture,
       strokes: cloneStrokes(capture.strokes),
+      featureV2: cloneFeatureVectorV2(capture.featureV2),
+      gestureSummary: cloneGestureSummary(capture.gestureSummary),
       baseSnapshot: cloneBaseSnapshot(capture.baseSnapshot),
       operatorContext: cloneOperatorContext(capture.operatorContext),
       validation: cloneTutorialCaptureValidation(capture.validation)
@@ -288,6 +302,8 @@ export function backfillTutorialProfileCardSignature(store: TutorialProfileStore
     captures: store.captures.map((capture) => ({
       ...capture,
       strokes: cloneStrokes(capture.strokes),
+      featureV2: cloneFeatureVectorV2(capture.featureV2),
+      gestureSummary: cloneGestureSummary(capture.gestureSummary),
       baseSnapshot: cloneBaseSnapshot(capture.baseSnapshot),
       operatorContext: cloneOperatorContext(capture.operatorContext),
       validation: cloneTutorialCaptureValidation(capture.validation)
@@ -548,7 +564,7 @@ function buildFamilyPrototype(
   captures: TutorialCapture[]
 ): FamilyPrototype | undefined {
   const samples = captures
-    .map((capture) => deriveTutorialFeatureSample(capture.strokes))
+    .map((capture) => deriveTutorialFeatureSample(capture.strokes, capture.featureV2))
     .filter((sample): sample is TutorialFeatureSample => Boolean(sample));
 
   if (samples.length === 0) {
@@ -559,6 +575,13 @@ function buildFamilyPrototype(
     family,
     normalizedClouds: samples.slice(-MAX_PROTOTYPE_SAMPLES).map((sample) => clonePointCloud(sample.normalizedCloud)),
     averageFeatures: averageRecognitionFeatures(samples.map((sample) => sample.features)),
+    featureV2: averageFeatureVectorV2(samples.map((sample) => sample.featureV2)),
+    featureV2Variance: varianceFeatureVectorV2(samples.map((sample) => sample.featureV2)),
+    gestureSummary: averageGestureRecognitionSignals(
+      captures
+        .map((capture) => capture.gestureSummary)
+        .filter((summary): summary is GestureRecognitionSignals => Boolean(summary))
+    ),
     sampleCount: samples.length,
     reliability: roundMetric(resolveCaptureSetReliability(captures))
   };
@@ -569,7 +592,7 @@ function buildOperatorPrototype(
   captures: TutorialCapture[]
 ): OperatorPrototype | undefined {
   const samples = captures
-    .map((capture) => deriveOperatorTutorialFeatureSample(capture.strokes))
+    .map((capture) => deriveOperatorTutorialFeatureSample(capture.strokes, capture.featureV2))
     .filter((sample): sample is OperatorTutorialFeatureSample => Boolean(sample));
 
   if (samples.length === 0) {
@@ -581,6 +604,13 @@ function buildOperatorPrototype(
     normalizedClouds: samples.slice(-MAX_PROTOTYPE_SAMPLES).map((sample) => clonePointCloud(sample.normalizedCloud)),
     sampleCount: samples.length,
     reliability: roundMetric(resolveCaptureSetReliability(captures)),
+    featureV2: averageFeatureVectorV2(samples.map((sample) => sample.featureV2)),
+    featureV2Variance: varianceFeatureVectorV2(samples.map((sample) => sample.featureV2)),
+    gestureSummary: averageGestureRecognitionSignals(
+      captures
+        .map((capture) => capture.gestureSummary)
+        .filter((summary): summary is GestureRecognitionSignals => Boolean(summary))
+    ),
     averageAngleRadians: averageScalar(samples.map((sample) => sample.angleRadians)),
     averageScaleRatio: averageOptionalScalar(
       captures.map((capture) => capture.operatorContext?.scaleRatio).filter((value): value is number => value !== undefined)
@@ -889,17 +919,22 @@ function buildExistingOperatorBiases(captures: TutorialCapture[]): Partial<Recor
 interface TutorialFeatureSample {
   normalizedCloud: PointSample[];
   features: RecognitionFeatures;
+  featureV2: RecognitionFeatureVectorV2;
 }
 
 interface OperatorTutorialFeatureSample {
   normalizedCloud: PointSample[];
+  featureV2: RecognitionFeatureVectorV2;
   angleRadians: number;
   straightness: number;
   corners: number;
   closure: number;
 }
 
-function deriveTutorialFeatureSample(strokes: Stroke[]): TutorialFeatureSample | undefined {
+function deriveTutorialFeatureSample(
+  strokes: Stroke[],
+  existingFeatureV2?: RecognitionFeatureVectorV2
+): TutorialFeatureSample | undefined {
   const validStrokes = strokes.filter((stroke) => stroke.points.length >= 2);
 
   if (validStrokes.length === 0) {
@@ -917,6 +952,7 @@ function deriveTutorialFeatureSample(strokes: Stroke[]): TutorialFeatureSample |
 
   return {
     normalizedCloud: normalized.normalizedCloud,
+    featureV2: cloneFeatureVectorV2(existingFeatureV2) ?? deriveRecognitionFeatureVectorV2(validStrokes),
     features: {
       strokeCount: validStrokes.length,
       pointCount: validStrokes.reduce((sum, stroke) => sum + stroke.points.length, 0),
@@ -936,7 +972,10 @@ function deriveTutorialFeatureSample(strokes: Stroke[]): TutorialFeatureSample |
   };
 }
 
-function deriveOperatorTutorialFeatureSample(strokes: Stroke[]): OperatorTutorialFeatureSample | undefined {
+function deriveOperatorTutorialFeatureSample(
+  strokes: Stroke[],
+  existingFeatureV2?: RecognitionFeatureVectorV2
+): OperatorTutorialFeatureSample | undefined {
   const validStrokes = strokes.filter((stroke) => stroke.points.length >= 2);
   const dominantStroke = [...validStrokes].sort((left, right) => pathLength(right.points) - pathLength(left.points))[0];
 
@@ -953,6 +992,7 @@ function deriveOperatorTutorialFeatureSample(strokes: Stroke[]): OperatorTutoria
 
   return {
     normalizedCloud: normalized.normalizedCloud,
+    featureV2: cloneFeatureVectorV2(existingFeatureV2) ?? deriveRecognitionFeatureVectorV2(validStrokes),
     angleRadians: normalizeAngleHalfPi(lineAngle(dominantStroke)),
     straightness: strokeStraightness(dominantStroke),
     corners: Math.max(simplified.length - 1, 0),
@@ -1091,6 +1131,8 @@ function coerceTutorialCapture(raw: Partial<TutorialCapture> | undefined): Tutor
       kind: "family",
       expectedFamily: raw.expectedFamily,
       strokes,
+      featureV2: cloneFeatureVectorV2(raw.featureV2) ?? deriveRecognitionFeatureVectorV2(strokes),
+      gestureSummary: cloneGestureSummary(raw.gestureSummary) ?? deriveTutorialGestureSummary("family", raw.expectedFamily, strokes),
       source,
       timestamp,
       baseSnapshot: cloneBaseSnapshot(raw.baseSnapshot),
@@ -1108,6 +1150,8 @@ function coerceTutorialCapture(raw: Partial<TutorialCapture> | undefined): Tutor
     kind: "operator",
     expectedOperator: raw.expectedOperator,
     strokes,
+    featureV2: cloneFeatureVectorV2(raw.featureV2) ?? deriveRecognitionFeatureVectorV2(strokes),
+    gestureSummary: cloneGestureSummary(raw.gestureSummary),
     source,
     timestamp,
     baseSnapshot: cloneBaseSnapshot(raw.baseSnapshot),
@@ -1122,6 +1166,8 @@ function upsertCapture(existing: TutorialCapture[], nextCapture: TutorialCapture
     .map((capture) => ({
       ...capture,
       strokes: cloneStrokes(capture.strokes),
+      featureV2: cloneFeatureVectorV2(capture.featureV2),
+      gestureSummary: cloneGestureSummary(capture.gestureSummary),
       baseSnapshot: cloneBaseSnapshot(capture.baseSnapshot),
       operatorContext: cloneOperatorContext(capture.operatorContext),
       validation: cloneTutorialCaptureValidation(capture.validation)
@@ -1130,6 +1176,8 @@ function upsertCapture(existing: TutorialCapture[], nextCapture: TutorialCapture
   next.push({
     ...nextCapture,
     strokes: cloneStrokes(nextCapture.strokes),
+    featureV2: cloneFeatureVectorV2(nextCapture.featureV2),
+    gestureSummary: cloneGestureSummary(nextCapture.gestureSummary),
     baseSnapshot: cloneBaseSnapshot(nextCapture.baseSnapshot),
     operatorContext: cloneOperatorContext(nextCapture.operatorContext),
     validation: cloneTutorialCaptureValidation(nextCapture.validation)
@@ -1147,6 +1195,32 @@ function cloneStrokes(strokes: Stroke[]): Stroke[] {
 
 function clonePointCloud(points: PointSample[]): PointSample[] {
   return points.map((point) => ({ ...point }));
+}
+
+function deriveTutorialGestureSummary(
+  kind: TutorialCapture["kind"],
+  family: GlyphFamily | undefined,
+  strokes: readonly Stroke[]
+): GestureRecognitionSignals | undefined {
+  if (kind !== "family" || !family) {
+    return undefined;
+  }
+
+  const template = GLYPH_TEMPLATES.find((candidate) => candidate.family === family);
+
+  if (!template) {
+    return undefined;
+  }
+
+  return buildGestureRecognitionSignals(strokes, template.strokes);
+}
+
+function cloneGestureSummary(summary: GestureRecognitionSignals | undefined): GestureRecognitionSignals | undefined {
+  if (!summary) {
+    return undefined;
+  }
+
+  return { ...summary };
 }
 
 function cloneBaseSnapshot(snapshot: TutorialBaseSnapshot | undefined): TutorialBaseSnapshot | undefined {

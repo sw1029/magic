@@ -11,6 +11,8 @@ import {
 } from "./geometry";
 import { createEmptyQualityVector } from "./user-profile";
 import { calculateAdjustedQuality, calculateQualityVector } from "./quality";
+import { deriveRecognitionFeatureVectorV2 } from "./feature-v2";
+import { buildGestureRecognitionSignals } from "./gesture-matcher";
 import {
   buildBaseShadowSummary,
   rerankBaseCandidates,
@@ -47,8 +49,9 @@ export function recognizeSession(
   const rawQuality = calculateQualityVector(strokes, normalized);
   const { adjustedQuality, qualityAdjustment } = calculateAdjustedQuality(rawQuality, options.profile);
   const features = deriveFeatures({ ...session, strokes }, normalized);
+  const featureV2 = deriveRecognitionFeatureVectorV2(strokes);
   const heuristicCandidates = TEMPLATE_BUNDLES.map((template) =>
-    scoreCandidate(template.family, normalized.normalizedCloud, strokes.length, features, rawQuality)
+    scoreCandidate(template.family, normalized.normalizedCloud, strokes, features, rawQuality)
   ).sort((left, right) => right.score - left.score);
   const personalization = resolveBasePersonalizationRuntime(options.profile);
   const candidates = rerankBaseCandidates({
@@ -61,7 +64,7 @@ export function recognizeSession(
 
   const topCandidate = candidates[0];
   const secondCandidate = candidates[1];
-  const initialDecision = resolveBaseRecognitionDecision(topCandidate, secondCandidate, personalization.thresholdBias);
+  const initialDecision = resolveBaseRecognitionDecision(candidates, personalization.thresholdBias);
   const initialShadow = buildBaseShadowSummary({
     heuristicCandidates,
     actualCandidates: candidates,
@@ -72,7 +75,7 @@ export function recognizeSession(
     profile: options.profile
   });
   const effectiveThreshold = resolveBaseEffectiveThresholdBias(options.profile, topCandidate?.family, initialShadow);
-  const decision = resolveBaseRecognitionDecision(topCandidate, secondCandidate, effectiveThreshold.thresholdBias);
+  const decision = resolveBaseRecognitionDecision(candidates, effectiveThreshold.thresholdBias);
   const shadow =
     decision.status === initialDecision.status
       ? initialShadow
@@ -100,6 +103,7 @@ export function recognizeSession(
     adjustedQuality,
     qualityAdjustment,
     features,
+    featureV2,
     candidates,
     topCandidate,
     canonicalFamily: options.sealed && decision.status === "recognized" ? topCandidate?.family : undefined,
@@ -113,18 +117,29 @@ export function recognizeSession(
 }
 
 function resolveBaseRecognitionDecision(
-  topCandidate: RecognitionCandidate | undefined,
-  secondCandidate: RecognitionCandidate | undefined,
+  candidates: RecognitionCandidate[],
   thresholdBias: number
 ): Pick<RecognitionResult, "status" | "invalidReason"> {
+  const topCandidate = candidates[0];
+  const secondCandidate = candidates[1];
   const margin = topCandidate ? topCandidate.score - (secondCandidate?.score ?? 0) : 0;
   const recognizedScoreThreshold = 0.7 - thresholdBias;
   const recognizedMarginThreshold = Math.max(0.08, 0.15 - thresholdBias * 0.7);
+  const nearbyIncompleteCandidate = topCandidate
+    ? candidates
+        .slice(0, 3)
+        .find(
+          (candidate) =>
+            Boolean(candidate.completenessHint) &&
+            candidate.score >= 0.55 &&
+            topCandidate.score - candidate.score <= 0.1
+        )
+    : undefined;
 
-  if (topCandidate && topCandidate.score >= 0.55 && topCandidate.completenessHint) {
+  if (nearbyIncompleteCandidate) {
     return {
       status: "incomplete",
-      invalidReason: topCandidate.completenessHint
+      invalidReason: nearbyIncompleteCandidate.completenessHint
     };
   }
 
@@ -179,7 +194,7 @@ function deriveFeatures(session: StrokeSession, normalized: ReturnType<typeof no
 function scoreCandidate(
   family: GlyphFamily,
   normalizedCloud: ReturnType<typeof normalizeStrokes>["normalizedCloud"],
-  strokeCount: number,
+  strokes: StrokeSession["strokes"],
   features: RecognitionFeatures,
   quality: RecognitionResult["quality"]
 ): RecognitionCandidate {
@@ -192,6 +207,8 @@ function scoreCandidate(
   const templateDistance = pointCloudDistance(normalizedCloud, template.normalized.normalizedCloud);
   const templateScore = clamp(1 - templateDistance / 0.62, 0, 1);
   const notes = [`template=${templateScore.toFixed(2)}`];
+  const strokeCount = strokes.length;
+  const gesture = buildGestureRecognitionSignals(strokes, template.strokes);
   const strokeScore = rangeScore(strokeCount, template.expectedStrokeCount[0], template.expectedStrokeCount[1]);
   const openScore = clamp(1 - quality.closure, 0, 1);
   let score = templateScore;
@@ -286,11 +303,19 @@ function scoreCandidate(
       break;
   }
 
+  const gestureWeight = template.closed ? 0.08 : 0.15;
+  const blendedScore = score * (1 - gestureWeight) + gesture.gestureScore * gestureWeight;
+  const maxGestureShift = template.closed ? 0.035 : 0.055;
+  score += clamp(blendedScore - score, 0, maxGestureShift);
+  notes.push(`gesture=${gesture.gestureScore.toFixed(2)}`, `temporal=${gesture.temporalScore.toFixed(2)}`);
+
   return {
     family,
     score: clamp(score, 0, 1),
     templateDistance,
     notes,
+    gestureScore: gesture.gestureScore,
+    temporalScore: gesture.temporalScore,
     completenessHint
   };
 }

@@ -95,11 +95,49 @@ export interface RecognitionFeatures {
   rawAngleRadians: number;
 }
 
+export interface RecognitionFeatureVectorV2 {
+  strokeOrderSignature: string;
+  strokeSplitCount: number;
+  mergeCandidateCount: number;
+  velocityMean: number;
+  velocityVariance: number;
+  pauseCount: number;
+  curvatureMean: number;
+  curvatureVariance: number;
+  curvatureHistogram: readonly [number, number, number];
+  selfIntersectionCount: number;
+  endpointTopology: string;
+  endpointClusterCount: number;
+  pressureMean: number;
+  pressureVariance: number;
+  directionSequence: string;
+  directionChangeCount: number;
+}
+
+export interface GestureRecognitionSignals {
+  trajectorySimilarity: number;
+  strokeOrderSimilarity: number;
+  directionSequenceSimilarity: number;
+  gestureScore: number;
+  temporalScore: number;
+}
+
+export interface TinyMlFeatureSpecV2 {
+  featureSpecVersion: "v1" | "v2";
+  cardSignature?: string;
+  datacardRegistrySignature?: string;
+  baseFeatureOrder: readonly string[];
+  operatorFeatureOrder: readonly string[];
+  auxiliaryRoles: readonly string[];
+}
+
 export interface RecognitionCandidate {
   family: GlyphFamily;
   score: number;
   templateDistance: number;
   notes: string[];
+  gestureScore?: number;
+  temporalScore?: number;
   completenessHint?: string;
 }
 
@@ -163,6 +201,7 @@ export interface RecognitionResult {
   adjustedQuality: QualityVector;
   qualityAdjustment: QualityVector;
   features: RecognitionFeatures;
+  featureV2?: RecognitionFeatureVectorV2;
   candidates: RecognitionCandidate[];
   topCandidate?: RecognitionCandidate;
   canonicalFamily?: GlyphFamily;
@@ -179,10 +218,15 @@ export interface SealDetection {
   ringDetected: boolean;
   strokeId?: string;
   strokeIndex?: number;
+  candidateStrokeIds?: string[];
   baseStrokeCount: number;
   closure: number;
   circularity: number;
   enclosureMargin: number;
+  centerAlignment?: number;
+  ringCoverage?: number;
+  multiStroke?: boolean;
+  falsePositiveRisk?: number;
   reason: string;
 }
 
@@ -198,6 +242,8 @@ export interface TutorialCapture {
   expectedFamily?: GlyphFamily;
   expectedOperator?: OverlayOperator;
   strokes: Stroke[];
+  featureV2?: RecognitionFeatureVectorV2;
+  gestureSummary?: GestureRecognitionSignals;
   source: TutorialCaptureSource;
   timestamp: number;
   baseSnapshot?: TutorialBaseSnapshot;
@@ -240,6 +286,9 @@ export interface FamilyPrototype {
   family: GlyphFamily;
   normalizedClouds: PointSample[][];
   averageFeatures: Partial<RecognitionFeatures>;
+  featureV2?: Partial<RecognitionFeatureVectorV2>;
+  featureV2Variance?: Partial<RecognitionFeatureVectorV2>;
+  gestureSummary?: GestureRecognitionSignals;
   sampleCount: number;
   reliability?: number;
 }
@@ -249,6 +298,9 @@ export interface OperatorPrototype {
   normalizedClouds: PointSample[][];
   sampleCount: number;
   reliability?: number;
+  featureV2?: Partial<RecognitionFeatureVectorV2>;
+  featureV2Variance?: Partial<RecognitionFeatureVectorV2>;
+  gestureSummary?: GestureRecognitionSignals;
   averageAngleRadians?: number;
   averageScaleRatio?: number;
   averageAnchorZoneId?: OverlayAnchorZoneId;

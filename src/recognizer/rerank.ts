@@ -229,6 +229,9 @@ interface TinyMlArtifactBundle {
 
 export interface TinyMlRuntimeStatus {
   featureSpecAvailable: boolean;
+  featureSpecVersion?: "v1" | "v2" | "unknown";
+  cardSignatureCompatible: boolean;
+  datacardRegistryCompatible: boolean;
   baseShadowAvailable: boolean;
   operatorShadowAvailable: boolean;
   shadowMode: true;
@@ -245,8 +248,11 @@ const TINY_ML_ARTIFACTS: TinyMlArtifactBundle = {
 export function getTinyMlRuntimeStatus(): TinyMlRuntimeStatus {
   return {
     featureSpecAvailable: Boolean(TINY_ML_ARTIFACTS.featureSpec),
-    baseShadowAvailable: Boolean(TINY_ML_ARTIFACTS.baseRerank && TINY_ML_ARTIFACTS.baseConfidence),
-    operatorShadowAvailable: Boolean(TINY_ML_ARTIFACTS.operatorRerank && TINY_ML_ARTIFACTS.operatorConfidence),
+    featureSpecVersion: resolveTinyMlFeatureSpecVersion(),
+    cardSignatureCompatible: isTinyMlCardSignatureCompatible(),
+    datacardRegistryCompatible: isTinyMlDatacardRegistryCompatible(),
+    baseShadowAvailable: isBaseTinyMlCompatible(),
+    operatorShadowAvailable: isOperatorTinyMlCompatible(),
     shadowMode: true
   };
 }
@@ -287,6 +293,12 @@ export function rerankBaseCandidates(params: {
 
   const calibration = resolveCalibration(profile, shapeProfile, personalization.tutorialSampleCount);
   const topScore = candidates[0]?.score ?? 0;
+  const secondScore = candidates[1]?.score ?? 0;
+
+  if (topScore >= 0.82 && topScore - secondScore >= 0.22) {
+    return candidates;
+  }
+
   const rerankableFamilies = candidates
     .filter((candidate, index) => index < MAX_TOP_K && topScore - candidate.score <= TOP_K_WINDOW)
     .map((candidate) => candidate.family);
@@ -882,7 +894,8 @@ function currentMagicCardPolicySignature(): { cardSetId: string; cardSetHash: st
 
 function isBaseTinyMlCompatible(): boolean {
   return Boolean(
-    TINY_ML_ARTIFACTS.baseRerank?.featureOrder &&
+    isTinyMlFeatureSpecCompatible() &&
+      TINY_ML_ARTIFACTS.baseRerank?.featureOrder &&
       TINY_ML_ARTIFACTS.baseRerank.featureNormalization &&
       TINY_ML_ARTIFACTS.baseRerank.models?.main?.model &&
       TINY_ML_ARTIFACTS.baseConfidence?.featureOrder &&
@@ -893,7 +906,8 @@ function isBaseTinyMlCompatible(): boolean {
 
 function isOperatorTinyMlCompatible(): boolean {
   return Boolean(
-    TINY_ML_ARTIFACTS.operatorRerank?.featureOrder &&
+    isTinyMlFeatureSpecCompatible() &&
+      TINY_ML_ARTIFACTS.operatorRerank?.featureOrder &&
       TINY_ML_ARTIFACTS.operatorRerank.featureNormalization &&
       TINY_ML_ARTIFACTS.operatorRerank.treeParams?.pairwiseDeltaModel &&
       TINY_ML_ARTIFACTS.operatorRerank.weights?.falsePositiveSuppression &&
@@ -901,6 +915,62 @@ function isOperatorTinyMlCompatible(): boolean {
       TINY_ML_ARTIFACTS.operatorConfidence.featureNormalization &&
       TINY_ML_ARTIFACTS.operatorConfidence.weights
   );
+}
+
+function isTinyMlFeatureSpecCompatible(): boolean {
+  return (
+    Boolean(TINY_ML_ARTIFACTS.featureSpec) &&
+    isTinyMlCardSignatureCompatible() &&
+    isTinyMlDatacardRegistryCompatible()
+  );
+}
+
+function resolveTinyMlFeatureSpecVersion(): "v1" | "v2" | "unknown" | undefined {
+  const spec = TINY_ML_ARTIFACTS.featureSpec;
+
+  if (!spec) {
+    return undefined;
+  }
+
+  const explicit = String(spec.featureSpecVersion ?? spec.schemaVersion ?? spec.version ?? "");
+
+  if (explicit.includes("v2")) {
+    return "v2";
+  }
+
+  if (explicit.includes("v1")) {
+    return "v1";
+  }
+
+  return "unknown";
+}
+
+function isTinyMlCardSignatureCompatible(): boolean {
+  const spec = TINY_ML_ARTIFACTS.featureSpec;
+
+  if (!spec) {
+    return false;
+  }
+
+  const requiredSignature = String(spec.cardSignature ?? spec.cardSetHash ?? "");
+
+  if (!requiredSignature) {
+    return true;
+  }
+
+  const current = getBuiltInMagicCardSetSignature();
+  return requiredSignature === current.cardSetHash || requiredSignature === current.cardSetId;
+}
+
+function isTinyMlDatacardRegistryCompatible(): boolean {
+  const spec = TINY_ML_ARTIFACTS.featureSpec;
+
+  if (!spec) {
+    return false;
+  }
+
+  const requiredRegistry = String(spec.datacardRegistrySignature ?? "");
+  return requiredRegistry.length === 0;
 }
 
 function buildPersonalizationRuntime(input: {

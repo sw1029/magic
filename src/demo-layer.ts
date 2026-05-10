@@ -1,5 +1,5 @@
 export type DemoViewPreset = "clean" | "explain" | "workshop";
-export type DemoPage = "test" | "tutorial" | "ml" | "quality" | "guide" | "logs";
+export type DemoPage = "test" | "tutorial" | "ml" | "quality" | "guide" | "logs" | "dashboard";
 export type GuidedDemoScenarioId =
   | "same_shape_fast"
   | "same_shape_slow"

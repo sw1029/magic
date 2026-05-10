@@ -9,6 +9,11 @@ import {
   rdpSimplify,
   strokeStraightness
 } from "./geometry";
+import {
+  BUILT_IN_MAGIC_FAMILY_LABELS,
+  BUILT_IN_MAGIC_OPERATOR_LABELS,
+  getBuiltInMagicCardSetSignature
+} from "./datacards";
 import type {
   FamilyPrototype,
   GlyphFamily,
@@ -29,6 +34,25 @@ import type {
   UserShapeProfile
 } from "./types";
 import type { OverlayPersonalizationProfile } from "./rerank";
+
+
+export type TutorialProfileBackfillReason =
+  | "already_current"
+  | "legacy_missing"
+  | "card_mismatch"
+  | "empty_store"
+  | "unknown_capture_target";
+
+export interface TutorialProfileBackfillPreview {
+  canBackfill: boolean;
+  reason: TutorialProfileBackfillReason;
+  currentCardSetId: string;
+  currentCardSetHash: string;
+  captureCount: number;
+  validatedCount: number;
+  userMessage: string;
+  blockingDetails: readonly string[];
+}
 
 export interface TutorialCaptureInput {
   id?: string;
@@ -72,6 +96,32 @@ const MIN_CALIBRATION_SAMPLES = 4;
 const FULL_CALIBRATION_SAMPLES = 24;
 const CONFUSION_THRESHOLD = 0.22;
 
+type TutorialCardSignatureFields = { cardSetId?: string; cardSetHash?: string; cardSignature?: string };
+
+function currentTutorialCardSignature(): Required<TutorialCardSignatureFields> {
+  const signature = getBuiltInMagicCardSetSignature();
+
+  return {
+    cardSetId: signature.cardSetId,
+    cardSetHash: signature.cardSetHash,
+    cardSignature: signature.cardSetHash
+  };
+}
+
+function resolveTutorialCardSignature(
+  raw?: Partial<TutorialProfileStore> | null
+): TutorialCardSignatureFields {
+  if (!raw) {
+    return currentTutorialCardSignature();
+  }
+
+  return {
+    cardSetId: typeof raw.cardSetId === "string" ? raw.cardSetId : undefined,
+    cardSetHash: typeof raw.cardSetHash === "string" ? raw.cardSetHash : undefined,
+    cardSignature: typeof raw.cardSignature === "string" ? raw.cardSignature : undefined
+  };
+}
+
 export function createEmptyRecognitionCalibration(): RecognitionCalibration {
   return {
     userPrototypeWeight: 0,
@@ -80,9 +130,13 @@ export function createEmptyRecognitionCalibration(): RecognitionCalibration {
   };
 }
 
-export function createEmptyUserShapeProfile(updatedAt = Date.now()): UserShapeProfile {
+export function createEmptyUserShapeProfile(
+  updatedAt = Date.now(),
+  cardSignature: TutorialCardSignatureFields = currentTutorialCardSignature()
+): UserShapeProfile {
   return {
     tutorialSampleCount: 0,
+    ...cardSignature,
     familyTutorialSampleCount: 0,
     operatorTutorialSampleCount: 0,
     validatedTutorialSampleCount: 0,
@@ -99,10 +153,13 @@ export function createEmptyUserShapeProfile(updatedAt = Date.now()): UserShapePr
 }
 
 export function createEmptyTutorialProfileStore(updatedAt = Date.now()): TutorialProfileStore {
+  const cardSignature = currentTutorialCardSignature();
+
   return {
     version: "v1.5",
+    ...cardSignature,
     captures: [],
-    shapeProfile: createEmptyUserShapeProfile(updatedAt),
+    shapeProfile: createEmptyUserShapeProfile(updatedAt, cardSignature),
     calibration: createEmptyRecognitionCalibration(),
     updatedAt
   };
@@ -142,21 +199,23 @@ export function appendTutorialCapture(
   const capture = createTutorialCapture(input);
   const captures = upsertCapture(previous.captures, capture);
 
-  return rebuildTutorialProfileStore(captures, capture.timestamp);
+  return rebuildTutorialProfileStore(captures, capture.timestamp, resolveTutorialCardSignature(previous));
 }
 
 export function rebuildTutorialProfileStore(
   captures: TutorialCapture[],
-  updatedAt = latestCaptureTimestamp(captures)
+  updatedAt = latestCaptureTimestamp(captures),
+  cardSignature: TutorialCardSignatureFields = currentTutorialCardSignature()
 ): TutorialProfileStore {
   const sanitizedCaptures = captures
     .map((capture) => coerceTutorialCapture(capture))
     .filter((capture): capture is TutorialCapture => Boolean(capture));
   const safeUpdatedAt = updatedAt > 0 ? updatedAt : Date.now();
-  const shapeProfile = buildUserShapeProfile(sanitizedCaptures, safeUpdatedAt);
+  const shapeProfile = buildUserShapeProfile(sanitizedCaptures, safeUpdatedAt, cardSignature);
 
   return {
     version: "v1.5",
+    ...cardSignature,
     captures: sanitizedCaptures.map((capture) => ({
       ...capture,
       strokes: cloneStrokes(capture.strokes),
@@ -185,7 +244,133 @@ export function hydrateTutorialProfileStore(raw: Partial<TutorialProfileStore> |
       ? raw.updatedAt
       : latestCaptureTimestamp(captures);
 
-  return rebuildTutorialProfileStore(captures, updatedAt);
+  return rebuildTutorialProfileStore(captures, updatedAt, resolveTutorialCardSignature(raw));
+}
+
+export function previewTutorialProfileCardBackfill(store: TutorialProfileStore): TutorialProfileBackfillPreview {
+  const current = currentTutorialCardSignature();
+  const captureCount = store.captures.length;
+  const validatedCount = store.shapeProfile.validatedTutorialSampleCount ?? 0;
+  const signature = resolveStoreCardSignature(store);
+  const blockingDetails = scanBackfillCaptureIssues(store.captures);
+
+  if (signatureMatchesCurrent(signature, current)) {
+    return buildBackfillPreview(false, "already_current", current, captureCount, validatedCount, "현재 카드 기준으로 이미 정리된 연습 기록입니다.", []);
+  }
+
+  if (hasAnySignatureValue(signature)) {
+    return buildBackfillPreview(false, "card_mismatch", current, captureCount, validatedCount, "다른 카드 묶음의 연습 기록이라 자동 보강하지 않습니다.", []);
+  }
+
+  if (blockingDetails.length > 0) {
+    return buildBackfillPreview(false, "unknown_capture_target", current, captureCount, validatedCount, "현재 판정판에 없는 이름이 들어 있어 자동 보강하지 않습니다.", blockingDetails);
+  }
+
+  if (captureCount === 0) {
+    return buildBackfillPreview(true, "empty_store", current, captureCount, validatedCount, "빈 연습 기록에 현재 카드 기준을 붙일 수 있습니다.", []);
+  }
+
+  return buildBackfillPreview(true, "legacy_missing", current, captureCount, validatedCount, "이전 형식의 연습 기록입니다. 현재 카드 기준으로 표시 정보를 보강할 수 있습니다.", []);
+}
+
+export function backfillTutorialProfileCardSignature(store: TutorialProfileStore): TutorialProfileStore {
+  const preview = previewTutorialProfileCardBackfill(store);
+
+  if (!preview.canBackfill) {
+    return store;
+  }
+
+  const cardSignature = currentTutorialCardSignature();
+
+  return {
+    ...store,
+    ...cardSignature,
+    captures: store.captures.map((capture) => ({
+      ...capture,
+      strokes: cloneStrokes(capture.strokes),
+      baseSnapshot: cloneBaseSnapshot(capture.baseSnapshot),
+      operatorContext: cloneOperatorContext(capture.operatorContext),
+      validation: cloneTutorialCaptureValidation(capture.validation)
+    })),
+    shapeProfile: {
+      ...store.shapeProfile,
+      ...cardSignature
+    }
+  };
+}
+
+function buildBackfillPreview(
+  canBackfill: boolean,
+  reason: TutorialProfileBackfillReason,
+  current: Required<TutorialCardSignatureFields>,
+  captureCount: number,
+  validatedCount: number,
+  userMessage: string,
+  blockingDetails: readonly string[]
+): TutorialProfileBackfillPreview {
+  return {
+    canBackfill,
+    reason,
+    currentCardSetId: current.cardSetId,
+    currentCardSetHash: current.cardSetHash,
+    captureCount,
+    validatedCount,
+    userMessage,
+    blockingDetails
+  };
+}
+
+function resolveStoreCardSignature(store: TutorialProfileStore): TutorialCardSignatureFields {
+  return {
+    cardSetId: store.cardSetId ?? store.shapeProfile.cardSetId,
+    cardSetHash: store.cardSetHash ?? store.shapeProfile.cardSetHash,
+    cardSignature: store.cardSignature ?? store.shapeProfile.cardSignature
+  };
+}
+
+function signatureMatchesCurrent(left: TutorialCardSignatureFields, right: Required<TutorialCardSignatureFields>): boolean {
+  return left.cardSetId === right.cardSetId && left.cardSetHash === right.cardSetHash && left.cardSignature === right.cardSignature;
+}
+
+function hasAnySignatureValue(signature: TutorialCardSignatureFields): boolean {
+  return Boolean(signature.cardSetId || signature.cardSetHash || signature.cardSignature);
+}
+
+function scanBackfillCaptureIssues(captures: readonly TutorialCapture[]): string[] {
+  const issues: string[] = [];
+
+  captures.forEach((capture, index) => {
+    if (capture.kind === "family") {
+      if (!isGlyphFamily(capture.expectedFamily)) {
+        issues.push(`captures[${index}].expectedFamily`);
+      }
+    } else if (!isOverlayOperator(capture.expectedOperator)) {
+      issues.push(`captures[${index}].expectedOperator`);
+    }
+
+    const validation = capture.validation;
+    if (validation?.expectedLabel && !isKnownBackfillLabel(validation.expectedLabel)) {
+      issues.push(`captures[${index}].validation.expectedLabel`);
+    }
+    if (validation?.actualTopLabel && !isKnownBackfillLabel(validation.actualTopLabel)) {
+      issues.push(`captures[${index}].validation.actualTopLabel`);
+    }
+    if (validation?.blockedBy && !isOverlayOperator(validation.blockedBy)) {
+      issues.push(`captures[${index}].validation.blockedBy`);
+    }
+
+    for (const operator of capture.operatorContext?.existingOperators ?? []) {
+      if (!isOverlayOperator(operator)) {
+        issues.push(`captures[${index}].operatorContext.existingOperators`);
+      }
+    }
+  });
+
+  return issues;
+}
+
+function isKnownBackfillLabel(label: string): boolean {
+  return isGlyphFamily(label) || isOverlayOperator(label);
 }
 
 export function mergeTutorializedUserProfile(
@@ -251,6 +436,9 @@ export function createTutorialOverlayPersonalizationProfile(
   }
 
   return {
+    cardSetId: safeStore.cardSetId ?? safeStore.shapeProfile.cardSetId,
+    cardSetHash: safeStore.cardSetHash ?? safeStore.shapeProfile.cardSetHash,
+    cardSignature: safeStore.cardSignature ?? safeStore.shapeProfile.cardSignature,
     sampleCount,
     tutorialSampleCount: sampleCount,
     operatorTutorialSampleCount: sampleCount,
@@ -293,9 +481,13 @@ export function calculateRecognitionCalibration(
   };
 }
 
-export function buildUserShapeProfile(captures: TutorialCapture[], updatedAt = latestCaptureTimestamp(captures)): UserShapeProfile {
+export function buildUserShapeProfile(
+  captures: TutorialCapture[],
+  updatedAt = latestCaptureTimestamp(captures),
+  cardSignature: TutorialCardSignatureFields = currentTutorialCardSignature()
+): UserShapeProfile {
   if (captures.length === 0) {
-    return createEmptyUserShapeProfile(updatedAt > 0 ? updatedAt : Date.now());
+    return createEmptyUserShapeProfile(updatedAt > 0 ? updatedAt : Date.now(), cardSignature);
   }
 
   const adaptationCaptures = captures.filter(isAdaptationCapture);
@@ -335,6 +527,7 @@ export function buildUserShapeProfile(captures: TutorialCapture[], updatedAt = l
 
   return {
     tutorialSampleCount: captures.length,
+    ...cardSignature,
     familyTutorialSampleCount,
     operatorTutorialSampleCount,
     validatedTutorialSampleCount: adaptationCaptures.length,

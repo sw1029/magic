@@ -174,6 +174,24 @@ export interface RecognitionResult {
   shadow?: ShadowRuntimeSummary<GlyphFamily>;
 }
 
+export interface SealDetection {
+  ok: boolean;
+  ringDetected: boolean;
+  strokeId?: string;
+  strokeIndex?: number;
+  baseStrokeCount: number;
+  closure: number;
+  circularity: number;
+  enclosureMargin: number;
+  reason: string;
+}
+
+export interface SealedBaseRecognitionResult {
+  result: RecognitionResult;
+  baseSession: StrokeSession;
+  sealDetection: SealDetection;
+}
+
 export interface TutorialCapture {
   id: string;
   kind: TutorialTargetKind;
@@ -249,6 +267,9 @@ export interface TutorialConfusionPair {
 
 export interface UserShapeProfile {
   tutorialSampleCount: number;
+  cardSetId?: string;
+  cardSetHash?: string;
+  cardSignature?: string;
   familyTutorialSampleCount?: number;
   operatorTutorialSampleCount?: number;
   validatedTutorialSampleCount?: number;
@@ -271,6 +292,9 @@ export interface RecognitionCalibration {
 
 export interface TutorialProfileStore {
   version: "v1.5";
+  cardSetId?: string;
+  cardSetHash?: string;
+  cardSignature?: string;
   captures: TutorialCapture[];
   shapeProfile: UserShapeProfile;
   calibration: RecognitionCalibration;
@@ -357,6 +381,7 @@ export interface BaseSealLogEntry {
   rawStrokes: Stroke[];
   normalizedStrokes: PointSample[][];
   result: RecognitionResult;
+  sealDetection?: SealDetection;
   profileDelta?: UserInputProfileDelta;
 }
 

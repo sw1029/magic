@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { compileSealResult } from "../src/recognizer/compile";
+import { getBuiltInMagicCardSetSignature } from "../src/recognizer/datacards";
 import { OVERLAY_OPERATOR_TEMPLATES } from "../src/recognizer/operator-templates";
 import { createOverlayReferenceFrame, recognizeOverlayStroke } from "../src/recognizer/operators";
 import {
   appendTutorialCapture,
   createEmptyTutorialProfileStore,
+  hydrateTutorialProfileStore,
   mergeTutorializedUserProfile
 } from "../src/recognizer/tutorial-profile";
 import { createEmptyUserInputProfile, updateUserInputProfile } from "../src/recognizer/user-profile";
@@ -13,6 +15,22 @@ import { GLYPH_TEMPLATES } from "../src/recognizer/templates";
 import type { GlyphFamily, OverlayOperator, OverlayStrokeRecord, Stroke, StrokeSession, UserInputProfile } from "../src/recognizer/types";
 
 describe("magic recognizer v1.5", () => {
+  it("attaches datacard signature to new tutorial stores while legacy hydrated stores need backfill", () => {
+    const signature = getBuiltInMagicCardSetSignature();
+    const fresh = createEmptyTutorialProfileStore(123);
+    const legacy = hydrateTutorialProfileStore({
+      version: "v1.5",
+      captures: [],
+      updatedAt: 123
+    });
+
+    expect(fresh.cardSetId).toBe(signature.cardSetId);
+    expect(fresh.cardSetHash).toBe(signature.cardSetHash);
+    expect(fresh.shapeProfile.cardSetHash).toBe(signature.cardSetHash);
+    expect(legacy.cardSetId).toBeUndefined();
+    expect(legacy.shapeProfile.cardSetHash).toBeUndefined();
+  });
+
   it("keeps canonical family fixed while adjusted quality reflects the user profile", () => {
     const session = fromGlyphTemplate("fire", {
       scale: 190,

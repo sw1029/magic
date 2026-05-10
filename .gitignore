@@ -12,3 +12,10 @@ __pycache__/
 
 .codex/
 .claude/
+.omx/
+.codex
+chat
+task-*
+*.md
+.gitignore
+*.png

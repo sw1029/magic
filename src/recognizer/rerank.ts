@@ -1,4 +1,6 @@
 import { pointCloudDistance } from "./geometry";
+import { getBuiltInMagicCardSetSignature } from "./datacards";
+import { evaluateTutorialThresholdBiasPolicy } from "./personalization-policy";
 import type {
   GlyphFamily,
   OverlayAnchorZoneId,
@@ -80,6 +82,9 @@ export interface OverlayOperatorConfusionBias {
 
 export interface OverlayPersonalizationProfile {
   sampleCount?: number;
+  cardSetId?: string;
+  cardSetHash?: string;
+  cardSignature?: string;
   tutorialSampleCount?: number;
   operatorTutorialSampleCount?: number;
   userPrototypeWeight?: number;
@@ -96,6 +101,9 @@ export interface OverlayPersonalizationProfile {
 
 interface ShapeProfileLike {
   tutorialSampleCount?: number;
+  cardSetId?: string;
+  cardSetHash?: string;
+  cardSignature?: string;
   familyTutorialSampleCount?: number;
   operatorTutorialSampleCount?: number;
   validatedTutorialSampleCount?: number;
@@ -452,9 +460,20 @@ export function resolveBaseEffectiveThresholdBias(
   const labelBias = family ? shapeProfile?.familyThresholdBias?.[family] : undefined;
   const selectedBias = clamp(labelBias ?? runtime.thresholdBias, 0, runtime.thresholdBias);
   const mlConfidenceGate = resolveMlConfidenceGate(shadow);
+  const policy = evaluateTutorialThresholdBiasPolicy({
+    storeVersion: profile?.version,
+    cardSetId: shapeProfile?.cardSetId,
+    cardSetHash: shapeProfile?.cardSetHash,
+    cardSignature: shapeProfile?.cardSignature,
+    currentCardSignature: currentMagicCardPolicySignature(),
+    totalCaptureCount: shapeProfile?.familyTutorialSampleCount ?? shapeProfile?.tutorialSampleCount ?? 0,
+    validatedCaptureCount: shapeProfile?.validatedTutorialSampleCount ?? 0,
+    feedbackOnlyCaptureCount: shapeProfile?.feedbackOnlyTutorialSampleCount ?? 0,
+    artifactCompatibility: isBaseTinyMlCompatible() ? "compatible" : "missing"
+  });
 
   return {
-    thresholdBias: roundMetric(selectedBias * mlConfidenceGate),
+    thresholdBias: roundMetric(selectedBias * mlConfidenceGate * policy.actualThresholdBiasMultiplier),
     mlConfidenceGate
   };
 }
@@ -468,9 +487,20 @@ export function resolveOverlayEffectiveThresholdBias(
   const labelBias = operator ? profile?.operatorThresholdBias?.[operator] : undefined;
   const selectedBias = clamp(labelBias ?? runtime.thresholdBias, 0, runtime.thresholdBias);
   const mlConfidenceGate = resolveMlConfidenceGate(shadow);
+  const policy = evaluateTutorialThresholdBiasPolicy({
+    storeVersion: "v1.5",
+    cardSetId: profile?.cardSetId,
+    cardSetHash: profile?.cardSetHash,
+    cardSignature: profile?.cardSignature,
+    currentCardSignature: currentMagicCardPolicySignature(),
+    totalCaptureCount: profile?.operatorTutorialSampleCount ?? profile?.tutorialSampleCount ?? profile?.sampleCount ?? 0,
+    validatedCaptureCount: profile?.operatorTutorialSampleCount ?? 0,
+    feedbackOnlyCaptureCount: 0,
+    artifactCompatibility: isOperatorTinyMlCompatible() ? "compatible" : "missing"
+  });
 
   return {
-    thresholdBias: roundMetric(selectedBias * mlConfidenceGate),
+    thresholdBias: roundMetric(selectedBias * mlConfidenceGate * policy.actualThresholdBiasMultiplier),
     mlConfidenceGate
   };
 }
@@ -837,6 +867,39 @@ export function buildOverlayShadowSummary<T extends OverlayRerankCandidate>(para
         };
       })
     }
+  );
+}
+
+function currentMagicCardPolicySignature(): { cardSetId: string; cardSetHash: string; cardSignature: string } {
+  const signature = getBuiltInMagicCardSetSignature();
+
+  return {
+    cardSetId: signature.cardSetId,
+    cardSetHash: signature.cardSetHash,
+    cardSignature: signature.cardSetHash
+  };
+}
+
+function isBaseTinyMlCompatible(): boolean {
+  return Boolean(
+    TINY_ML_ARTIFACTS.baseRerank?.featureOrder &&
+      TINY_ML_ARTIFACTS.baseRerank.featureNormalization &&
+      TINY_ML_ARTIFACTS.baseRerank.models?.main?.model &&
+      TINY_ML_ARTIFACTS.baseConfidence?.featureOrder &&
+      TINY_ML_ARTIFACTS.baseConfidence.featureNormalization &&
+      TINY_ML_ARTIFACTS.baseConfidence.models?.main?.model
+  );
+}
+
+function isOperatorTinyMlCompatible(): boolean {
+  return Boolean(
+    TINY_ML_ARTIFACTS.operatorRerank?.featureOrder &&
+      TINY_ML_ARTIFACTS.operatorRerank.featureNormalization &&
+      TINY_ML_ARTIFACTS.operatorRerank.treeParams?.pairwiseDeltaModel &&
+      TINY_ML_ARTIFACTS.operatorRerank.weights?.falsePositiveSuppression &&
+      TINY_ML_ARTIFACTS.operatorConfidence?.featureOrder &&
+      TINY_ML_ARTIFACTS.operatorConfidence.featureNormalization &&
+      TINY_ML_ARTIFACTS.operatorConfidence.weights
   );
 }
 

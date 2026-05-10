@@ -1,4 +1,5 @@
 import { compileSealResult } from "./recognizer/compile";
+import { getBuiltInMagicCardSetSignature, listBuiltInMagicCards, type MagicCard } from "./recognizer/datacards";
 import {
   OVERLAY_OPERATOR_TEMPLATES,
   createOverlayReferenceFrame,
@@ -7,10 +8,12 @@ import {
 } from "./recognizer/overlay";
 import {
   appendTutorialCapture,
+  backfillTutorialProfileCardSignature,
   createTutorialOverlayPersonalizationProfile,
   createEmptyTutorialProfileStore,
   hydrateTutorialProfileStore,
-  mergeTutorializedUserProfile
+  mergeTutorializedUserProfile,
+  previewTutorialProfileCardBackfill
 } from "./recognizer/tutorial-profile";
 import {
   QUALITY_VECTOR_KEYS,
@@ -22,16 +25,78 @@ import {
   applyDemoViewPreset,
   createDemoViewState,
 } from "./demo-layer";
-import { TUTORIAL_DEMO_STEPS, resolveNextTutorialStepIndex } from "./demo/tutorial-flow";
+import { TUTORIAL_DEMO_STEPS, buildPreviewTutorialSteps, resolveNextTutorialStepIndex, type TutorialDemoStep } from "./demo/tutorial-flow";
 import {
   buildDemoOutcomeCompare,
   createRecentSealSnapshot,
   getChangedOutcomeMetrics
 } from "./demo/outcome-summary";
 import { buildExplainNotes } from "./demo/explain";
+import {
+  buildMagicWhatIfScenarios,
+  resolveMagicWhatIfScenario,
+  summarizeWhatIfImpact,
+  type MagicWhatIfScenario
+} from "./demo/what-if";
+import {
+  buildMagicWhatIfPreviewModel,
+  type MagicWhatIfPreviewMark,
+  type MagicWhatIfPreviewModel
+} from "./demo/what-if-preview";
 import { getExemplarSpec, renderExemplarChip, resolveRelevantExemplarIds } from "./demo/exemplars";
+import {
+  buildDashboardSampleFromSession,
+  buildDashboardSingleResult,
+  describeDashboardSample,
+  runDashboardBatch,
+  type DashboardBatchSample,
+  type DashboardBatchSummary
+} from "./demo/dashboard-batch";
+import { buildDashboardPlotModel, type DashboardPlotModel } from "./demo/dashboard-plots";
+import {
+  DASHBOARD_SCENARIO_PRESETS,
+  accumulateDashboardFamilyMatrixSummaries,
+  buildSyntheticRecipeFromRange,
+  findDashboardScenarioPreset,
+  runDashboardComparison,
+  runDashboardFamilyMatrix,
+  type DashboardComparisonSummary,
+  type DashboardFamilyMatrixSummary,
+  type SyntheticInputRange
+} from "./demo/dashboard-presets";
+import {
+  coerceStrokeSessionFixture,
+  parseDashboardFixture,
+  type DashboardFixtureParseResult
+} from "./demo/dashboard-fixtures";
+import {
+  dashboardFamilyName,
+  dashboardStatusLabel,
+  dashboardStatusTone
+} from "./demo/dashboard-copy";
+import type { SyntheticInputRecipe } from "./demo/synthetic-input";
 import { recognizeSession } from "./recognizer/recognize";
+import { recognizeSealedBaseSession } from "./recognizer/seal";
 import { getTinyMlRuntimeStatus } from "./recognizer/rerank";
+import { evaluateTutorialThresholdBiasPolicy } from "./recognizer/personalization-policy";
+import {
+  loadMagicDatacardPreview,
+  type MagicDatacardLoadResult,
+  type MagicDatacardPreviewRegistry
+} from "./recognizer/datacard-loader";
+import {
+  appendDatacardShapeCapture,
+  createEmptyDatacardShapeCaptureStore,
+  getDatacardShapePresetById,
+  listDatacardShapePresets,
+  recognizeSessionWithDatacard,
+  validateDatacardShapePreset,
+  type DatacardRecognitionResult,
+  type DatacardShapeCaptureStore,
+  type DatacardShapeId,
+  type DatacardShapePreset,
+  type DatacardShapePresetGroup
+} from "./recognizer/datacard-shape-lab";
 import type {
   AxisLine,
   CompiledSealResult,
@@ -45,7 +110,9 @@ import type {
   QualityVector,
   RecognitionLogEntry,
   RecognitionResult,
+  RecognitionStatus,
   RitualPhase,
+  SealDetection,
   Stroke,
   StrokeSession,
   TutorialCapture,
@@ -73,7 +140,7 @@ import type {
 } from "./demo/outcome-summary";
 
 const CANVAS_WIDTH = 900;
-const CANVAS_HEIGHT = 620;
+const CANVAS_HEIGHT = 900;
 const PROFILE_STORAGE_KEY = "magic-recognizer-v1_5-profile";
 const TUTORIAL_PROFILE_STORAGE_KEY = "magic-recognizer-v1_5-tutorial-profile";
 const RECENT_SEAL_LIMIT = 6;
@@ -118,6 +185,12 @@ const WEB_UI_PAGES: Array<{
     label: "로그",
     title: "기록",
     copy: "최근 결과, 연습 요약, 판정 JSON을 검증합니다."
+  },
+  {
+    id: "dashboard",
+    label: "검사판",
+    title: "마법진 상세 검사판",
+    copy: "떨림, 열린 틈, 곡선, 대량 입력, 보조 판독을 한 화면에서 확인합니다."
   }
 ];
 const SCENARIO_APPEAL: Record<
@@ -166,6 +239,7 @@ interface CanvasRenderState {
   overlayRecords: OverlayStrokeRecord[];
   compiledResult: CompiledSealResult | null;
   analysisOverlay: boolean;
+  whatIfPreview?: MagicWhatIfPreviewModel | null;
 }
 
 type TutorialCaptureRequest =
@@ -387,6 +461,135 @@ export function mountApp(root: HTMLDivElement): void {
             <div id="analysis-legend" class="analysis-legend"></div>
           </div>
         </section>
+        <section id="dashboard-panel" class="dashboard-panel" hidden aria-hidden="true">
+          <section class="card dashboard-control-card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">입력 만들기</p>
+                <h3>떨림과 열린 틈 검사</h3>
+              </div>
+              <span id="dashboard-single-status" class="status-chip status-waiting">대기</span>
+            </div>
+            <p class="card-copy">실제 판정은 바꾸지 않고, 일부러 흔들리거나 열린 마법진 입력을 만들어 안정성을 확인합니다.</p>
+            <div id="dashboard-preset-list" class="dashboard-preset-list" role="list"></div>
+            <div class="dashboard-control-grid range-grid">
+              <label>
+                <span>기본 모양</span>
+                <select id="dashboard-family-select">
+                  <option value="fire">불꽃 모양</option>
+                  <option value="water">물 모양</option>
+                  <option value="earth">땅 모양</option>
+                  <option value="wind">바람 모양</option>
+                  <option value="life">생명 모양</option>
+                </select>
+              </label>
+              <label>
+                <span>Seed</span>
+                <input id="dashboard-seed-input" type="number" value="42" />
+              </label>
+              <label>
+                <span>떨림</span>
+                <span class="range-pair">
+                  <input id="dashboard-jitter-min-input" type="range" min="0" max="64" step="1" value="0" aria-label="떨림 최소" />
+                  <input id="dashboard-jitter-input" type="range" min="0" max="64" step="1" value="8" aria-label="떨림 최대" />
+                </span>
+                <output id="dashboard-jitter-output" class="range-output" for="dashboard-jitter-min-input dashboard-jitter-input">0 - 8 px</output>
+              </label>
+              <label>
+                <span>열린 틈</span>
+                <span class="range-pair">
+                  <input id="dashboard-open-gap-min-input" type="range" min="0" max="0.82" step="0.01" value="0" aria-label="열린 틈 최소" />
+                  <input id="dashboard-open-gap-input" type="range" min="0" max="0.82" step="0.01" value="0.18" aria-label="열린 틈 최대" />
+                </span>
+                <output id="dashboard-open-gap-output" class="range-output" for="dashboard-open-gap-min-input dashboard-open-gap-input">0 - 18%</output>
+              </label>
+              <label>
+                <span>기울기</span>
+                <span class="range-pair">
+                  <input id="dashboard-rotation-min-input" type="range" min="-180" max="180" step="1" value="-12" aria-label="기울기 최소" />
+                  <input id="dashboard-rotation-input" type="range" min="-180" max="180" step="1" value="12" aria-label="기울기 최대" />
+                </span>
+                <output id="dashboard-rotation-output" class="range-output" for="dashboard-rotation-min-input dashboard-rotation-input">-12 - 12 deg</output>
+              </label>
+              <label>
+                <span>휘어짐</span>
+                <span class="range-pair">
+                  <input id="dashboard-curve-min-input" type="range" min="0" max="1" step="0.01" value="0" aria-label="휘어짐 최소" />
+                  <input id="dashboard-curve-input" type="range" min="0" max="1" step="0.01" value="0.16" aria-label="휘어짐 최대" />
+                </span>
+                <output id="dashboard-curve-output" class="range-output" for="dashboard-curve-min-input dashboard-curve-input">0 - 16%</output>
+              </label>
+              <label>
+                <span>노이즈 선</span>
+                <span class="range-pair">
+                  <input id="dashboard-noise-min-input" type="range" min="0" max="8" step="1" value="0" aria-label="노이즈 선 최소" />
+                  <input id="dashboard-noise-input" type="range" min="0" max="8" step="1" value="1" aria-label="노이즈 선 최대" />
+                </span>
+                <output id="dashboard-noise-output" class="range-output" for="dashboard-noise-min-input dashboard-noise-input">0 - 1</output>
+              </label>
+              <label>
+                <span>반복 횟수</span>
+                <input id="dashboard-iterations-input" type="range" min="10" max="1000" step="10" value="100" aria-label="반복 횟수" />
+                <output id="dashboard-iterations-output" class="range-output" for="dashboard-iterations-input">100회</output>
+              </label>
+            </div>
+            <div class="tutorial-actions compact-actions">
+              <button id="dashboard-generate-button" type="button" class="primary">랜덤 입력 만들기</button>
+              <button id="dashboard-random-button" type="button">seed 바꿔 생성</button>
+              <button id="dashboard-batch-button" type="button">여러 번 테스트</button>
+              <button id="dashboard-family-batch-button" type="button">모양별 n회 생성</button>
+              <button id="dashboard-batch-log-clear-button" type="button">누적 로그 지우기</button>
+              <span id="dashboard-batch-log-count" class="log-count">0 runs</span>
+            </div>
+          </section>
+          <section class="card dashboard-preview-card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">한 번 보기</p>
+                <h3 id="dashboard-preview-title">만든 입력 미리보기</h3>
+              </div>
+            </div>
+            <div id="dashboard-stroke-preview" class="dashboard-stroke-preview"></div>
+            <div id="dashboard-single-summary" class="summary-grid"></div>
+            <div id="dashboard-single-details" class="metric-list"></div>
+            <div id="dashboard-seal-smoke" class="metric-list"></div>
+          </section>
+          <section class="card dashboard-plot-card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">여러 번 테스트 결과</p>
+                <h3>헷갈림 지도와 분포</h3>
+              </div>
+              <span id="dashboard-batch-count" class="log-count">0회</span>
+            </div>
+            <p id="dashboard-batch-copy" class="card-copy">여러 번 테스트를 누르면 비슷한 입력을 반복해 안정성을 보여 줍니다.</p>
+            <div id="dashboard-comparison-lanes" class="dashboard-comparison-lanes"></div>
+            <div id="dashboard-comparison-table" class="dashboard-comparison-table"></div>
+            <div id="dashboard-status-bars" class="dashboard-bars"></div>
+            <div id="dashboard-quality-bars" class="dashboard-bars"></div>
+            <div id="dashboard-heatmap" class="dashboard-heatmap"></div>
+            <div id="dashboard-scatter" class="dashboard-scatter"></div>
+            <div id="dashboard-family-distribution" class="dashboard-family-distribution"></div>
+            <div id="dashboard-overlap-table" class="dashboard-overlap-table"></div>
+            <div id="dashboard-batch-log" class="dashboard-batch-log"></div>
+          </section>
+          <section class="card dashboard-fixture-card dashboard-hidden-json" hidden aria-hidden="true">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">예시 데이터</p>
+                <h3>JSON으로 재현하기</h3>
+              </div>
+              <span id="dashboard-fixture-status" class="status-chip status-waiting">대기</span>
+            </div>
+            <p class="card-copy">선 입력, 설명 카드 패치, 여러 번 테스트 설정을 붙여 넣어 문제 상황을 미리보기로 확인합니다.</p>
+            <textarea id="dashboard-fixture-input" rows="7" spellcheck="false" placeholder='{ "family": "fire", "seed": 77, "jitterPx": 8, "openGapRatio": 0.25, "iterations": 50 }'></textarea>
+            <div class="tutorial-actions compact-actions">
+              <button id="dashboard-fixture-button" type="button">예시 미리보기</button>
+            </div>
+            <div id="dashboard-fixture-summary" class="metric-list"></div>
+            <pre id="dashboard-report-viewer" class="log-viewer dashboard-report-viewer">{}</pre>
+          </section>
+        </section>
         <aside class="sidebar">
           <section id="base-card" class="card">
             <p class="panel-label">기본 모양 판정</p>
@@ -416,6 +619,32 @@ export function mountApp(root: HTMLDivElement): void {
             <p id="compile-status" class="status-chip status-waiting">대기</p>
             <p id="compile-reason" class="card-copy">기본 모양과 추가 효과를 함께 묶어 최종 결과를 보여 줍니다.</p>
             <div id="compile-summary" class="summary-grid"></div>
+          </section>
+          <section id="datacard-shape-lab-card" class="card datacard-shape-lab-card">
+            <div class="split-head">
+              <div>
+                <p class="panel-label">도형 카드</p>
+                <h3 id="datacard-shape-title">정의로 도형 비교</h3>
+              </div>
+              <span id="datacard-shape-status" class="status-chip status-waiting">대기</span>
+            </div>
+            <p id="datacard-shape-copy" class="card-copy">
+              preset을 골라 현재 입력이 카드의 그리기 기준과 얼마나 맞는지 비교합니다.
+            </p>
+            <div class="insight-tabs datacard-shape-tabs">
+              <button id="datacard-shape-basic-tab" class="chip-button active" type="button" data-datacard-shape-tab="basic">기본 도형</button>
+              <button id="datacard-shape-custom-tab" class="chip-button" type="button" data-datacard-shape-tab="custom">새 도형 예시</button>
+            </div>
+            <div id="datacard-shape-preset-list" class="datacard-shape-preset-list" role="list"></div>
+            <div id="datacard-shape-definition" class="datacard-definition-panel"></div>
+            <div id="datacard-shape-preview" class="datacard-shape-preview"></div>
+            <div id="datacard-shape-comparison" class="datacard-comparison-grid"></div>
+            <div id="datacard-shape-summary" class="summary-grid"></div>
+            <ol id="datacard-shape-candidates" class="candidate-list"></ol>
+            <div class="tutorial-actions compact-actions">
+              <button id="datacard-shape-capture-button" type="button" class="primary">연습 입력 저장</button>
+            </div>
+            <div id="datacard-shape-notes" class="metric-list"></div>
           </section>
           <section id="outcome-card" class="card">
             <div class="split-head">
@@ -527,6 +756,9 @@ export function mountApp(root: HTMLDivElement): void {
             </p>
             <div id="tutorial-validation-summary" class="summary-grid"></div>
             <div id="tutorial-validation-details" class="metric-list"></div>
+            <div class="tutorial-actions backfill-actions">
+              <button id="tutorial-backfill-button" type="button" class="secondary">현재 카드 기준으로 보강</button>
+            </div>
           </section>
           <section id="principles-card" class="card">
             <div class="split-head">
@@ -539,6 +771,25 @@ export function mountApp(root: HTMLDivElement): void {
               화면에서 무엇을 기준으로 읽는지와, 안정적으로 보이는 예시를 함께 보여 줍니다.
             </p>
             <div id="principles-list" class="principles-list"></div>
+            <div id="magic-what-if-guide" class="metric-list"></div>
+            <section class="datacard-authoring" id="datacard-authoring-card" aria-label="datacard preview authoring">
+              <div class="split-head compact-head">
+                <div>
+                  <p class="panel-label">Datacard preview lane</p>
+                  <h3>도형/기호 저작 검증</h3>
+                </div>
+                <span class="status-chip status-waiting" id="datacard-preview-status">대기</span>
+              </div>
+              <p class="card-copy">현재 판정은 건드리지 않고, 설명 카드 preset으로 튜토리얼 문구와 what-if 후보만 미리 바꿔봅니다.</p>
+              <div id="datacard-preset-list" class="datacard-preset-list"></div>
+              <textarea id="datacard-preview-input" rows="1" spellcheck="false" hidden aria-hidden="true" placeholder='{ "cards": [{ "id": "family:fire", "kind": "family", "family": "fire", "label": "불꽃 결계", "shortLabel": "불꽃", "target": { "kind": "family", "label": "fire" }, "tutorial": { "title": "세 꼭짓점의 불꽃", "instruction": "세 점의 균형과 시작/끝 접힘을 관찰합니다.", "summary": "삼각형의 압축, 회전, 획순 변화를 what-if로 비교합니다.", "checklist": ["세 꼭짓점이 분리되는가", "한 변이 과도하게 짧아지지 않는가"], "emergentPrompts": ["한 꼭짓점을 안쪽으로 당기면 어떤 오인이 생길까요?"], "whatIfHints": ["압축", "회전", "획순"] }, "recognitionHints": { "strokeCount": [2, 4], "closed": true, "shapeKeywords": ["triangle", "flame"] } }] }'></textarea>
+              <div class="tutorial-actions compact-actions">
+                <button id="datacard-preview-button" type="button" hidden aria-hidden="true">패치 미리보기</button>
+                <button id="datacard-preview-reset-button" type="button" class="secondary">내장 카드로 복귀</button>
+              </div>
+              <div class="summary-grid" id="datacard-preview-summary"></div>
+              <div class="metric-list" id="datacard-preview-issues"></div>
+            </section>
             <div id="reading-guide-exemplar" class="reading-guide-exemplar">
               <div class="split-head">
                 <div>
@@ -611,11 +862,65 @@ export function mountApp(root: HTMLDivElement): void {
 
   const ctx = context;
   const workspace = select<HTMLElement>(root, ".workspace");
+  const sidebar = select<HTMLElement>(root, ".sidebar");
+  const canvasWrap = select<HTMLElement>(root, ".canvas-wrap");
   const pageTitle = select<HTMLElement>(root, "#page-title");
   const pageCopy = select<HTMLParagraphElement>(root, "#page-copy");
   const pageSummaryBadges = select<HTMLDivElement>(root, "#page-summary-badges");
   const pageNavButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-page-id]"));
   const boardPanel = select<HTMLElement>(root, "#board-panel");
+  const dashboardPanel = select<HTMLElement>(root, "#dashboard-panel");
+  const dashboardControlCard = select<HTMLElement>(root, ".dashboard-control-card");
+  const dashboardPreviewCard = select<HTMLElement>(root, ".dashboard-preview-card");
+  const dashboardPlotCard = select<HTMLElement>(root, ".dashboard-plot-card");
+  const dashboardPresetList = select<HTMLDivElement>(root, "#dashboard-preset-list");
+  const dashboardFamilySelect = select<HTMLSelectElement>(root, "#dashboard-family-select");
+  const dashboardSeedInput = select<HTMLInputElement>(root, "#dashboard-seed-input");
+  const dashboardJitterMinInput = select<HTMLInputElement>(root, "#dashboard-jitter-min-input");
+  const dashboardJitterInput = select<HTMLInputElement>(root, "#dashboard-jitter-input");
+  const dashboardJitterOutput = select<HTMLOutputElement>(root, "#dashboard-jitter-output");
+  const dashboardOpenGapMinInput = select<HTMLInputElement>(root, "#dashboard-open-gap-min-input");
+  const dashboardOpenGapInput = select<HTMLInputElement>(root, "#dashboard-open-gap-input");
+  const dashboardOpenGapOutput = select<HTMLOutputElement>(root, "#dashboard-open-gap-output");
+  const dashboardRotationMinInput = select<HTMLInputElement>(root, "#dashboard-rotation-min-input");
+  const dashboardRotationInput = select<HTMLInputElement>(root, "#dashboard-rotation-input");
+  const dashboardRotationOutput = select<HTMLOutputElement>(root, "#dashboard-rotation-output");
+  const dashboardCurveMinInput = select<HTMLInputElement>(root, "#dashboard-curve-min-input");
+  const dashboardCurveInput = select<HTMLInputElement>(root, "#dashboard-curve-input");
+  const dashboardCurveOutput = select<HTMLOutputElement>(root, "#dashboard-curve-output");
+  const dashboardNoiseMinInput = select<HTMLInputElement>(root, "#dashboard-noise-min-input");
+  const dashboardNoiseInput = select<HTMLInputElement>(root, "#dashboard-noise-input");
+  const dashboardNoiseOutput = select<HTMLOutputElement>(root, "#dashboard-noise-output");
+  const dashboardIterationsInput = select<HTMLInputElement>(root, "#dashboard-iterations-input");
+  const dashboardIterationsOutput = select<HTMLOutputElement>(root, "#dashboard-iterations-output");
+  const dashboardGenerateButton = select<HTMLButtonElement>(root, "#dashboard-generate-button");
+  const dashboardRandomButton = select<HTMLButtonElement>(root, "#dashboard-random-button");
+  const dashboardBatchButton = select<HTMLButtonElement>(root, "#dashboard-batch-button");
+  const dashboardFamilyBatchButton = select<HTMLButtonElement>(root, "#dashboard-family-batch-button");
+  const dashboardBatchLogClearButton = select<HTMLButtonElement>(root, "#dashboard-batch-log-clear-button");
+  const dashboardBatchLogCount = select<HTMLElement>(root, "#dashboard-batch-log-count");
+  const dashboardSingleStatus = select<HTMLElement>(root, "#dashboard-single-status");
+  const dashboardPreviewTitle = select<HTMLElement>(root, "#dashboard-preview-title");
+  const dashboardStrokePreview = select<HTMLDivElement>(root, "#dashboard-stroke-preview");
+  const dashboardSingleSummary = select<HTMLDivElement>(root, "#dashboard-single-summary");
+  const dashboardSingleDetails = select<HTMLDivElement>(root, "#dashboard-single-details");
+  const dashboardSealSmoke = select<HTMLDivElement>(root, "#dashboard-seal-smoke");
+  const dashboardBatchCount = select<HTMLElement>(root, "#dashboard-batch-count");
+  const dashboardBatchCopy = select<HTMLParagraphElement>(root, "#dashboard-batch-copy");
+  const dashboardComparisonLanes = select<HTMLDivElement>(root, "#dashboard-comparison-lanes");
+  const dashboardComparisonTable = select<HTMLDivElement>(root, "#dashboard-comparison-table");
+  const dashboardStatusBars = select<HTMLDivElement>(root, "#dashboard-status-bars");
+  const dashboardQualityBars = select<HTMLDivElement>(root, "#dashboard-quality-bars");
+  const dashboardHeatmap = select<HTMLDivElement>(root, "#dashboard-heatmap");
+  const dashboardScatter = select<HTMLDivElement>(root, "#dashboard-scatter");
+  const dashboardFamilyDistribution = select<HTMLDivElement>(root, "#dashboard-family-distribution");
+  const dashboardOverlapTable = select<HTMLDivElement>(root, "#dashboard-overlap-table");
+  const dashboardBatchLog = select<HTMLDivElement>(root, "#dashboard-batch-log");
+  const dashboardFixtureInput = select<HTMLTextAreaElement>(root, "#dashboard-fixture-input");
+  const dashboardFixtureButton = select<HTMLButtonElement>(root, "#dashboard-fixture-button");
+  const dashboardFixtureStatus = select<HTMLElement>(root, "#dashboard-fixture-status");
+  const dashboardFixtureSummary = select<HTMLDivElement>(root, "#dashboard-fixture-summary");
+  const dashboardReportViewer = select<HTMLPreElement>(root, "#dashboard-report-viewer");
   const sealBaseButton = select<HTMLButtonElement>(root, "#seal-base-button");
   const startOverlayButton = select<HTMLButtonElement>(root, "#start-overlay-button");
   const sealFinalButton = select<HTMLButtonElement>(root, "#seal-final-button");
@@ -669,6 +974,20 @@ export function mountApp(root: HTMLDivElement): void {
   const compileStatus = select<HTMLElement>(root, "#compile-status");
   const compileReason = select<HTMLElement>(root, "#compile-reason");
   const compileSummary = select<HTMLDivElement>(root, "#compile-summary");
+  const datacardShapeLabCard = select<HTMLElement>(root, "#datacard-shape-lab-card");
+  const datacardShapeTitle = select<HTMLElement>(root, "#datacard-shape-title");
+  const datacardShapeStatus = select<HTMLElement>(root, "#datacard-shape-status");
+  const datacardShapeCopy = select<HTMLParagraphElement>(root, "#datacard-shape-copy");
+  const datacardShapeBasicTab = select<HTMLButtonElement>(root, "#datacard-shape-basic-tab");
+  const datacardShapeCustomTab = select<HTMLButtonElement>(root, "#datacard-shape-custom-tab");
+  const datacardShapePresetList = select<HTMLDivElement>(root, "#datacard-shape-preset-list");
+  const datacardShapeDefinition = select<HTMLDivElement>(root, "#datacard-shape-definition");
+  const datacardShapePreview = select<HTMLDivElement>(root, "#datacard-shape-preview");
+  const datacardShapeComparison = select<HTMLDivElement>(root, "#datacard-shape-comparison");
+  const datacardShapeSummary = select<HTMLDivElement>(root, "#datacard-shape-summary");
+  const datacardShapeCandidates = select<HTMLOListElement>(root, "#datacard-shape-candidates");
+  const datacardShapeCaptureButton = select<HTMLButtonElement>(root, "#datacard-shape-capture-button");
+  const datacardShapeNotes = select<HTMLDivElement>(root, "#datacard-shape-notes");
   const outcomeCard = select<HTMLElement>(root, "#outcome-card");
   const outcomeTitle = select<HTMLElement>(root, "#outcome-title");
   const qualityActiveBadge = select<HTMLSpanElement>(root, "#quality-active-badge");
@@ -711,6 +1030,7 @@ export function mountApp(root: HTMLDivElement): void {
   const tutorialValidationCopy = select<HTMLParagraphElement>(root, "#tutorial-validation-copy");
   const tutorialValidationSummary = select<HTMLDivElement>(root, "#tutorial-validation-summary");
   const tutorialValidationDetails = select<HTMLDivElement>(root, "#tutorial-validation-details");
+  const tutorialBackfillButton = select<HTMLButtonElement>(root, "#tutorial-backfill-button");
   const personalizationCompare = select<HTMLDivElement>(root, "#personalization-compare");
   const personalizationEffects = select<HTMLDivElement>(root, "#personalization-effects");
   const tutorialCompareGrid = select<HTMLDivElement>(root, "#tutorial-compare-grid");
@@ -721,6 +1041,14 @@ export function mountApp(root: HTMLDivElement): void {
   const readingGuideCopy = select<HTMLParagraphElement>(root, "#reading-guide-copy");
   const readingGuideExemplar = select<HTMLDivElement>(root, "#reading-guide-exemplar");
   const principlesList = select<HTMLDivElement>(root, "#principles-list");
+  const magicWhatIfGuide = select<HTMLDivElement>(root, "#magic-what-if-guide");
+  const datacardPreviewStatus = select<HTMLElement>(root, "#datacard-preview-status");
+  const datacardPresetList = select<HTMLDivElement>(root, "#datacard-preset-list");
+  const datacardPreviewInput = select<HTMLTextAreaElement>(root, "#datacard-preview-input");
+  const datacardPreviewButton = select<HTMLButtonElement>(root, "#datacard-preview-button");
+  const datacardPreviewResetButton = select<HTMLButtonElement>(root, "#datacard-preview-reset-button");
+  const datacardPreviewSummary = select<HTMLDivElement>(root, "#datacard-preview-summary");
+  const datacardPreviewIssues = select<HTMLDivElement>(root, "#datacard-preview-issues");
   const exemplarCard = select<HTMLElement>(root, "#exemplar-card");
   const exemplarTitle = select<HTMLElement>(root, "#exemplar-title");
   const exemplarCopy = select<HTMLParagraphElement>(root, "#exemplar-copy");
@@ -750,16 +1078,34 @@ export function mountApp(root: HTMLDivElement): void {
   };
   let userProfile = loadUserInputProfile();
   let tutorialProfileStore = loadTutorialProfileStore();
+  let datacardPreviewRegistry: MagicDatacardPreviewRegistry | null = null;
+  let datacardAuthoringResult: MagicDatacardLoadResult | null = null;
+  let datacardShapeTab: DatacardShapePresetGroup = "basic";
+  let activeDatacardShapePresetId: DatacardShapeId = "fire";
+  let datacardShapeCaptureStore: DatacardShapeCaptureStore = createEmptyDatacardShapeCaptureStore();
+  let activeWhatIfScenarioId: string | null = null;
+  let showWhatIfOverlay = false;
   let latestProfileDelta: UserInputProfileDelta | undefined;
   let baseSession = createEmptySession();
   let overlaySession = createEmptySession();
   let currentStroke: Stroke | null = null;
+  let activeDashboardPresetId = DASHBOARD_SCENARIO_PRESETS[0].id;
+  let dashboardRange: SyntheticInputRange = structuredClone(DASHBOARD_SCENARIO_PRESETS[0].range);
+  let dashboardRecipe: SyntheticInputRecipe = buildSyntheticRecipeFromRange(dashboardRange, dashboardRange.seed);
+  let dashboardIterations = 100;
+  let dashboardSingleSample: DashboardBatchSample | null = null;
+  let dashboardBatchSummary: DashboardBatchSummary | null = null;
+  let dashboardComparisonSummary: DashboardComparisonSummary | null = null;
+  let dashboardFamilyMatrixSummary: DashboardFamilyMatrixSummary | null = null;
+  let dashboardFamilyMatrixLog: DashboardFamilyMatrixSummary[] = [];
+  let dashboardFixtureResult: DashboardFixtureParseResult | null = null;
   const currentRecognitionProfile = (): UserInputProfile =>
     mergeTutorializedUserProfile(userProfile, tutorialProfileStore);
   const currentOverlayPersonalizationProfile = () =>
     createTutorialOverlayPersonalizationProfile(tutorialProfileStore);
   let previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
   let baseSealResult: RecognitionResult | null = null;
+  let baseSealDetection: SealDetection | null = null;
   let currentOverlayPreview: OverlayRecognition | null = null;
   let overlayRecords: OverlayStrokeRecord[] = [];
   let compiledResult: CompiledSealResult | null = null;
@@ -781,6 +1127,27 @@ export function mountApp(root: HTMLDivElement): void {
     root.dispatchEvent(new CustomEvent("magic:tutorial-profile-updated", { detail: structuredClone(nextStore) }));
     refreshRecognitionState();
   };
+  const currentMagicCards = (): readonly MagicCard[] => datacardPreviewRegistry?.cards ?? listBuiltInMagicCards();
+  const currentTutorialSteps = (): TutorialDemoStep[] => buildPreviewTutorialSteps(TUTORIAL_DEMO_STEPS, currentMagicCards());
+  const currentWhatIfScenarios = (): MagicWhatIfScenario[] => buildMagicWhatIfScenarios(currentMagicCards());
+  const activeDatacardShapePreset = (): DatacardShapePreset =>
+    getDatacardShapePresetById(activeDatacardShapePresetId) ?? listDatacardShapePresets()[0];
+  const buildActiveWhatIfPreviewModel = (): MagicWhatIfPreviewModel | null => {
+    if (!showWhatIfOverlay || !activeWhatIfScenarioId) {
+      return null;
+    }
+
+    const scenario = resolveMagicWhatIfScenario(activeWhatIfScenarioId, currentWhatIfScenarios());
+    if (!scenario) {
+      return null;
+    }
+
+    return buildMagicWhatIfPreviewModel({
+      scenario,
+      referenceFrame: baseSession.strokes.length > 0 ? createOverlayReferenceFrame(baseSession) : null,
+      baseStrokes: baseSession.strokes
+    });
+  };
   const tutorialOnboardingHook = createTutorialOnboardingHook({
     getBaseStrokes: () => structuredClone(baseSession.strokes),
     getOverlayStrokes: () => structuredClone(overlaySession.strokes),
@@ -794,6 +1161,80 @@ export function mountApp(root: HTMLDivElement): void {
   exposeTutorialOnboardingHook(root, tutorialOnboardingHook);
   syncTutorialHookMetadata(root, tutorialProfileStore);
   syncTinyMlRuntimeMetadata(root);
+
+  let layoutSyncFrame: number | null = null;
+
+  function setLayoutVariable(name: string, value: string): void {
+    if (root.style.getPropertyValue(name) !== value) {
+      root.style.setProperty(name, value);
+    }
+  }
+
+  function removeLayoutVariable(name: string): void {
+    if (root.style.getPropertyValue(name)) {
+      root.style.removeProperty(name);
+    }
+  }
+
+  function syncAdaptiveLayoutBounds(page: DemoPage = demoView.activePage): void {
+    if (page === "test" || page === "tutorial") {
+      const workspaceRect = workspace.getBoundingClientRect();
+      const canvasRect = canvasWrap.getBoundingClientRect();
+      const maxHeight = Math.max(240, Math.floor(canvasRect.bottom - workspaceRect.top) - 8);
+
+      if (workspaceRect.width > 0 && canvasRect.width > 0 && maxHeight > 0) {
+        setLayoutVariable("--canvas-sidebar-max-height", `${maxHeight}px`);
+      }
+    } else {
+      removeLayoutVariable("--canvas-sidebar-max-height");
+    }
+
+    if (page === "dashboard") {
+      const controlRect = dashboardControlCard.getBoundingClientRect();
+      const previewRect = dashboardPreviewCard.getBoundingClientRect();
+      const maxHeight = Math.ceil(Math.max(controlRect.height, previewRect.height));
+
+      if (controlRect.width > 0 && previewRect.width > 0 && maxHeight > 0) {
+        setLayoutVariable("--dashboard-result-max-height", `${maxHeight}px`);
+      }
+    } else {
+      removeLayoutVariable("--dashboard-result-max-height");
+    }
+  }
+
+  function scheduleAdaptiveLayoutBounds(): void {
+    if (typeof window.requestAnimationFrame !== "function") {
+      syncAdaptiveLayoutBounds();
+      return;
+    }
+
+    if (layoutSyncFrame !== null && typeof window.cancelAnimationFrame === "function") {
+      window.cancelAnimationFrame(layoutSyncFrame);
+    }
+
+    layoutSyncFrame = window.requestAnimationFrame(() => {
+      layoutSyncFrame = null;
+      syncAdaptiveLayoutBounds();
+    });
+  }
+
+  if (typeof ResizeObserver !== "undefined") {
+    const adaptiveLayoutObserver = new ResizeObserver(() => {
+      scheduleAdaptiveLayoutBounds();
+    });
+
+    for (const element of [
+      workspace,
+      boardPanel,
+      canvasWrap,
+      sidebar,
+      dashboardControlCard,
+      dashboardPreviewCard,
+      dashboardPlotCard
+    ]) {
+      adaptiveLayoutObserver.observe(element);
+    }
+  }
 
   canvas.addEventListener("pointerdown", (event) => {
     if (phase === "final") {
@@ -810,6 +1251,7 @@ export function mountApp(root: HTMLDivElement): void {
 
     if (phase === "base") {
       baseSealResult = null;
+      baseSealDetection = null;
       latestProfileDelta = undefined;
       overlayAuthoringStarted = false;
       overlaySession = createEmptySession();
@@ -910,6 +1352,7 @@ export function mountApp(root: HTMLDivElement): void {
     if (phase === "base") {
       baseSession.endedAt = Date.now();
       previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
+      attemptSealBasePhase(true);
     } else {
       overlaySession.endedAt = Date.now();
       const recognition = recognizeOverlayStroke(
@@ -960,6 +1403,7 @@ export function mountApp(root: HTMLDivElement): void {
       baseSession.endedAt = Date.now();
       currentStroke = null;
       baseSealResult = null;
+      baseSealDetection = null;
       latestProfileDelta = undefined;
       overlayAuthoringStarted = false;
       overlaySession = createEmptySession();
@@ -1009,6 +1453,168 @@ export function mountApp(root: HTMLDivElement): void {
     URL.revokeObjectURL(url);
   });
 
+  [
+    dashboardJitterMinInput,
+    dashboardJitterInput,
+    dashboardOpenGapMinInput,
+    dashboardOpenGapInput,
+    dashboardRotationMinInput,
+    dashboardRotationInput,
+    dashboardCurveMinInput,
+    dashboardCurveInput,
+    dashboardNoiseMinInput,
+    dashboardNoiseInput,
+    dashboardIterationsInput
+  ].forEach((input) => {
+    input.addEventListener("input", updateDashboardControlValueOutputs);
+    input.addEventListener("change", updateDashboardControlValueOutputs);
+  });
+
+  dashboardPresetList.addEventListener("click", (event) => {
+    const target = event.target instanceof HTMLElement ? event.target.closest<HTMLButtonElement>("[data-dashboard-preset-id]") : null;
+
+    if (!target) {
+      return;
+    }
+
+    const preset = findDashboardScenarioPreset(target.dataset.dashboardPresetId);
+    activeDashboardPresetId = preset.id;
+    dashboardRange = structuredClone(preset.range);
+    dashboardIterations = preset.iterations;
+    dashboardRecipe = buildSyntheticRecipeFromRange(dashboardRange, dashboardRange.seed);
+    dashboardSingleSample = buildDashboardSingleResult(dashboardRecipe, currentRecognitionProfile());
+    dashboardBatchSummary = null;
+    dashboardComparisonSummary = null;
+    dashboardFixtureResult = null;
+    render();
+  });
+
+  dashboardGenerateButton.addEventListener("click", () => {
+    dashboardRange = readDashboardRangeFromControls();
+    dashboardRecipe = buildSyntheticRecipeFromRange(dashboardRange, dashboardRange.seed);
+    dashboardIterations = readDashboardIterations();
+    dashboardSingleSample = buildDashboardSingleResult(dashboardRecipe, currentRecognitionProfile());
+    dashboardBatchSummary = null;
+    dashboardComparisonSummary = null;
+    dashboardFixtureResult = null;
+    render();
+  });
+
+  dashboardRandomButton.addEventListener("click", () => {
+    dashboardRange = {
+      ...readDashboardRangeFromControls(),
+      seed: readDashboardSeed() + 1
+    };
+    dashboardRecipe = buildSyntheticRecipeFromRange(dashboardRange, dashboardRange.seed);
+    dashboardIterations = readDashboardIterations();
+    dashboardSingleSample = buildDashboardSingleResult(dashboardRecipe, currentRecognitionProfile());
+    dashboardBatchSummary = null;
+    dashboardComparisonSummary = null;
+    dashboardFixtureResult = null;
+    render();
+  });
+
+  dashboardBatchButton.addEventListener("click", () => {
+    dashboardRange = readDashboardRangeFromControls();
+    dashboardRecipe = buildSyntheticRecipeFromRange(dashboardRange, dashboardRange.seed);
+    dashboardIterations = readDashboardIterations();
+    dashboardBatchSummary = runDashboardBatch({
+      recipe: dashboardRecipe,
+      iterations: dashboardIterations,
+      seedStart: dashboardRecipe.seed,
+      profile: currentRecognitionProfile()
+    });
+    dashboardComparisonSummary = runDashboardComparison({
+      presetId: activeDashboardPresetId,
+      recipe: dashboardRecipe,
+      iterations: dashboardIterations,
+      seedStart: dashboardRecipe.seed,
+      baselineProfile: currentRecognitionProfile()
+    });
+    dashboardSingleSample = dashboardBatchSummary.samples[0] ?? buildDashboardSingleResult(dashboardRecipe, currentRecognitionProfile());
+    dashboardFixtureResult = null;
+    render();
+  });
+
+  dashboardFamilyBatchButton.addEventListener("click", () => {
+    dashboardRange = readDashboardRangeFromControls();
+    dashboardRecipe = buildSyntheticRecipeFromRange(dashboardRange, dashboardRange.seed);
+    dashboardIterations = readDashboardIterations();
+    dashboardFamilyMatrixSummary = runDashboardFamilyMatrix({
+      range: dashboardRange,
+      iterations: dashboardIterations,
+      seedStart: dashboardRange.seed,
+      profile: currentRecognitionProfile()
+    });
+    dashboardFamilyMatrixLog = [dashboardFamilyMatrixSummary, ...dashboardFamilyMatrixLog].slice(0, 20);
+    dashboardFixtureResult = null;
+    render();
+  });
+
+  dashboardBatchLogClearButton.addEventListener("click", () => {
+    dashboardFamilyMatrixSummary = null;
+    dashboardFamilyMatrixLog = [];
+    render();
+  });
+
+  dashboardBatchLog.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("[data-dashboard-log-index]") : null;
+
+    if (!target) {
+      return;
+    }
+
+    const index = Number.parseInt(target.dataset.dashboardLogIndex ?? "", 10);
+    const summary = Number.isFinite(index) ? dashboardFamilyMatrixLog[index] : null;
+
+    if (!summary) {
+      return;
+    }
+
+    dashboardFamilyMatrixSummary = summary;
+    render();
+  });
+
+  dashboardFixtureButton.addEventListener("click", () => {
+    dashboardFixtureResult = parseDashboardFixture(dashboardFixtureInput.value.trim() || dashboardFixtureInput.placeholder);
+
+    if (dashboardFixtureResult.kind === "stroke_session") {
+      const session = coerceStrokeSessionFixture(dashboardFixtureResult.value);
+      if (session) {
+        dashboardRecipe = readDashboardRecipeFromControls();
+        dashboardSingleSample = buildDashboardSampleFromSession(dashboardRecipe.family ?? "fire", session, currentRecognitionProfile());
+        dashboardBatchSummary = null;
+      }
+    } else if (dashboardFixtureResult.kind === "batch_recipe" && typeof dashboardFixtureResult.value === "object" && dashboardFixtureResult.value) {
+      const value = dashboardFixtureResult.value as Partial<SyntheticInputRecipe> & { iterations?: number };
+      dashboardRecipe = {
+        ...dashboardRecipe,
+        ...value,
+        family: readDashboardFamily(value.family)
+      };
+      const nextIterations = Number(value.iterations ?? dashboardIterations);
+      dashboardIterations = Number.isFinite(nextIterations)
+        ? Math.max(1, Math.min(1000, Math.round(nextIterations)))
+        : dashboardIterations;
+      dashboardSingleSample = buildDashboardSingleResult(dashboardRecipe, currentRecognitionProfile());
+      dashboardBatchSummary = runDashboardBatch({
+        recipe: dashboardRecipe,
+        iterations: dashboardIterations,
+        seedStart: dashboardRecipe.seed,
+        profile: currentRecognitionProfile()
+      });
+    } else if (dashboardFixtureResult.kind === "datacard_patch") {
+      datacardAuthoringResult = loadMagicDatacardPreview({
+        rawJson: dashboardFixtureInput.value.trim() || dashboardFixtureInput.placeholder,
+        loadMode: "patch",
+        sourceName: "dashboard fixture preview"
+      });
+      datacardPreviewRegistry = datacardAuthoringResult.registry;
+    }
+
+    render();
+  });
+
   presetCleanButton.addEventListener("click", () => {
     applyPreset("clean");
   });
@@ -1035,6 +1641,10 @@ export function mountApp(root: HTMLDivElement): void {
 
   window.addEventListener("hashchange", () => {
     setActivePage(resolveWebUiPageFromHash(window.location.hash), false);
+  });
+
+  window.addEventListener("resize", () => {
+    scheduleAdaptiveLayoutBounds();
   });
 
   qualityToggle.addEventListener("change", () => {
@@ -1117,7 +1727,13 @@ export function mountApp(root: HTMLDivElement): void {
   });
 
   tutorialCaptureButton.addEventListener("click", () => {
-    const step = TUTORIAL_DEMO_STEPS[tutorialStepIndex];
+    const tutorialSteps = currentTutorialSteps();
+    const step = tutorialSteps[tutorialStepIndex] ?? tutorialSteps[0];
+
+    if (!step) {
+      return;
+    }
+
     const stepState = getTutorialStepState(step, baseSealResult, overlayRecords, baseSession, overlaySession);
 
     if (!stepState.ready) {
@@ -1169,6 +1785,243 @@ export function mountApp(root: HTMLDivElement): void {
     render();
   });
 
+  tutorialBackfillButton.addEventListener("click", () => {
+    const preview = previewTutorialProfileCardBackfill(tutorialProfileStore);
+
+    if (!preview.canBackfill) {
+      render();
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `${preview.userMessage}
+
+기존 획 데이터는 바꾸지 않고 카드 메타데이터만 현재 내장 카드 기준으로 보강합니다.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setTutorialProfileStore(backfillTutorialProfileCardSignature(tutorialProfileStore));
+    render();
+  });
+
+  datacardPresetList.addEventListener("click", (event) => {
+    const target = event.target instanceof HTMLElement ? event.target.closest<HTMLButtonElement>("[data-datacard-preset-id]") : null;
+
+    if (!target?.dataset.datacardPresetId) {
+      return;
+    }
+
+    applyDatacardPreset(target.dataset.datacardPresetId);
+  });
+
+  datacardPreviewButton.addEventListener("click", () => {
+    const rawJson = datacardPreviewInput.value.trim() || datacardPreviewInput.placeholder;
+    datacardAuthoringResult = loadMagicDatacardPreview({
+      rawJson,
+      loadMode: "patch",
+      sourceName: "web-ui datacard authoring preview"
+    });
+    datacardPreviewRegistry = datacardAuthoringResult.registry;
+    activeWhatIfScenarioId = null;
+    showWhatIfOverlay = false;
+    tutorialStepIndex = Math.min(tutorialStepIndex, Math.max(0, currentTutorialSteps().length - 1));
+    render();
+  });
+
+  datacardPreviewResetButton.addEventListener("click", () => {
+    datacardAuthoringResult = null;
+    datacardPreviewRegistry = null;
+    activeWhatIfScenarioId = null;
+    showWhatIfOverlay = false;
+    render();
+  });
+
+  datacardShapeBasicTab.addEventListener("click", () => {
+    setDatacardShapeTab("basic");
+  });
+
+  datacardShapeCustomTab.addEventListener("click", () => {
+    setDatacardShapeTab("custom");
+  });
+
+  datacardShapePresetList.addEventListener("click", (event) => {
+    const target = event.target instanceof HTMLElement ? event.target.closest<HTMLButtonElement>("[data-datacard-shape-id]") : null;
+
+    if (!target?.dataset.datacardShapeId) {
+      return;
+    }
+
+    const preset = getDatacardShapePresetById(target.dataset.datacardShapeId);
+
+    if (!preset) {
+      return;
+    }
+
+    activeDatacardShapePresetId = preset.id;
+    datacardShapeTab = preset.group;
+    render();
+  });
+
+  datacardShapeCaptureButton.addEventListener("click", () => {
+    captureDatacardShapeExample();
+  });
+
+  function applyDatacardPreset(presetId: string): void {
+    const rawJson = buildDatacardPresetPatch(presetId);
+    datacardPreviewInput.value = rawJson;
+    datacardAuthoringResult = loadMagicDatacardPreview({
+      rawJson,
+      loadMode: "patch",
+      sourceName: `web-ui datacard preset:${presetId}`
+    });
+    datacardPreviewRegistry = datacardAuthoringResult.registry;
+    activeWhatIfScenarioId = null;
+    showWhatIfOverlay = false;
+    tutorialStepIndex = Math.min(tutorialStepIndex, Math.max(0, currentTutorialSteps().length - 1));
+    render();
+  }
+
+  function setDatacardShapeTab(tab: DatacardShapePresetGroup): void {
+    datacardShapeTab = tab;
+    const firstPreset = listDatacardShapePresets().find((preset) => preset.group === tab);
+
+    if (firstPreset && getDatacardShapePresetById(activeDatacardShapePresetId)?.group !== tab) {
+      activeDatacardShapePresetId = firstPreset.id;
+    }
+
+    render();
+  }
+
+  function captureDatacardShapeExample(): void {
+    const preset = activeDatacardShapePreset();
+    const recognition = recognizeSessionWithDatacard(
+      baseSession,
+      preset,
+      datacardShapeCaptureStore,
+      currentRecognitionProfile()
+    );
+
+    if (recognition.sessionUsed.strokes.length === 0) {
+      render();
+      return;
+    }
+
+    if (preset.kind === "built_in" && preset.builtInFamily) {
+      const top = recognition.baseResult.candidates[0];
+      const second = recognition.baseResult.candidates[1];
+      setTutorialProfileStore(
+        appendTutorialCapture(tutorialProfileStore, {
+          kind: "family",
+          expectedFamily: preset.builtInFamily,
+          source: "variation",
+          strokes: recognition.sessionUsed.strokes,
+          validation: {
+            reliability: recognition.selectedCandidate.status === "recognized" ? "medium" : "unvalidated",
+            expectedLabel: preset.builtInFamily,
+            actualTopLabel: top?.family,
+            status: recognition.baseResult.status,
+            topScore: top?.score,
+            margin: top ? top.score - (second?.score ?? 0) : undefined,
+            quality: recognition.baseResult.rawQuality
+          }
+        })
+      );
+    }
+
+    datacardShapeCaptureStore = appendDatacardShapeCapture(
+      datacardShapeCaptureStore,
+      preset.id,
+      recognition.sessionUsed.strokes
+    );
+    render();
+  }
+
+  function updateDatacardShapeLab(result: DatacardRecognitionResult): void {
+    const preset = activeDatacardShapePreset();
+    const validation = validateDatacardShapePreset(preset);
+    const selected = result.selectedCandidate;
+    const topCandidates = result.candidates.slice(0, 5);
+    const captureCount = datacardShapeCaptureStore.captures.filter((capture) => capture.presetId === preset.id).length;
+
+    datacardShapeBasicTab.className = ["chip-button", datacardShapeTab === "basic" ? "active" : ""].filter(Boolean).join(" ");
+    datacardShapeCustomTab.className = ["chip-button", datacardShapeTab === "custom" ? "active" : ""].filter(Boolean).join(" ");
+    datacardShapeTitle.textContent = `${preset.shortLabel} 카드 비교`;
+    datacardShapeStatus.textContent = statusLabel(selected.status);
+    datacardShapeStatus.className = `status-chip status-${datacardStatusTone(selected.status)}`;
+    datacardShapeCopy.textContent =
+      preset.kind === "custom"
+        ? "새 도형은 선택한 카드 기준과 이 화면에서 저장한 연습 입력으로 비교합니다."
+        : "기본 도형은 기존 판정 결과와 카드의 그리기 기준을 함께 비교합니다.";
+    datacardShapePresetList.innerHTML = renderDatacardShapePresetButtons(datacardShapeTab, preset.id);
+    datacardShapeDefinition.innerHTML = renderDatacardShapeDefinition(preset, validation);
+    datacardShapePreview.innerHTML = renderDashboardStrokeSvg({
+      startedAt: 0,
+      endedAt: 1,
+      strokes: [...preset.definition.exampleTemplate]
+    });
+    datacardShapeComparison.innerHTML = renderDatacardShapeComparison(result);
+    datacardShapeSummary.innerHTML = renderSummaryRows([
+      ["선택 카드", preset.label],
+      ["현재 비교", `${datacardPercent(selected.score)} / ${statusLabel(selected.status)}`],
+      ["연습 입력", `${captureCount}회`],
+      ["보정 변화", selected.localModelLift > 0 ? `+${datacardPercent(selected.localModelLift)}` : "아직 없음"]
+    ]);
+    datacardShapeCandidates.innerHTML = topCandidates
+      .map(
+        (candidate) => `
+          <li>
+            <span>${escapeDashboardHtml(candidate.label)}</span>
+            <strong>${datacardPercent(candidate.score)}</strong>
+          </li>
+        `
+      )
+      .join("");
+    datacardShapeCaptureButton.disabled = result.sessionUsed.strokes.length === 0;
+    datacardShapeCaptureButton.textContent =
+      preset.kind === "built_in" ? "연습에 저장하고 비교" : "새 도형 예시 저장";
+    datacardShapeNotes.innerHTML = renderMetricNotes([
+      selected.reason,
+      result.sealDetection?.ok
+        ? "기본 모양을 감싸는 원은 완료 표시로만 보고, 도형 비교에서는 안쪽 입력만 사용했습니다."
+        : "원을 둘러 완료 표시를 만들면 안쪽 도형만 따로 비교합니다.",
+      preset.kind === "custom"
+        ? "새 도형은 이 화면에서 저장한 연습 입력으로만 보정되며, 기존 최종 결과 조합은 바꾸지 않습니다."
+        : "기본 도형은 기존 연습 저장 흐름에도 함께 반영됩니다."
+    ]);
+  }
+
+  magicWhatIfGuide.addEventListener("click", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const button = target.closest<HTMLButtonElement>("[data-what-if-scenario-id]");
+
+    if (!button) {
+      return;
+    }
+
+    const scenarioId = button.dataset.whatIfScenarioId;
+
+    if (!scenarioId) {
+      return;
+    }
+
+    if (activeWhatIfScenarioId === scenarioId) {
+      showWhatIfOverlay = !showWhatIfOverlay;
+    } else {
+      activeWhatIfScenarioId = scenarioId;
+      showWhatIfOverlay = true;
+    }
+
+    render();
+  });
+
   insightAssistTab.addEventListener("click", () => {
     insightTab = "assist";
     render();
@@ -1194,7 +2047,7 @@ export function mountApp(root: HTMLDivElement): void {
 
     const nextIndex = Number(button.dataset.tutorialStepIndex);
 
-    if (!Number.isFinite(nextIndex) || nextIndex < 0 || nextIndex >= TUTORIAL_DEMO_STEPS.length) {
+    if (!Number.isFinite(nextIndex) || nextIndex < 0 || nextIndex >= currentTutorialSteps().length) {
       return;
     }
 
@@ -1261,53 +2114,62 @@ export function mountApp(root: HTMLDivElement): void {
   render();
 
   function sealBasePhase(): void {
+    attemptSealBasePhase(false);
+  }
+
+  function attemptSealBasePhase(autoAdvance: boolean): void {
     if (baseSession.strokes.length === 0) {
       return;
     }
 
-    const sealed = recognizeSession(baseSession, { sealed: true, profile: currentRecognitionProfile() });
+    const sealedBase = recognizeSealedBaseSession(baseSession, { profile: currentRecognitionProfile() });
+    const sealed = sealedBase.result;
     const snapshotId = crypto.randomUUID();
     const timestamp = Date.now();
     previewResult = sealed;
-    baseSealResult = sealed;
+    baseSealDetection = sealedBase.sealDetection;
+    baseSealResult = sealedBase.sealDetection.ok ? sealed : null;
     let profileUpdate: { profile: UserInputProfile; delta: UserInputProfileDelta } | undefined;
 
-    if (sealed.canonicalFamily) {
+    if (baseSealResult?.canonicalFamily) {
       profileUpdate = updateUserInputProfile(userProfile, sealed);
       userProfile = profileUpdate.profile;
       latestProfileDelta = profileUpdate.delta;
       saveUserInputProfile(userProfile);
-      phase = "base";
-      overlayAuthoringStarted = false;
+      phase = autoAdvance ? "overlay" : "base";
+      overlayAuthoringStarted = autoAdvance;
       overlaySession = createEmptySession();
       overlayRecords = [];
       currentOverlayPreview = null;
       compiledResult = null;
     }
 
-    logs = [
-      {
-        kind: "base_seal",
-        id: snapshotId,
-        timestamp,
-        rawStrokeCount: baseSession.strokes.length,
-        rawStrokes: structuredClone(baseSession.strokes),
-        normalizedStrokes: sealed.normalizedStrokes,
-        result: sealed,
-        profileDelta: profileUpdate?.delta
-      },
-      ...logs
-    ];
-    recentSealSnapshots = [
-      createRecentSealSnapshot(
-        snapshotId,
-        "base",
-        timestamp,
-        createOutcomeInput(sealed, []),
-        structuredClone(baseSession.strokes)
-      ),
-      ...recentSealSnapshots
-    ].slice(0, RECENT_SEAL_LIMIT);
+    if (baseSealResult?.canonicalFamily || !autoAdvance) {
+      logs = [
+        {
+          kind: "base_seal",
+          id: snapshotId,
+          timestamp,
+          rawStrokeCount: baseSession.strokes.length,
+          rawStrokes: structuredClone(baseSession.strokes),
+          normalizedStrokes: sealed.normalizedStrokes,
+          result: sealed,
+          sealDetection: sealedBase.sealDetection,
+          profileDelta: profileUpdate?.delta
+        },
+        ...logs
+      ];
+      recentSealSnapshots = [
+        createRecentSealSnapshot(
+          snapshotId,
+          "base",
+          timestamp,
+          createOutcomeInput(sealed, []),
+          structuredClone(baseSession.strokes)
+        ),
+        ...recentSealSnapshots
+      ].slice(0, RECENT_SEAL_LIMIT);
+    }
 
     render();
   }
@@ -1372,10 +2234,194 @@ export function mountApp(root: HTMLDivElement): void {
     currentStroke = null;
     previewResult = recognizeSession(baseSession, { sealed: false, profile: currentRecognitionProfile() });
     baseSealResult = null;
+    baseSealDetection = null;
     currentOverlayPreview = null;
     overlayRecords = [];
     compiledResult = null;
     latestProfileDelta = undefined;
+  }
+
+  function readDashboardFamily(value: unknown): GlyphFamily {
+    return value === "fire" || value === "water" || value === "earth" || value === "wind" || value === "life"
+      ? value
+      : dashboardRecipe.family ?? "fire";
+  }
+
+  function readDashboardRecipeFromControls(): SyntheticInputRecipe {
+    return {
+      ...dashboardRecipe,
+      family: readDashboardFamily(dashboardFamilySelect.value),
+      seed: readDashboardSeed(),
+      jitterPx: Number(dashboardJitterInput.value) || 0,
+      openGapRatio: Number(dashboardOpenGapInput.value) || 0,
+      rotationDeg: Number(dashboardRotationInput.value) || 0,
+      curveWarp: Number(dashboardCurveInput.value) || 0,
+      extraNoiseStrokeCount: Number(dashboardNoiseInput.value) || 0,
+      pointDensity: 5
+    };
+  }
+
+  function readDashboardRangeFromControls(): SyntheticInputRange {
+    return {
+      family: readDashboardFamily(dashboardFamilySelect.value),
+      seed: readDashboardSeed(),
+      jitterPx: readRangePair(dashboardJitterMinInput, dashboardJitterInput, 0, 64),
+      openGapRatio: readRangePair(dashboardOpenGapMinInput, dashboardOpenGapInput, 0, 0.82),
+      rotationDeg: readRangePair(dashboardRotationMinInput, dashboardRotationInput, -180, 180),
+      curveWarp: readRangePair(dashboardCurveMinInput, dashboardCurveInput, 0, 1),
+      extraNoiseStrokeCount: readRangePair(dashboardNoiseMinInput, dashboardNoiseInput, 0, 8),
+      pointDensity: 5
+    };
+  }
+
+  function readDashboardSeed(): number {
+    return Math.round(Number(dashboardSeedInput.value) || dashboardRange.seed || 42);
+  }
+
+  function readRangePair(
+    minimumInput: HTMLInputElement,
+    maximumInput: HTMLInputElement,
+    lowerBound: number,
+    upperBound: number
+  ): { min: number; max: number } {
+    const first = clampNumber(Number(minimumInput.value), lowerBound, upperBound);
+    const second = clampNumber(Number(maximumInput.value), lowerBound, upperBound);
+
+    return {
+      min: Math.min(first, second),
+      max: Math.max(first, second)
+    };
+  }
+
+  function updateDashboardControlValueOutputs(): void {
+    const jitter = readRangePair(dashboardJitterMinInput, dashboardJitterInput, 0, 64);
+    const openGap = readRangePair(dashboardOpenGapMinInput, dashboardOpenGapInput, 0, 0.82);
+    const rotation = readRangePair(dashboardRotationMinInput, dashboardRotationInput, -180, 180);
+    const curve = readRangePair(dashboardCurveMinInput, dashboardCurveInput, 0, 1);
+    const noise = readRangePair(dashboardNoiseMinInput, dashboardNoiseInput, 0, 8);
+
+    setOutputText(dashboardJitterOutput, `${jitter.min.toFixed(0)} - ${jitter.max.toFixed(0)} px`);
+    setOutputText(dashboardOpenGapOutput, `${(openGap.min * 100).toFixed(0)} - ${(openGap.max * 100).toFixed(0)}%`);
+    setOutputText(dashboardRotationOutput, `${rotation.min.toFixed(0)} - ${rotation.max.toFixed(0)} deg`);
+    setOutputText(dashboardCurveOutput, `${(curve.min * 100).toFixed(0)} - ${(curve.max * 100).toFixed(0)}%`);
+    setOutputText(dashboardNoiseOutput, `${noise.min.toFixed(0)} - ${noise.max.toFixed(0)}`);
+    setOutputText(dashboardIterationsOutput, `${readDashboardIterations()}회`);
+  }
+
+  function setOutputText(output: HTMLOutputElement, text: string): void {
+    output.value = text;
+    output.textContent = text;
+  }
+
+  function clampNumber(value: number, minimum: number, maximum: number): number {
+    const safeValue = Number.isFinite(value) ? value : minimum;
+    return Math.max(minimum, Math.min(maximum, safeValue));
+  }
+
+  function readDashboardIterations(): number {
+    return Math.max(1, Math.min(1000, Math.round(Number(dashboardIterationsInput.value) || dashboardIterations)));
+  }
+
+  function syncDashboardControls(): void {
+    dashboardFamilySelect.value = dashboardRange.family ?? dashboardRecipe.family ?? "fire";
+    dashboardSeedInput.value = String(dashboardRange.seed ?? dashboardRecipe.seed ?? 42);
+    dashboardJitterMinInput.value = String(dashboardRange.jitterPx.min);
+    dashboardJitterInput.value = String(dashboardRange.jitterPx.max);
+    dashboardOpenGapMinInput.value = String(dashboardRange.openGapRatio.min);
+    dashboardOpenGapInput.value = String(dashboardRange.openGapRatio.max);
+    dashboardRotationMinInput.value = String(dashboardRange.rotationDeg.min);
+    dashboardRotationInput.value = String(dashboardRange.rotationDeg.max);
+    dashboardCurveMinInput.value = String(dashboardRange.curveWarp.min);
+    dashboardCurveInput.value = String(dashboardRange.curveWarp.max);
+    dashboardNoiseMinInput.value = String(dashboardRange.extraNoiseStrokeCount.min);
+    dashboardNoiseInput.value = String(dashboardRange.extraNoiseStrokeCount.max);
+    dashboardIterationsInput.value = String(dashboardIterations);
+    updateDashboardControlValueOutputs();
+  }
+
+  function ensureDashboardSample(): DashboardBatchSample {
+    if (!dashboardSingleSample) {
+      dashboardSingleSample = buildDashboardSingleResult(dashboardRecipe, currentRecognitionProfile());
+    }
+
+    return dashboardSingleSample;
+  }
+
+  function updateDashboardPanel(): void {
+    syncDashboardControls();
+    const sample = ensureDashboardSample();
+    const plotModel = dashboardBatchSummary ? buildDashboardPlotModel(dashboardBatchSummary) : null;
+    const selectedMatrixSummary = dashboardFamilyMatrixSummary ?? dashboardFamilyMatrixLog[0] ?? null;
+    const matrixSummary = accumulateDashboardFamilyMatrixSummaries(dashboardFamilyMatrixLog) ?? selectedMatrixSummary;
+    const topFamily = sample.actualFamily === "none" ? null : sample.actualFamily;
+    const comparison = dashboardComparisonSummary;
+
+    dashboardPresetList.innerHTML = renderDashboardPresetButtons(activeDashboardPresetId);
+    dashboardSingleStatus.textContent = dashboardStatusLabel(sample.status);
+    dashboardSingleStatus.className = `status-chip status-${dashboardStatusTone(sample.status)}`;
+    dashboardPreviewTitle.textContent = `${dashboardFamilyName(dashboardRecipe.family)} 검사 입력`;
+    dashboardStrokePreview.innerHTML = renderDashboardStrokeSvg(sample.session);
+    dashboardSingleSummary.innerHTML = renderSummaryRows([
+      ["기대한 모양", dashboardFamilyName(sample.expectedFamily)],
+      ["읽힌 모양", topFamily ? dashboardFamilyName(topFamily) : "아직 없음"],
+      ["상태", dashboardStatusLabel(sample.status)],
+      ["후보 점수", `${(sample.topScore * 100).toFixed(1)}점`]
+    ]);
+    dashboardSingleDetails.innerHTML = renderMetricNotes([
+      describeDashboardSample(sample),
+      `닫힘 ${(sample.closure * 100).toFixed(0)}점 · 부드러움 ${(sample.smoothness * 100).toFixed(0)}점 · 안정감 ${(sample.stability * 100).toFixed(0)}점`,
+      sample.shadowChanged ? "보조 판독이 참고 차이를 발견했습니다." : "보조 판독은 실제 결과를 바꾸지 않았습니다."
+    ]);
+
+    dashboardSealSmoke.innerHTML = renderMetricNotes([
+      activeDashboardPresetId === "seal_ring_pass_fail"
+        ? "테두리 자동 인식 테스트: 실제 테스트 화면에서 기본 도형을 감싸는 원이 확인되면 다음 단계로 넘어가는지 검증합니다."
+        : "자동 테두리 인식: 기본 도형을 바깥에서 감싸는 원만 완료 신호로 보고, 그 원은 도형 종류 판정에는 포함하지 않습니다."
+    ]);
+
+    dashboardBatchCount.textContent = matrixSummary
+      ? `${matrixSummary.samples.length}회`
+      : comparison
+        ? `${comparison.iterations}회`
+        : dashboardBatchSummary
+          ? `${dashboardBatchSummary.total}회`
+          : "0회";
+    dashboardBatchLogCount.textContent = `${dashboardFamilyMatrixLog.length} logs`;
+    dashboardBatchCopy.textContent = matrixSummary
+      ? matrixSummary.userSummary
+      : comparison
+        ? comparison.userSummary
+        : dashboardBatchSummary
+          ? dashboardBatchSummary.userSummary
+          : "여러 번 테스트를 누르면 비슷한 입력을 반복해 안정성을 보여 줍니다.";
+    dashboardComparisonLanes.innerHTML = comparison
+      ? renderDashboardComparisonLanes(comparison)
+      : renderEmptyDashboardPlot("baseline / tutorial / threshold 비교 대기");
+    dashboardComparisonTable.innerHTML = comparison ? renderDashboardComparisonTable(comparison) : "";
+    dashboardStatusBars.innerHTML = plotModel ? renderDashboardBars(plotModel.statusBars) : renderEmptyDashboardPlot("상태 분포 대기");
+    dashboardQualityBars.innerHTML = plotModel ? renderDashboardBars(plotModel.qualityBars) : renderEmptyDashboardPlot("품질 분포 대기");
+    dashboardHeatmap.innerHTML = plotModel ? renderDashboardHeatmap(plotModel) : renderEmptyDashboardPlot("헷갈림 지도 대기");
+    dashboardScatter.innerHTML = plotModel ? renderDashboardScatter(plotModel) : renderEmptyDashboardPlot("점 분포 대기");
+    dashboardFamilyDistribution.innerHTML = matrixSummary
+      ? renderDashboardFamilyDistribution(matrixSummary)
+      : renderEmptyDashboardPlot("모양별 n회 생성 대기");
+    dashboardOverlapTable.innerHTML = matrixSummary
+      ? renderDashboardOverlapTable(matrixSummary)
+      : renderEmptyDashboardPlot("겹침 특성 대기");
+    dashboardBatchLog.innerHTML = renderDashboardBatchLog(dashboardFamilyMatrixLog, selectedMatrixSummary?.id);
+
+    const fixtureTone = dashboardFixtureResult?.ok ? "recognized" : dashboardFixtureResult ? "invalid" : "waiting";
+    dashboardFixtureStatus.textContent = dashboardFixtureResult ? (dashboardFixtureResult.ok ? "읽음" : "확인 필요") : "대기";
+    dashboardFixtureStatus.className = `status-chip status-${fixtureTone}`;
+    dashboardFixtureSummary.innerHTML = renderMetricNotes([
+      dashboardFixtureResult?.userMessage ?? "예시 데이터를 붙여 넣으면 미리보기로만 확인합니다.",
+      datacardAuthoringResult?.registry ? "설명 카드 패치가 guide 미리보기에 연결되었습니다. 실제 판정은 그대로입니다." : "localStorage는 자동으로 바꾸지 않습니다."
+    ]);
+    dashboardReportViewer.textContent = JSON.stringify(
+      buildDashboardReport(sample, dashboardBatchSummary, dashboardFixtureResult, matrixSummary),
+      null,
+      2
+    );
   }
 
   function render(): void {
@@ -1389,9 +2435,11 @@ export function mountApp(root: HTMLDivElement): void {
       currentOverlayPreview,
       overlayRecords,
       compiledResult,
-      analysisOverlay: demoView.analysisOverlay
+      analysisOverlay: demoView.analysisOverlay,
+      whatIfPreview: buildActiveWhatIfPreviewModel()
     });
     updateSidebar();
+    scheduleAdaptiveLayoutBounds();
   }
 
   function updateSidebar(): void {
@@ -1408,6 +2456,7 @@ export function mountApp(root: HTMLDivElement): void {
     const compilePreview =
       compiledResult ?? (baseSealResult?.canonicalFamily ? compileSealResult(baseSealResult, overlayRecords, latestProfileDelta) : null);
     const scenario = scenarioAppeal(demoView.selectedScenarioId);
+    const tutorialSteps = currentTutorialSteps();
     const personalizationModel = buildPersonalizationDemoModel(
       baseDisplay,
       overlayLive,
@@ -1415,6 +2464,7 @@ export function mountApp(root: HTMLDivElement): void {
       demoView
     );
     const tutorialModel = buildTutorialFlowModel({
+      tutorialSteps,
       stepIndex: tutorialStepIndex,
       completedStepIds: tutorialCompletedStepIds,
       tutorialFlowActive,
@@ -1426,6 +2476,12 @@ export function mountApp(root: HTMLDivElement): void {
       overlayRecords,
       tutorialStore: tutorialProfileStore
     });
+    const datacardShapeRecognition = recognizeSessionWithDatacard(
+      baseSession,
+      activeDatacardShapePreset(),
+      datacardShapeCaptureStore,
+      currentRecognitionProfile()
+    );
 
     syncTinyMlRuntimeMetadata(root, baseDisplay, overlayLive);
 
@@ -1452,6 +2508,9 @@ export function mountApp(root: HTMLDivElement): void {
     syncScenarioButtons(scenarioChipButtons, demoView.selectedScenarioId);
 
     syncPageLayout(demoView.activePage, baseDisplay, overlayLive, tutorialProfileStore);
+    if (demoView.activePage === "dashboard") {
+      updateDashboardPanel();
+    }
 
     phaseTitle.textContent = phaseTitleFor(phase, baseSealed, overlayAuthoringStarted);
     phaseCopy.textContent = phaseCopyFor(phase, baseSealed, overlayAuthoringStarted, compiledResult);
@@ -1474,6 +2533,9 @@ export function mountApp(root: HTMLDivElement): void {
     baseStatus.textContent = statusLabel(baseDisplay.status);
     baseStatus.className = `status-chip status-${baseDisplay.status}`;
     baseReason.textContent =
+      !baseSealed && baseSealDetection?.reason
+        ? baseSealDetection.reason
+        :
       baseDisplay.invalidReason ??
       (baseDisplay.topCandidate
         ? `가장 가까운 모양 점수 ${(baseDisplay.topCandidate.score * 100).toFixed(1)} / 전체 완성도 ${(averageQuality(activeQuality) * 100).toFixed(0)}`
@@ -1573,6 +2635,7 @@ export function mountApp(root: HTMLDivElement): void {
       compileReason.textContent = "기본 모양을 고정하고 추가 효과를 더한 뒤 최종 결과를 확인합니다.";
       compileSummary.innerHTML = "";
     }
+    updateDatacardShapeLab(datacardShapeRecognition);
 
     outcomeTitle.textContent = baseSealed ? `${familyLabel(baseSealResult?.canonicalFamily ?? "wind")} 결과감 비교` : "품질 전후 비교";
     qualityActiveBadge.textContent = demoView.qualityInfluence ? "품질 반영 켬" : "품질 반영 끔";
@@ -1618,6 +2681,24 @@ export function mountApp(root: HTMLDivElement): void {
     readingGuideTitle.textContent = "설명 기준과 모범 선례";
     readingGuideCopy.textContent = "같은 모양은 같은 종류로 유지한 채, 화면에서 무엇을 기준으로 읽는지와 안정적인 예시를 함께 보여 줍니다.";
     principlesList.innerHTML = renderHciPrinciples();
+    magicWhatIfGuide.innerHTML = renderMagicWhatIfGuide(
+      activeWhatIfScenarioId,
+      showWhatIfOverlay,
+      currentWhatIfScenarios()
+    );
+    datacardPresetList.innerHTML = renderDatacardPresetButtons();
+    const datacardDisplay = buildDatacardAuthoringDisplay(datacardAuthoringResult);
+    datacardPreviewStatus.textContent = datacardDisplay.statusLabel;
+    datacardPreviewStatus.className = `status-chip status-${datacardDisplay.statusTone}`;
+    datacardPreviewSummary.innerHTML = renderSummaryRows(datacardDisplay.summaryRows);
+    datacardPreviewIssues.innerHTML = renderMetricNotes(datacardDisplay.issueLines);
+    const backfillPreview = previewTutorialProfileCardBackfill(tutorialProfileStore);
+    tutorialBackfillButton.disabled = !backfillPreview.canBackfill;
+    tutorialBackfillButton.textContent = backfillPreview.canBackfill
+      ? "현재 카드 기준으로 보강"
+      : backfillPreview.reason === "already_current"
+        ? "카드 메타데이터 최신"
+        : "보강 불가";
     readingGuideExemplar.hidden = demoView.activePage === "guide" ? false : !demoView.showExemplarPanel;
     exemplarTitle.textContent = personalizationModel.exemplarTitle;
     exemplarCopy.textContent = personalizationModel.exemplarCopy;
@@ -1653,13 +2734,13 @@ export function mountApp(root: HTMLDivElement): void {
     logViewer.textContent = JSON.stringify(logs, null, 2);
     canvasHint.textContent =
       demoView.activePage === "tutorial"
-        ? buildTutorialCanvasHint(TUTORIAL_DEMO_STEPS[tutorialStepIndex] ?? TUTORIAL_DEMO_STEPS[0], {
+        ? buildTutorialCanvasHint(tutorialSteps[tutorialStepIndex] ?? tutorialSteps[0] ?? TUTORIAL_DEMO_STEPS[0], {
             phase,
             baseSealed,
             overlayAuthoringStarted
           })
         : !baseSealed
-          ? "1. 기본 모양을 그린 뒤 먼저 종류를 고정합니다."
+          ? "1. 기본 모양을 그리고, 마지막에 기본 도형을 감싸는 원을 그리면 자동으로 기본 모양이 고정됩니다."
           : phase === "base"
             ? `2. 모양이 고정됐습니다. ${scenario.title} 시나리오에 맞춰 품질 전후 비교나 추가 효과 그리기를 보여줍니다.`
             : phase === "overlay"
@@ -1680,7 +2761,8 @@ export function mountApp(root: HTMLDivElement): void {
     const meta = WEB_UI_PAGES.find((item) => item.id === page) ?? WEB_UI_PAGES[0];
     const mlMetadata = buildTinyMlRuntimeMetadata(baseDisplay, overlayLive);
 
-    const workspaceLayout = page === "test" ? "test-layout" : page === "tutorial" ? "tutorial-layout" : "analysis-layout";
+    const workspaceLayout =
+      page === "test" ? "test-layout" : page === "tutorial" ? "tutorial-layout" : page === "dashboard" ? "dashboard-layout" : "analysis-layout";
 
     root.dataset.activePage = page;
     workspace.className = ["workspace", workspaceLayout].join(" ");
@@ -1695,10 +2777,14 @@ export function mountApp(root: HTMLDivElement): void {
     }
 
     boardPanel.hidden = page !== "test" && page !== "tutorial";
+    dashboardPanel.hidden = page !== "dashboard";
+    dashboardPanel.setAttribute("aria-hidden", page === "dashboard" ? "false" : "true");
+    sidebar.hidden = page === "dashboard";
     baseCard.hidden = page !== "test";
     overlayPreviewCard.hidden = page !== "test";
     overlayRecordsCard.hidden = page !== "test";
     compileCard.hidden = page !== "test";
+    datacardShapeLabCard.hidden = page !== "test";
     outcomeCard.hidden = page !== "quality";
     whyCard.hidden = page !== "guide";
     supportCard.hidden = page !== "ml" && page !== "tutorial";
@@ -1768,8 +2854,9 @@ export function mountApp(root: HTMLDivElement): void {
       return;
     }
 
-    const sealedReplay = recognizeSession(baseSession, { sealed: true, profile: currentRecognitionProfile() });
-    baseSealResult = sealedReplay.canonicalFamily ? sealedReplay : null;
+    const sealedReplay = recognizeSealedBaseSession(baseSession, { profile: currentRecognitionProfile() });
+    baseSealDetection = sealedReplay.sealDetection;
+    baseSealResult = sealedReplay.sealDetection.ok && sealedReplay.result.canonicalFamily ? sealedReplay.result : null;
 
     if (!baseSealResult?.canonicalFamily) {
       currentOverlayPreview = null;
@@ -1832,7 +2919,9 @@ export function mountApp(root: HTMLDivElement): void {
     const snapshotBaseSession = structuredClone(baseSession);
     const snapshotOverlayStrokes = structuredClone(overlaySession.strokes);
     const baseSealed = Boolean(baseSealResult?.canonicalFamily);
-    const snapshotBaseResult = recognizeSession(snapshotBaseSession, { sealed: baseSealed, profile });
+    const snapshotBaseResult = baseSealed
+      ? recognizeSealedBaseSession(snapshotBaseSession, { profile }).result
+      : recognizeSession(snapshotBaseSession, { sealed: false, profile });
     const replayedOverlay =
       baseSealed && snapshotBaseResult.canonicalFamily
         ? replayOverlaySeries(snapshotBaseSession, snapshotOverlayStrokes)
@@ -1853,10 +2942,9 @@ export function mountApp(root: HTMLDivElement): void {
   function replayTutorialComparisonSnapshot(source: TutorialComparisonSnapshot): TutorialComparisonSnapshot {
     const nextBaseSession = structuredClone(source.baseSession);
     const nextOverlayStrokes = structuredClone(source.overlayStrokes);
-    const nextBaseResult = recognizeSession(nextBaseSession, {
-      sealed: source.baseSealed,
-      profile: currentRecognitionProfile()
-    });
+    const nextBaseResult = source.baseSealed
+      ? recognizeSealedBaseSession(nextBaseSession, { profile: currentRecognitionProfile() }).result
+      : recognizeSession(nextBaseSession, { sealed: false, profile: currentRecognitionProfile() });
     const replayedOverlay =
       source.baseSealed && nextBaseResult.canonicalFamily
         ? replayOverlaySeries(nextBaseSession, nextOverlayStrokes)
@@ -1874,7 +2962,7 @@ export function mountApp(root: HTMLDivElement): void {
     };
   }
 
-  function recordTutorialDemoStep(step: (typeof TUTORIAL_DEMO_STEPS)[number]): TutorialCapture | null {
+  function recordTutorialDemoStep(step: TutorialDemoStep): TutorialCapture | null {
     if (step.kind === "family" && step.expectedFamily) {
       return tutorialOnboardingHook.recordCapture({
         kind: "family",
@@ -2027,7 +3115,7 @@ function viewPresetLabel(preset: DemoViewPreset): string {
 }
 
 function buildTutorialCanvasHint(
-  step: (typeof TUTORIAL_DEMO_STEPS)[number],
+  step: TutorialDemoStep,
   state: { phase: RitualPhase; baseSealed: boolean; overlayAuthoringStarted: boolean }
 ): string {
   if (step.kind === "family") {
@@ -2329,6 +3417,55 @@ function syncTinyMlRuntimeMetadata(
   }
 }
 
+export interface TutorialPersonalizationPolicyMetadata {
+  canApply: boolean;
+  canUseForShadow: boolean;
+  needsBackfill: boolean;
+  statusLabel: string;
+  reasonLabels: string[];
+}
+
+export function buildTutorialPersonalizationPolicyMetadata(
+  store: TutorialProfileStore
+): TutorialPersonalizationPolicyMetadata {
+  const signature = getBuiltInMagicCardSetSignature();
+  const runtime = getTinyMlRuntimeStatus();
+  const decision = evaluateTutorialThresholdBiasPolicy({
+    storeVersion: store.version,
+    cardSetId: store.cardSetId ?? store.shapeProfile.cardSetId,
+    cardSetHash: store.cardSetHash ?? store.shapeProfile.cardSetHash,
+    cardSignature: store.cardSignature ?? store.shapeProfile.cardSignature,
+    currentCardSignature: {
+      cardSetId: signature.cardSetId,
+      cardSetHash: signature.cardSetHash,
+      cardSignature: signature.cardSetHash
+    },
+    totalCaptureCount: store.shapeProfile.tutorialSampleCount,
+    validatedCaptureCount: store.shapeProfile.validatedTutorialSampleCount ?? 0,
+    feedbackOnlyCaptureCount: store.shapeProfile.feedbackOnlyTutorialSampleCount ?? 0,
+    artifactCompatibility:
+      runtime.baseShadowAvailable || runtime.operatorShadowAvailable
+        ? "compatible"
+        : "missing"
+  });
+  const reasonLabels = decision.reasons
+    .filter((reason) => reason.severity !== "ok" || reason.code === "card_set_match")
+    .map((reason) => reason.label)
+    .slice(0, 4);
+
+  return {
+    canApply: decision.canApplyThresholdBias,
+    canUseForShadow: decision.canUseForShadow,
+    needsBackfill: decision.needsBackfill,
+    statusLabel: decision.canApplyThresholdBias
+      ? "실제 보정 가능"
+      : decision.canUseForShadow
+        ? "참고 표시만"
+        : "보정 대기",
+    reasonLabels: reasonLabels.length > 0 ? reasonLabels : ["연습 안전 상태 확인 전"]
+  };
+}
+
 export function buildTinyMlRuntimeMetadata(
   baseResult?: RecognitionResult,
   overlayRecognition?: OverlayRecognition | null
@@ -2526,6 +3663,10 @@ function drawCanvas(context: CanvasRenderingContext2D, state: CanvasRenderState)
     }
   }
 
+  if (state.whatIfPreview) {
+    drawWhatIfPreview(context, state.whatIfPreview, referenceFrame);
+  }
+
   const overlayCount = state.overlayRecords.filter(
     (record) => record.recognition.status === "recognized" && record.recognition.operator
   ).length;
@@ -2710,6 +3851,170 @@ function drawReferenceFrameDebug(
   context.restore();
 }
 
+function drawWhatIfPreview(
+  context: CanvasRenderingContext2D,
+  preview: MagicWhatIfPreviewModel,
+  referenceFrame: OverlayReferenceFrame | null
+): void {
+  context.save();
+  context.setLineDash([8, 6]);
+
+  for (const mark of preview.marks) {
+    drawWhatIfMark(context, mark, referenceFrame);
+  }
+
+  context.restore();
+}
+
+function drawWhatIfMark(
+  context: CanvasRenderingContext2D,
+  mark: MagicWhatIfPreviewMark,
+  referenceFrame: OverlayReferenceFrame | null
+): void {
+  switch (mark.kind) {
+    case "ghost_stroke":
+      if (mark.points && mark.points.length > 0) {
+        drawWhatIfGhostStroke(context, mark.points, whatIfToneColor(mark.tone, 0.78));
+      }
+      return;
+    case "anchor_zone":
+      drawWhatIfAnchorZone(context, mark, referenceFrame);
+      return;
+    case "dependency_arrow":
+      drawWhatIfArrow(context, mark);
+      return;
+    case "risk_label":
+      if (mark.label) {
+        drawWhatIfLabel(context, mark.label, mark.from ?? { x: 34, y: CANVAS_HEIGHT - 34 }, mark.tone);
+      }
+      return;
+  }
+}
+
+function drawWhatIfGhostStroke(
+  context: CanvasRenderingContext2D,
+  points: readonly { x: number; y: number }[],
+  strokeStyle: string
+): void {
+  if (points.length === 0) {
+    return;
+  }
+
+  context.save();
+  context.strokeStyle = strokeStyle;
+  context.lineWidth = 3;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.setLineDash([9, 7]);
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y);
+
+  for (const point of points.slice(1)) {
+    context.lineTo(point.x, point.y);
+  }
+
+  context.stroke();
+  context.restore();
+}
+
+function drawWhatIfAnchorZone(
+  context: CanvasRenderingContext2D,
+  mark: MagicWhatIfPreviewMark,
+  referenceFrame: OverlayReferenceFrame | null
+): void {
+  const zone = mark.anchorZoneId ? referenceFrame?.anchorZones.find((item) => item.id === mark.anchorZoneId) : undefined;
+  const center = zone?.center ?? mark.from;
+
+  if (!center) {
+    return;
+  }
+
+  const radius = zone?.radius ?? 26;
+  context.save();
+  context.strokeStyle = whatIfToneColor(mark.tone, 0.74);
+  context.fillStyle = whatIfToneColor(mark.tone, 0.1);
+  context.lineWidth = 2;
+  context.setLineDash([7, 5]);
+  context.beginPath();
+  context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+  if (mark.label) {
+    drawWhatIfLabel(context, mark.label, { x: center.x + radius + 8, y: center.y - 8 }, mark.tone);
+  }
+  context.restore();
+}
+
+function drawWhatIfArrow(context: CanvasRenderingContext2D, mark: MagicWhatIfPreviewMark): void {
+  if (!mark.from || !mark.to) {
+    return;
+  }
+
+  const color = whatIfToneColor(mark.tone, 0.82);
+  const angle = Math.atan2(mark.to.y - mark.from.y, mark.to.x - mark.from.x);
+  const head = 12;
+
+  context.save();
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.lineWidth = 2;
+  context.setLineDash([8, 6]);
+  context.beginPath();
+  context.moveTo(mark.from.x, mark.from.y);
+  context.lineTo(mark.to.x, mark.to.y);
+  context.stroke();
+  context.setLineDash([]);
+  context.beginPath();
+  context.moveTo(mark.to.x, mark.to.y);
+  context.lineTo(mark.to.x - head * Math.cos(angle - Math.PI / 6), mark.to.y - head * Math.sin(angle - Math.PI / 6));
+  context.lineTo(mark.to.x - head * Math.cos(angle + Math.PI / 6), mark.to.y - head * Math.sin(angle + Math.PI / 6));
+  context.closePath();
+  context.fill();
+  if (mark.label) {
+    drawWhatIfLabel(
+      context,
+      mark.label,
+      { x: (mark.from.x + mark.to.x) / 2 + 10, y: (mark.from.y + mark.to.y) / 2 - 10 },
+      mark.tone
+    );
+  }
+  context.restore();
+}
+
+function drawWhatIfLabel(
+  context: CanvasRenderingContext2D,
+  label: string,
+  at: { x: number; y: number },
+  tone: MagicWhatIfPreviewMark["tone"]
+): void {
+  context.save();
+  context.font = "600 12px Manrope, 'Segoe UI', sans-serif";
+  const width = Math.min(Math.max(context.measureText(label).width + 18, 96), 280);
+  const x = Math.min(Math.max(at.x, 14), CANVAS_WIDTH - width - 14);
+  const y = Math.min(Math.max(at.y, 22), CANVAS_HEIGHT - 18);
+  context.fillStyle = whatIfToneColor(tone, 0.88);
+  context.strokeStyle = "rgba(255, 255, 255, 0.76)";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.roundRect(x, y - 18, width, 24, 8);
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#fffaf0";
+  context.fillText(label.length > 32 ? `${label.slice(0, 31)}…` : label, x + 9, y - 2);
+  context.restore();
+}
+
+function whatIfToneColor(tone: MagicWhatIfPreviewMark["tone"], alpha: number): string {
+  switch (tone) {
+    case "risk":
+      return `rgba(177, 71, 41, ${alpha})`;
+    case "warning":
+      return `rgba(200, 137, 42, ${alpha})`;
+    default:
+      return `rgba(43, 103, 119, ${alpha})`;
+  }
+}
+
 function drawOperatorGhost(context: CanvasRenderingContext2D, recognition: OverlayRecognition, strokeStyle: string): void {
   const operator = recognition.operator ?? recognition.topCandidate?.operator;
   const template = OVERLAY_OPERATOR_TEMPLATES.find((item) => item.operator === operator);
@@ -2828,7 +4133,7 @@ interface TutorialFlowModel {
 }
 
 function getTutorialStepState(
-  step: (typeof TUTORIAL_DEMO_STEPS)[number],
+  step: TutorialDemoStep,
   baseSealResult: RecognitionResult | null,
   overlayRecords: OverlayStrokeRecord[],
   baseSession: StrokeSession,
@@ -2884,6 +4189,7 @@ function getTutorialStepState(
 }
 
 function buildTutorialFlowModel(args: {
+  tutorialSteps: readonly TutorialDemoStep[];
   stepIndex: number;
   completedStepIds: string[];
   tutorialFlowActive: boolean;
@@ -2895,7 +4201,8 @@ function buildTutorialFlowModel(args: {
   overlayRecords: OverlayStrokeRecord[];
   tutorialStore: TutorialProfileStore;
 }): TutorialFlowModel {
-  const currentStep = TUTORIAL_DEMO_STEPS[args.stepIndex] ?? TUTORIAL_DEMO_STEPS[0];
+  const tutorialSteps = args.tutorialSteps.length > 0 ? args.tutorialSteps : TUTORIAL_DEMO_STEPS;
+  const currentStep = tutorialSteps[args.stepIndex] ?? tutorialSteps[0];
   const stepState = getTutorialStepState(
     currentStep,
     args.baseSealResult,
@@ -2911,7 +4218,7 @@ function buildTutorialFlowModel(args: {
   );
   const targetId = currentStep.expectedFamily ?? currentStep.expectedOperator ?? null;
   const stepBadges = [
-    renderPromiseBadge(`${completedCount}/${TUTORIAL_DEMO_STEPS.length} 단계`, completedCount > 0),
+    renderPromiseBadge(`${completedCount}/${tutorialSteps.length} 단계`, completedCount > 0),
     renderPromiseBadge(stepState.label, stepState.ready),
     renderPromiseBadge(
       args.beforeSnapshot ? "연습 전 입력 고정됨" : "연습 전 입력 대기",
@@ -2947,7 +4254,7 @@ function buildTutorialFlowModel(args: {
       }
     </article>
   `;
-  const stepList = TUTORIAL_DEMO_STEPS.map((step, index) => {
+  const stepList = tutorialSteps.map((step, index) => {
     const completed = args.completedStepIds.includes(step.id);
     const selected = step.id === currentStep.id;
     const locked =
@@ -3195,6 +4502,7 @@ function buildPersonalizationDemoModel(
   demoView: DemoViewState
 ): PersonalizationDemoModel {
   const runtime = getTinyMlRuntimeStatus();
+  const policy = buildTutorialPersonalizationPolicyMetadata(tutorialStore);
   const tutorialSamples = tutorialStore.shapeProfile.tutorialSampleCount;
   const familySamples = tutorialStore.shapeProfile.familyTutorialSampleCount ?? 0;
   const operatorSamples = tutorialStore.shapeProfile.operatorTutorialSampleCount ?? 0;
@@ -3206,6 +4514,7 @@ function buildPersonalizationDemoModel(
   const stripBadges = [
     renderPromiseBadge(shadowReady ? "보조 판독 참고 계산" : "보조 판독 준비 중", shadowReady),
     renderPromiseBadge(`연습 입력 ${tutorialSamples}회`, tutorialSamples > 0),
+    renderPromiseBadge(policy.statusLabel, policy.canApply),
     renderPromiseBadge(personalizationStageLabel(stage), stage !== "none")
   ].join("");
   const effectRows = renderMetricNotes([
@@ -3237,11 +4546,13 @@ function buildPersonalizationDemoModel(
         runtime.operatorShadowAvailable ? "추가 효과 보조 판독 준비" : "추가 효과 보조 판독 없음",
         runtime.operatorShadowAvailable
       ),
+      renderPromiseBadge(policy.needsBackfill ? "카드 정보 보강 필요" : policy.statusLabel, policy.canApply),
       renderPromiseBadge("최종 판정은 그대로 유지", true)
     ].join(""),
     metricRows: renderSummaryRows([
       ["연습 입력 누적", `${tutorialSamples}회`],
       ["반영 단계", personalizationStageLabel(stage)],
+      ["개인화 안전 상태", policy.statusLabel],
       ["보조 판독 준비", shadowReady ? "연결됨" : "준비 중"]
     ]),
     compareTitle: "실제 판정 / 보조 판독 / 입력 습관 반영",
@@ -3321,6 +4632,12 @@ function renderPageSummaryBadges(
         renderPromiseBadge(`기본 ${baseLabel ? familyLabel(baseLabel) : "없음"}`, Boolean(baseLabel)),
         renderPromiseBadge(`추가 ${overlayLabel ? operatorLabel(overlayLabel) : "없음"}`, Boolean(overlayLabel))
       ].join("");
+    case "dashboard":
+      return [
+        renderPromiseBadge("만든 입력으로 검사", true),
+        renderPromiseBadge("여러 번 테스트", Boolean(baseResult.shadow)),
+        renderPromiseBadge("실제 판정 로직 유지", true)
+      ].join("");
     case "test":
     default:
       return [
@@ -3397,6 +4714,14 @@ function renderTutorialValidationSummary(store: TutorialProfileStore): string {
 }
 
 function renderTutorialValidationDetails(store: TutorialProfileStore): string {
+  const policy = buildTutorialPersonalizationPolicyMetadata(store);
+  const backfill = previewTutorialProfileCardBackfill(store);
+  const policyRows = [
+    `개인화 안전 상태: ${policy.statusLabel}`,
+    ...policy.reasonLabels.map((label) => `안전 확인: ${label}`),
+    `카드 메타데이터: ${backfill.userMessage}`,
+    ...backfill.blockingDetails.map((detail) => `보강 확인: ${detail}`)
+  ];
   const familyBiasRows = Object.entries(store.shapeProfile.familyThresholdBias ?? {}).map(
     ([family, bias]) => `${familyLabel(family)} 인식 기준 조정 ${Number(bias).toFixed(3)}`
   );
@@ -3411,13 +4736,177 @@ function renderTutorialValidationDetails(store: TutorialProfileStore): string {
       ([operator, reliability]) => `${operatorLabel(operator)} 내 손모양 신뢰도 ${Number(reliability).toFixed(2)}`
     )
   ];
-  const rows = [...familyBiasRows, ...operatorBiasRows, ...reliabilityRows].slice(0, 10);
+  const rows = [...policyRows, ...familyBiasRows, ...operatorBiasRows, ...reliabilityRows].slice(0, 10);
 
   if (rows.length === 0) {
     return renderMetricNotes(["아직 라벨별 인식 기준이나 내 손모양 신뢰도가 생성되지 않았습니다."]);
   }
 
   return renderMetricNotes(rows);
+}
+
+function renderDatacardShapePresetButtons(group: DatacardShapePresetGroup, activeId: DatacardShapeId): string {
+  return listDatacardShapePresets()
+    .filter((preset) => preset.group === group)
+    .map((preset) => {
+      const validation = validateDatacardShapePreset(preset);
+      return `
+        <button
+          type="button"
+          class="datacard-shape-preset ${preset.id === activeId ? "active" : ""}"
+          data-datacard-shape-id="${escapeDashboardHtml(preset.id)}"
+        >
+          <strong>${escapeDashboardHtml(preset.label)}</strong>
+          <span>${escapeDashboardHtml(preset.description)}</span>
+          <small>${validation.valid ? "정의 확인됨" : "정의 확인 필요"}</small>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function renderDatacardShapeDefinition(
+  preset: DatacardShapePreset,
+  validation: ReturnType<typeof validateDatacardShapePreset>
+): string {
+  return `
+    <div class="datacard-definition-row">
+      <span>정의 표현</span>
+      <code>${escapeDashboardHtml(preset.definition.expression)}</code>
+    </div>
+    <div class="datacard-definition-row">
+      <span>그리기 기준</span>
+      <strong>${escapeDashboardHtml(preset.definition.guide)}</strong>
+    </div>
+    <div class="datacard-definition-row">
+      <span>카드 상태</span>
+      <strong>${validation.valid ? "바로 테스트 가능" : validation.issues.map((issue) => issue.message).join(", ")}</strong>
+    </div>
+  `;
+}
+
+function renderDatacardShapeComparison(result: DatacardRecognitionResult): string {
+  const selected = result.selectedCandidate;
+  const beforeLabel = selected.captureCount > 0 ? "카드 기준" : "현재 기준";
+  const afterLabel = selected.captureCount > 0 ? "연습 반영" : "연습 대기";
+
+  return `
+    <div class="datacard-comparison-lane">
+      <span>${beforeLabel}</span>
+      <strong>${datacardPercent(selected.baselineScore)}</strong>
+      <small>예시 도형과 그리기 기준으로 비교</small>
+    </div>
+    <div class="datacard-comparison-lane">
+      <span>${afterLabel}</span>
+      <strong>${datacardPercent(selected.score)}</strong>
+      <small>${selected.captureCount > 0 ? "저장된 연습 입력을 함께 반영" : "입력을 저장하면 차이를 비교"}</small>
+    </div>
+  `;
+}
+
+function datacardStatusTone(status: RecognitionStatus): "recognized" | "ambiguous" | "incomplete" | "invalid" {
+  return status;
+}
+
+function datacardPercent(value: number): string {
+  return `${Math.max(0, Math.min(100, value * 100)).toFixed(0)}%`;
+}
+
+const DATACARD_PRESET_IDS = ["family:fire", "family:water", "operator:void_cut", "operator:martial_axis"] as const;
+
+function renderDatacardPresetButtons(): string {
+  const cards = listBuiltInMagicCards();
+
+  return DATACARD_PRESET_IDS.map((id) => {
+    const card = cards.find((item) => item.id === id);
+
+    if (!card) {
+      return "";
+    }
+
+    return `
+      <button type="button" class="datacard-preset" data-datacard-preset-id="${escapeDashboardHtml(id)}">
+        <strong>${escapeDashboardHtml(card.label)}</strong>
+        <span>${escapeDashboardHtml(card.tutorial.summary)}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+function buildDatacardPresetPatch(presetId: string): string {
+  const card = listBuiltInMagicCards().find((item) => item.id === presetId) ?? listBuiltInMagicCards()[0];
+  const tutorial = {
+    ...card.tutorial,
+    title: `${card.tutorial.title} preset`,
+    instruction: `${card.tutorial.instruction} preset 미리보기에서는 실제 판정 기준은 유지됩니다.`,
+    summary: `${card.tutorial.summary} 이 preset은 guide/tutorial/what-if 문구만 바꿉니다.`
+  };
+
+  return JSON.stringify({
+    cardSetId: "web-ui/preset-preview",
+    cards: [
+      {
+        ...card,
+        tutorial
+      }
+    ]
+  });
+}
+
+export interface DatacardAuthoringDisplay {
+  statusLabel: string;
+  statusTone: "recognized" | "ready" | "waiting" | "invalid";
+  summaryRows: Array<[string, string]>;
+  issueLines: string[];
+}
+
+export function buildDatacardAuthoringDisplay(result: MagicDatacardLoadResult | null): DatacardAuthoringDisplay {
+  if (!result) {
+    return {
+      statusLabel: "대기",
+      statusTone: "waiting",
+      summaryRows: [
+        ["적용 범위", "튜토리얼/what-if 미리보기"],
+        ["현재 카드", "내장 datacard"],
+        ["판정 영향", "없음"]
+      ],
+      issueLines: ["preset 미리보기를 선택하면 문구와 상상 비교 후보만 교체됩니다."]
+    };
+  }
+
+  if (result.ok && result.registry) {
+    const summary = result.registry.compatibility.coverage;
+    const warnings = result.issues.filter((issue) => issue.severity === "warning").map((issue) => issue.message);
+
+    return {
+      statusLabel: "미리보기 준비",
+      statusTone: "recognized",
+      summaryRows: [
+        ["카드 묶음", result.registry.cardSetId],
+        ["카드 수", `${summary.cardCount}장`],
+        ["기본/추가", `${summary.familyCount} / ${summary.operatorCount}`],
+        ["불러오기", result.loadMode === "patch" ? "패치 병합" : "전체 교체"]
+      ],
+      issueLines: [
+        result.registry.compatibility.userMessage,
+        "실제 인식 라벨과 보정 기준은 변경하지 않습니다.",
+        ...warnings
+      ]
+    };
+  }
+
+  return {
+    statusLabel: "검증 필요",
+    statusTone: "invalid",
+    summaryRows: [
+      ["불러오기", result.loadMode === "patch" ? "패치 병합" : "전체 교체"],
+      ["오류", `${result.issues.filter((issue) => issue.severity === "error").length}건`],
+      ["현재 카드", "내장 datacard 유지"]
+    ],
+    issueLines: result.issues.length > 0
+      ? result.issues.slice(0, 6).map((issue) => `${issue.path}: ${issue.message}`)
+      : [result.userMessage]
+  };
 }
 
 function renderPromiseBadge(text: string, positive: boolean): string {
@@ -3447,6 +4936,480 @@ function renderMetricNotes(lines: string[]): string {
       `
     )
     .join("");
+}
+
+function renderDashboardPresetButtons(activePresetId: string): string {
+  return DASHBOARD_SCENARIO_PRESETS.map((preset) => {
+    const active = preset.id === activePresetId;
+
+    return `
+      <button
+        type="button"
+        class="dashboard-preset ${active ? "active" : ""}"
+        data-dashboard-preset-id="${escapeDashboardHtml(preset.id)}"
+        aria-pressed="${active ? "true" : "false"}"
+      >
+        <strong>${escapeDashboardHtml(preset.label)}</strong>
+        <span>${escapeDashboardHtml(preset.description)}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+function renderDashboardComparisonLanes(comparison: DashboardComparisonSummary): string {
+  return comparison.lanes
+    .map(
+      (lane) => `
+        <section class="dashboard-comparison-lane">
+          <span>${escapeDashboardHtml(lane.label)}</span>
+          <strong>${lane.recognizedRate.toFixed(1)}%</strong>
+          <small>ambiguous ${lane.ambiguousRate.toFixed(1)}% · gap ${lane.averageScoreGap.toFixed(3)}</small>
+        </section>
+      `
+    )
+    .join("");
+}
+
+function renderDashboardComparisonTable(comparison: DashboardComparisonSummary): string {
+  return `
+    <div class="dashboard-comparison-metrics">
+      ${comparison.lanes
+        .map((lane) => {
+          const tokens = [
+            { label: "recognized", value: `${lane.recognizedRate.toFixed(1)}%`, tone: "recognized" },
+            { label: "ambiguous", value: `${lane.ambiguousRate.toFixed(1)}%`, tone: "ambiguous" },
+            { label: "incomplete", value: `${lane.incompleteRate.toFixed(1)}%`, tone: "incomplete" },
+            { label: "invalid", value: `${lane.invalidRate.toFixed(1)}%`, tone: "invalid" },
+            { label: "score gap", value: lane.averageScoreGap.toFixed(3), tone: "neutral" },
+            { label: "tutorial delta", value: String(lane.personalizedChangedCount), tone: "neutral" }
+          ];
+
+          return `
+            <section class="dashboard-comparison-metric-card">
+              <div class="dashboard-comparison-metric-head">
+                <span>${escapeDashboardHtml(lane.label)}</span>
+                <strong>${lane.recognizedRate.toFixed(1)}%</strong>
+              </div>
+              <div class="dashboard-comparison-token-grid">
+                ${tokens
+                  .map(
+                    (token) => `
+                      <span class="dashboard-comparison-token tone-${token.tone}">
+                        <small>${escapeDashboardHtml(token.label)}</small>
+                        <strong>${escapeDashboardHtml(token.value)}</strong>
+                      </span>
+                    `
+                  )
+                  .join("")}
+              </div>
+            </section>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderDashboardStrokeSvg(session: StrokeSession): string {
+  const points = session.strokes
+    .flatMap((stroke) => stroke.points)
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  if (points.length === 0) {
+    return `<div class="empty-state">아직 그릴 선 입력이 없습니다.</div>`;
+  }
+
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const width = 360;
+  const height = 240;
+  const padding = 18;
+  const boundsWidth = Math.max(maxX - minX, 1);
+  const boundsHeight = Math.max(maxY - minY, 1);
+  const scale = Math.min((width - padding * 2) / boundsWidth, (height - padding * 2) / boundsHeight);
+  const offsetX = (width - boundsWidth * scale) / 2;
+  const offsetY = (height - boundsHeight * scale) / 2;
+  const project = (point: { x: number; y: number }): string => {
+    const x = offsetX + (point.x - minX) * scale;
+    const y = offsetY + (point.y - minY) * scale;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  };
+
+  const polylines = session.strokes
+    .filter((stroke) => stroke.points.length > 0)
+    .map((stroke, index) => {
+      const fadeIndex = Math.min(index, 7);
+      return `<polyline class="dashboard-stroke-line dashboard-stroke-fade-${fadeIndex}" points="${stroke.points.map(project).join(" ")}" />`;
+    })
+    .join("");
+
+  return `
+    <svg class="dashboard-stroke-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="만든 선 입력 미리보기">
+      <rect class="dashboard-stroke-paper" x="1" y="1" width="${width - 2}" height="${height - 2}" rx="16" />
+      <path class="dashboard-stroke-guide" d="M${width / 2} ${padding} V${height - padding} M${padding} ${height / 2} H${width - padding}" />
+      ${polylines}
+    </svg>
+  `;
+}
+
+function renderDashboardBars(items: DashboardPlotModel["statusBars"]): string {
+  if (items.length === 0) {
+    return renderEmptyDashboardPlot("분포 대기");
+  }
+
+  const qualityIds = new Set(["closure", "smoothness", "stability", "rotationBias"]);
+  const isQuality = items.every((item) => qualityIds.has(item.id));
+
+  return items
+    .map((item) => {
+      const ratio = Math.max(0, Math.min(1, item.ratio));
+      const valueLabel = isQuality ? `${(item.value * 100).toFixed(0)}점` : `${item.value}회`;
+      return `
+        <div class="dashboard-bar-row">
+          <div class="dashboard-bar-head">
+            <span>${escapeDashboardHtml(item.label)}</span>
+            <strong>${valueLabel}</strong>
+          </div>
+          <div class="dashboard-bar-track" aria-hidden="true">
+            <span class="${percentClass(ratio)}"></span>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderDashboardHeatmap(model: DashboardPlotModel): string {
+  if (model.heatmap.length === 0) {
+    return renderEmptyDashboardPlot("헷갈림 지도 대기");
+  }
+
+  const cells = model.heatmap.slice(0, 12).map((cell) => {
+    const intensity = Math.max(0, Math.min(10, Math.round(cell.intensity * 10)));
+    return `
+      <div class="dashboard-heat-cell dashboard-heat-${intensity}">
+        <span>${escapeDashboardHtml(cell.expected)} → ${escapeDashboardHtml(cell.actual)}</span>
+        <strong>${cell.count}회</strong>
+      </div>
+    `;
+  });
+  const familyBars = model.familyBars.slice(0, 5).map(
+    (item) => `
+      <span class="dashboard-family-pill">
+        ${escapeDashboardHtml(item.label)} ${item.value}회
+      </span>
+    `
+  );
+
+  return `
+    <div class="dashboard-plot-heading">
+      <span>기대한 모양과 실제로 읽힌 모양</span>
+    </div>
+    <div class="dashboard-heat-grid">${cells.join("")}</div>
+    <div class="dashboard-family-row">${familyBars.join("")}</div>
+  `;
+}
+
+function renderDashboardScatter(model: DashboardPlotModel): string {
+  if (model.scorePoints.length === 0) {
+    return renderEmptyDashboardPlot("점 분포 대기");
+  }
+
+  const width = 360;
+  const height = 190;
+  const padding = 24;
+  const maxVisiblePoints = 420;
+  const stride = Math.max(1, Math.ceil(model.scorePoints.length / maxVisiblePoints));
+  const visiblePoints = model.scorePoints.filter((_, index) => index % stride === 0).slice(0, maxVisiblePoints);
+  const hiddenCount = Math.max(0, model.scorePoints.length - visiblePoints.length);
+  const dots = visiblePoints.map((point) => {
+    const x = padding + Math.max(0, Math.min(1, point.x)) * (width - padding * 2);
+    const y = padding + (1 - Math.max(0, Math.min(1, point.y))) * (height - padding * 2);
+    return `
+      <circle class="dashboard-dot status-${point.status}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2">
+        <title>${escapeDashboardHtml(point.label)}</title>
+      </circle>
+    `;
+  });
+
+  return `
+    <div class="dashboard-plot-heading">
+      <span>가로: 닫힘 · 세로: 후보 점수</span>
+      <strong>${model.scorePoints.length}점</strong>
+    </div>
+    <svg class="dashboard-scatter-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="닫힘과 후보 점수의 점 분포">
+      <path class="dashboard-axis" d="M${padding} ${height - padding} H${width - padding} M${padding} ${padding} V${height - padding}" />
+      <text x="${padding}" y="${height - 6}">닫힘 낮음</text>
+      <text x="${width - padding - 54}" y="${height - 6}">닫힘 높음</text>
+      <text x="${padding + 4}" y="${padding - 8}">점수 높음</text>
+      ${dots.join("")}
+    </svg>
+    ${
+      hiddenCount > 0
+        ? `<p class="dashboard-plot-note">plot은 ${visiblePoints.length}개 대표 샘플로 표시하고, 전체 ${model.scorePoints.length}개 계산 결과는 위 분포 카드에 반영했습니다.</p>`
+        : ""
+    }
+  `;
+}
+
+function renderDashboardFamilyDistribution(summary: DashboardFamilyMatrixSummary): string {
+  const cards = summary.familySummaries
+    .map((familySummary) => {
+      const statusItems = [
+        { label: "인정", status: "recognized" as RecognitionStatus, rate: familySummary.recognizedRate },
+        { label: "헷갈림", status: "ambiguous" as RecognitionStatus, rate: familySummary.ambiguousRate },
+        { label: "미완성", status: "incomplete" as RecognitionStatus, rate: familySummary.incompleteRate },
+        { label: "미인식", status: "invalid" as RecognitionStatus, rate: familySummary.invalidRate }
+      ];
+      const statusSegments = statusItems
+        .filter((item) => item.rate > 0)
+        .map(
+          (item) => `
+            <span
+              class="dashboard-stack-segment status-${dashboardStatusTone(item.status)}"
+              ${dashboardWidthStyle(item.rate)}
+              title="${escapeDashboardHtml(`${item.label} ${item.rate.toFixed(1)}%`)}"
+            ></span>
+          `
+        )
+        .join("");
+      const statusLegend = statusItems
+        .map(
+          (item) => `
+            <span class="dashboard-status-token status-${dashboardStatusTone(item.status)}">
+              ${escapeDashboardHtml(item.label)} ${item.rate.toFixed(1)}%
+            </span>
+          `
+        )
+        .join("");
+      const topActual = familySummary.topActualFamilies
+        .map(
+          (entry) => `
+            <span class="dashboard-family-pill">
+              ${escapeDashboardHtml(dashboardActualFamilyLabel(entry.family))} ${entry.rate.toFixed(1)}%
+            </span>
+          `
+        )
+        .join("");
+
+      return `
+        <section class="dashboard-family-card">
+          <div class="dashboard-family-card-head">
+            <span>${escapeDashboardHtml(dashboardFamilyName(familySummary.family))}</span>
+            <strong>${familySummary.total}회</strong>
+          </div>
+          <div class="dashboard-stack" aria-label="${escapeDashboardHtml(dashboardFamilyName(familySummary.family))} 상태 분포">
+            ${statusSegments || `<span class="dashboard-stack-segment status-invalid" ${dashboardWidthStyle(100)}></span>`}
+          </div>
+          <div class="dashboard-status-token-row">${statusLegend}</div>
+          <div class="dashboard-mini-metrics">
+            <span><small>평균 점수</small><strong>${familySummary.averageTopScore.toFixed(3)}</strong></span>
+            <span><small>점수 차이</small><strong>${familySummary.averageScoreGap.toFixed(3)}</strong></span>
+          </div>
+          <div class="dashboard-family-actuals">
+            ${topActual || `<span class="dashboard-family-pill">판정 없음</span>`}
+          </div>
+        </section>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="dashboard-plot-heading">
+      <span>모양별 생성 분포 plot</span>
+      <strong>각 ${summary.iterationsPerFamily}회</strong>
+    </div>
+    <div class="dashboard-family-plot">${cards}</div>
+  `;
+}
+
+function renderDashboardOverlapTable(summary: DashboardFamilyMatrixSummary): string {
+  if (summary.overlapCells.length === 0 && summary.overlapSettings.length === 0) {
+    return renderEmptyDashboardPlot("현재 설정에서는 두드러진 겹침이 없습니다.");
+  }
+
+  const overlapCards = summary.overlapCells
+    .slice(0, 8)
+    .map(
+      (cell) => `
+        <section class="dashboard-overlap-card">
+          <div class="dashboard-overlap-card-head">
+            <span>${escapeDashboardHtml(dashboardFamilyName(cell.expectedFamily))} → ${escapeDashboardHtml(dashboardActualFamilyLabel(cell.actualFamily))}</span>
+            <span class="status-chip status-${dashboardStatusTone(cell.status)}">${escapeDashboardHtml(dashboardStatusLabel(cell.status))}</span>
+          </div>
+          <div class="dashboard-overlap-rate-row">
+            <strong>${cell.count}건</strong>
+            <span>${cell.rate.toFixed(1)}%</span>
+          </div>
+          <div class="dashboard-overlap-track" aria-hidden="true">
+            <span class="status-${dashboardStatusTone(cell.status)}" ${dashboardWidthStyle(cell.rate)}></span>
+          </div>
+          <div class="dashboard-mini-metrics">
+            <span><small>평균 점수</small><strong>${cell.averageTopScore.toFixed(3)}</strong></span>
+            <span><small>점수 차이</small><strong>${cell.averageScoreGap.toFixed(3)}</strong></span>
+          </div>
+          <p>${escapeDashboardHtml(cell.settingHint)}</p>
+        </section>
+      `
+    )
+    .join("");
+  const settingChips = summary.overlapSettings
+    .slice(0, 6)
+    .map((setting) => {
+      const families = setting.expectedFamilies.map((family) => dashboardFamilyName(family)).join(", ");
+
+      return `
+        <span class="dashboard-setting-chip">
+          <strong>${escapeDashboardHtml(setting.label)}</strong>
+          <small>${setting.count}건 · ${escapeDashboardHtml(families)} · ${escapeDashboardHtml(setting.settingHint)}</small>
+        </span>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="dashboard-plot-heading">
+      <span>겹침 특성 plot</span>
+      <strong>${summary.overlapCells.reduce((sum, cell) => sum + cell.count, 0)}건</strong>
+    </div>
+    <div class="dashboard-overlap-plot">${overlapCards || `<div class="empty-state dashboard-empty">겹친 입력이 없습니다.</div>`}</div>
+    <div class="dashboard-overlap-notes">
+      ${settingChips || `<span class="dashboard-setting-chip"><small>공통으로 겹치는 설정 묶음은 아직 없습니다.</small></span>`}
+    </div>
+  `;
+}
+
+function renderDashboardBatchLog(log: DashboardFamilyMatrixSummary[], activeId?: string): string {
+  if (log.length === 0) {
+    return renderEmptyDashboardPlot("모양별 n회 생성 로그가 아직 없습니다.");
+  }
+
+  const items = log
+    .map((summary, index) => {
+      const activeClass = summary.id === activeId ? " is-active" : "";
+      const overlapCount = summary.overlapCells.reduce((sum, cell) => sum + cell.count, 0);
+
+      return `
+        <button type="button" class="dashboard-log-item${activeClass}" data-dashboard-log-index="${index}">
+          <span>${escapeDashboardHtml(formatDashboardLogTime(summary.createdAt))}</span>
+          <strong>${summary.familySummaries.length}개 모양 · 각 ${summary.iterationsPerFamily}회</strong>
+          <small>겹침/보류 ${overlapCount}건 · seed ${summary.seedStart}</small>
+        </button>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="dashboard-plot-heading">
+      <span>누적 실행 로그</span>
+      <strong>${log.length}개</strong>
+    </div>
+    <div class="dashboard-log-list">${items}</div>
+  `;
+}
+
+function dashboardActualFamilyLabel(family: GlyphFamily | "none"): string {
+  return family === "none" ? "판정 없음" : dashboardFamilyName(family);
+}
+
+function formatDashboardLogTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function dashboardWidthStyle(value: number): string {
+  const width = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+  return `style="width: ${width.toFixed(1)}%"`;
+}
+
+function renderEmptyDashboardPlot(label: string): string {
+  return `<div class="empty-state dashboard-empty">${escapeDashboardHtml(label)}</div>`;
+}
+
+function buildDashboardReport(
+  sample: DashboardBatchSample,
+  summary: DashboardBatchSummary | null,
+  fixture: DashboardFixtureParseResult | null,
+  matrix: DashboardFamilyMatrixSummary | null = null
+): Record<string, unknown> {
+  return {
+    generatedAt: new Date().toISOString(),
+    preview: {
+      expectedFamily: dashboardFamilyName(sample.expectedFamily),
+      actualFamily: sample.actualFamily === "none" ? "아직 없음" : dashboardFamilyName(sample.actualFamily),
+      status: dashboardStatusLabel(sample.status),
+      topScore: Number(sample.topScore.toFixed(4)),
+      scoreGap: Number(sample.scoreGap.toFixed(4)),
+      quality: {
+        closure: Number(sample.closure.toFixed(4)),
+        smoothness: Number(sample.smoothness.toFixed(4)),
+        stability: Number(sample.stability.toFixed(4)),
+        rotationBias: Number(sample.rotationBias.toFixed(4))
+      },
+      shadowChanged: sample.shadowChanged,
+      personalizedChanged: sample.personalizedChanged
+    },
+    batch: summary
+      ? {
+          total: summary.total,
+          recipeLabel: summary.recipeLabel,
+          statusCounts: summary.statusCounts,
+          qualityAverages: summary.qualityAverages,
+          shadowChangedCount: summary.shadowChangedCount,
+          personalizedChangedCount: summary.personalizedChangedCount,
+          confusionRows: summary.confusionRows.slice(0, 12)
+        }
+      : null,
+    familyMatrix: matrix
+      ? {
+          id: matrix.id,
+          createdAt: new Date(matrix.createdAt).toISOString(),
+          iterationsPerFamily: matrix.iterationsPerFamily,
+          total: matrix.samples.length,
+          statusCounts: matrix.statusCounts,
+          familySummaries: matrix.familySummaries.map((familySummary) => ({
+            family: familySummary.family,
+            total: familySummary.total,
+            recognizedRate: familySummary.recognizedRate,
+            ambiguousRate: familySummary.ambiguousRate,
+            incompleteRate: familySummary.incompleteRate,
+            invalidRate: familySummary.invalidRate,
+            averageTopScore: familySummary.averageTopScore,
+            averageScoreGap: familySummary.averageScoreGap,
+            topActualFamilies: familySummary.topActualFamilies
+          })),
+          overlapCells: matrix.overlapCells.slice(0, 12),
+          overlapSettings: matrix.overlapSettings.slice(0, 8)
+        }
+      : null,
+    fixture: fixture
+      ? {
+          ok: fixture.ok,
+          kind: fixture.kind,
+          message: fixture.userMessage
+        }
+      : null,
+    guardrails: ["survey 경로 미사용", "실제 판정 로직 변경 없음", "localStorage 자동 변경 없음"]
+  };
+}
+
+function escapeDashboardHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function percentClass(value: number): string {
+  const bucket = Math.max(0, Math.min(100, Math.round(value * 20) * 5));
+  return `width-${bucket}`;
 }
 
 function renderPersonalizationCompare(baseResult: RecognitionResult, overlayRecognition: OverlayRecognition | null): string {
@@ -3582,6 +5545,95 @@ function renderPracticeDetails(store: TutorialProfileStore): string {
     .join("");
 }
 
+export interface MagicWhatIfGuideCard {
+  id: string;
+  title: string;
+  dimensionLabel: string;
+  riskLabel: string;
+  summary: string;
+  nonMutating: true;
+}
+
+export function buildMagicWhatIfGuideModel(
+  limit = 4,
+  scenarios: readonly MagicWhatIfScenario[] = buildMagicWhatIfScenarios()
+): MagicWhatIfGuideCard[] {
+  const prioritizedScenarios = prioritizeWhatIfScenarios(scenarios).slice(0, limit);
+
+  return prioritizedScenarios.map((scenario) => ({
+    id: scenario.id,
+    title: scenario.title,
+    dimensionLabel: whatIfDimensionLabel(scenario.dimension),
+    riskLabel: whatIfRiskLabel(scenario.impact.riskLevel),
+    summary: summarizeWhatIfImpact(scenario),
+    nonMutating: true
+  }));
+}
+
+function renderMagicWhatIfGuide(
+  activeScenarioId: string | null = null,
+  overlayActive = false,
+  scenarios: readonly MagicWhatIfScenario[] = buildMagicWhatIfScenarios()
+): string {
+  const cards = buildMagicWhatIfGuideModel(4, scenarios);
+
+  if (cards.length === 0) {
+    return renderMetricNotes(["아직 상상 비교 카드가 없습니다. 현재 판정은 그대로 유지됩니다."]);
+  }
+
+  return cards
+    .map((card) => {
+      const active = overlayActive && activeScenarioId === card.id;
+      return `
+        <button class="metric-row what-if-row ${active ? "active" : ""}" type="button" data-what-if-scenario-id="${card.id}">
+          <span>${card.dimensionLabel} · ${card.riskLabel}<br /><strong>${card.title}</strong><br />${card.summary}</span>
+          <strong>${active ? "캔버스 미리보기 켜짐" : "미리보기"}</strong>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function prioritizeWhatIfScenarios(scenarios: readonly MagicWhatIfScenario[]): MagicWhatIfScenario[] {
+  const preferredIds = [
+    "relation:martial_axis:requires-void_cut",
+    "structure:fire:shape-mutation",
+    "placement:void_cut:off-anchor-risk",
+    "placement:soul_dot:underscale-risk"
+  ];
+  const byId = new Map(scenarios.map((scenario) => [scenario.id, scenario]));
+  const preferred = preferredIds
+    .map((id) => byId.get(id))
+    .filter((scenario): scenario is MagicWhatIfScenario => Boolean(scenario));
+  const remaining = scenarios.filter((scenario) => !preferredIds.includes(scenario.id));
+
+  return [...preferred, ...remaining];
+}
+
+function whatIfDimensionLabel(dimension: MagicWhatIfScenario["dimension"]): string {
+  switch (dimension) {
+    case "structure":
+      return "구조";
+    case "relation":
+      return "관계";
+    case "placement":
+      return "배치";
+    default:
+      return "상상 비교";
+  }
+}
+
+function whatIfRiskLabel(risk: MagicWhatIfScenario["impact"]["riskLevel"]): string {
+  switch (risk) {
+    case "high":
+      return "흔들림 큼";
+    case "medium":
+      return "주의";
+    default:
+      return "안정";
+  }
+}
+
 function renderHciPrinciples(): string {
   return [
     "연습 입력 전/후를 같은 화면에서 비교합니다.",
@@ -3692,7 +5744,7 @@ function renderQuality(quality: QualityVector): string {
           <strong>${(clamped * 100).toFixed(0)}</strong>
         </div>
         <div class="quality-bar">
-          <span style="width:${clamped * 100}%"></span>
+          <span class="${percentClass(clamped)}"></span>
         </div>
       </div>
     `;
@@ -3864,7 +5916,7 @@ function renderOutcomeMetricRows(
             </div>
           </div>
           <div class="quality-bar outcome-bar">
-            <span style="width:${value * 100}%"></span>
+            <span class="${percentClass(value)}"></span>
           </div>
         </div>
       `;

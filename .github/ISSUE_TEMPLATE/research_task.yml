@@ -1,0 +1,33 @@
+name: Research / task
+description: Track investigation, validation, dataset, or project work.
+title: "[Task]: "
+labels:
+  - task
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should be learned or completed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Relevant docs, prior decisions, experiments, or constraints.
+
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: Deliverables
+      description: What artifact, decision, PR, or note should come out of this?
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: How should the result be checked?

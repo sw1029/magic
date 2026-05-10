@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible problem in the app, recognizer, docs, or scripts.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps, commands, or drawing flow that triggers the issue.
+      placeholder: |
+        1. Run ...
+        2. Open ...
+        3. Draw ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: Paste relevant command output, screenshots, or browser console errors.

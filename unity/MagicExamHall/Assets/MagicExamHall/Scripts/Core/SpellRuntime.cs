@@ -158,12 +158,12 @@ namespace MagicExamHall
                 return new OverlayRecognitionResult
                 {
                     status = top.score >= 0.52f ? RecognitionStatus.Incomplete : RecognitionStatus.Invalid,
-                    recognizedOperator = null,
+                    recognizedOperator = top.op,
                     score = top.score,
                     shapeConfidence = top.shapeConfidence,
                     scaleRatio = features.scaleRatio,
                     anchorZone = top.anchorZone,
-                    feedbackReason = "martial_axis는 void_cut 이후에만 축으로 고정됩니다."
+                    feedbackReason = "축 장식은 먼저 절단(void_cut)이 붙은 seal에서만 고정됩니다. 먼저 대각선 절단을 붙인 뒤 축을 그리세요."
                 };
             }
 
@@ -178,7 +178,7 @@ namespace MagicExamHall
                     shapeConfidence = top.shapeConfidence,
                     scaleRatio = features.scaleRatio,
                     anchorZone = top.anchorZone,
-                    feedbackReason = $"{SpellLabels.English(top.op)} operator가 seal에 붙었습니다."
+                    feedbackReason = $"{SpellLabels.Korean(top.op)} 장식이 seal에 붙었습니다."
                 };
             }
 
@@ -191,7 +191,7 @@ namespace MagicExamHall
                     shapeConfidence = top.shapeConfidence,
                     scaleRatio = features.scaleRatio,
                     anchorZone = top.anchorZone,
-                    feedbackReason = "overlay 후보가 겹쳐 seal stack에 추가하지 않았습니다."
+                    feedbackReason = "장식 후보가 겹쳐 아직 seal에 붙이지 않았습니다. 모양을 더 단순하게 다시 그려 보세요."
                 };
             }
 
@@ -202,7 +202,7 @@ namespace MagicExamHall
                 shapeConfidence = top.shapeConfidence,
                 scaleRatio = features.scaleRatio,
                 anchorZone = top.anchorZone,
-                feedbackReason = "overlay 기준형과 충분히 가깝지 않습니다."
+                feedbackReason = "장식의 모양, 위치, 크기가 seal과 충분히 맞지 않았습니다."
             };
         }
 

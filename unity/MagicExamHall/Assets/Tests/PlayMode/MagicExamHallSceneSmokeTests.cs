@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using MagicExamHall;
 using NUnit.Framework;
@@ -68,6 +69,54 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.VoidCut), Is.True);
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.MartialAxis), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator FailedBaseCastsEscalateMagicNoteHints()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastRawBaseForTests(new List<List<StrokeSample>>(), Vector2.zero);
+            yield return null;
+            Assert.That(controller.CurrentAssistLevel, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("짧은 힌트"));
+
+            controller.CastRawBaseForTests(new List<List<StrokeSample>>(), Vector2.zero);
+            yield return null;
+            Assert.That(controller.CurrentAssistLevel, Is.EqualTo(2));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("체크리스트"));
+
+            controller.CastRawBaseForTests(new List<List<StrokeSample>>(), Vector2.zero);
+            yield return null;
+            Assert.That(controller.CurrentAssistLevel, Is.EqualTo(3));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("강한 보조"));
+            Assert.That(controller.LastHintText, Does.Contain("바람"));
+        }
+
+        [UnityTest]
+        public IEnumerator SuccessAfterBaseHintKeepsAssistedFeedback()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastRawBaseForTests(new List<List<StrokeSample>>(), Vector2.zero);
+            controller.CastRawBaseForTests(new List<List<StrokeSample>>(), Vector2.zero);
+            var result = controller.CastSyntheticBaseForTests(SpellFamily.Wind, new Vector2(5.5f, 2.6f));
+            yield return null;
+
+            Assert.That(result.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(controller.CurrentAssistLevel, Is.EqualTo(2));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("이전 힌트"));
+            Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
         }
 
         [UnityTest]

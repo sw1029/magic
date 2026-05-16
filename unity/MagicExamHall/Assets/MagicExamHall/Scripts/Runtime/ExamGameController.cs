@@ -20,6 +20,7 @@ namespace MagicExamHall
         private readonly List<GameObject> floorObjects = new();
         private readonly List<WorldStateGoal> activeGoals = new();
         private readonly List<HazardZone> activeHazards = new();
+        private readonly Dictionary<SpellFamily, int> baseFailureCounts = new();
 
         private ExamLogger logger = null!;
         private WorldDrawingController worldDrawing = null!;
@@ -52,6 +53,7 @@ namespace MagicExamHall
         public bool IsResultPanelVisible => false;
         public int CurrentAssistLevel { get; private set; }
         public string LastHintText { get; private set; } = "";
+        public string LastMagicNoteText => magicNote?.Text ?? "";
         public string OutputDirectory => logger?.OutputDirectory ?? "";
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
 
@@ -84,6 +86,11 @@ namespace MagicExamHall
         {
             var strokes = Offset(GestureRecognizer.CreateCanonicalSamples(family, 1.6f, 0.03f), worldCenter, 0.8f);
             return ProcessSpellGroup(strokes, worldCenter, strokes.Count).baseResult;
+        }
+
+        public BaseRecognitionResult CastRawBaseForTests(List<List<StrokeSample>> strokes, Vector2 worldCenter)
+        {
+            return ProcessBase(strokes, worldCenter, strokes.Count).baseResult;
         }
 
         public OverlayRecognitionResult CastSyntheticOverlayForTests(OverlayOperator op, Vector2 worldCenter)
@@ -188,8 +195,8 @@ namespace MagicExamHall
             hudCopy = CreateText("HUD Copy", hudPanel, "", 15, FontStyle.Normal, new Vector2(16, -46), new Vector2(520, 60), Anchor.TopLeft);
             floorProgress = CreateText("Floor Progress", hudPanel, "", 15, FontStyle.Bold, new Vector2(16, 12), new Vector2(520, 24), Anchor.BottomLeft);
 
-            notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(560, 72), Anchor.BottomLeft, new Color(0.04f, 0.055f, 0.075f, 0.84f));
-            noteText = CreateText("Note Text", notePanel, "", 15, FontStyle.Normal, new Vector2(14, -12), new Vector2(530, 48), Anchor.TopLeft);
+            notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(560, 112), Anchor.BottomLeft, new Color(0.04f, 0.055f, 0.075f, 0.84f));
+            noteText = CreateText("Note Text", notePanel, "", 14, FontStyle.Normal, new Vector2(14, -12), new Vector2(530, 88), Anchor.TopLeft);
 
             reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(760, 520), Anchor.Center, new Color(0.035f, 0.045f, 0.065f, 0.96f));
             reportText = CreateText("Report Text", reportPanel, "", 17, FontStyle.Normal, new Vector2(28, -28), new Vector2(704, 464), Anchor.TopLeft);
@@ -265,24 +272,32 @@ namespace MagicExamHall
             var baseResult = SpellRuntime.RecognizeBase(strokes);
             baseResult.center = center;
             baseResult.bufferStrokeCount = strokeCount;
+            var feedbackFamily = baseResult.spell.recognizedFamily ?? baseResult.spell.targetFamily;
+            var priorFailures = GetBaseFailureCount(feedbackFamily);
             if (baseResult.spell.status != RecognitionStatus.Recognized || !baseResult.spell.recognizedFamily.HasValue)
             {
-                CurrentAssistLevel = 1;
-                LastHintText = baseResult.spell.nextHint;
-                magicNote.Show(baseResult.spell.feedbackReason);
+                var hintState = HintAssistance.ForAttempt(feedbackFamily, priorFailures, false, baseResult.spell);
+                baseFailureCounts[feedbackFamily] = priorFailures + 1;
+                CurrentAssistLevel = hintState.AssistLevelNumber;
+                LastHintText = hintState.body;
+                magicNote.Show(BuildBaseFailureNote(baseResult.spell, hintState));
                 pulses.Add(new ParticlePulse(center, new Color(0.75f, 0.75f, 0.82f), weak: true));
-                LogBaseAttempt(baseResult, null, "failed");
+                LogBaseAttempt(baseResult, null, "failed", hintState);
                 return new ProcessedSpell { baseResult = baseResult };
             }
 
             var seal = SpellRuntime.CreateSeal(baseResult, Time.time);
+            var successHintState = HintAssistance.ForAttempt(seal.baseFamily, priorFailures, true, baseResult.spell);
+            baseFailureCounts[seal.baseFamily] = 0;
+            CurrentAssistLevel = successHintState.AssistLevelNumber;
+            LastHintText = successHintState.assisted ? successHintState.body : "";
             var view = CreateSealView(seal);
             seals.Add(view);
             endingReport.RecordBase(seal.baseFamily, seal.quality, success: true);
             var effect = ApplyBaseToGoals(seal.baseFamily, center);
-            magicNote.Show(effect.note);
+            magicNote.Show(BuildBaseSuccessNote(seal, effect, successHintState));
             pulses.Add(new ParticlePulse(center, FamilyColor(seal.baseFamily)));
-            LogBaseAttempt(baseResult, seal, effect.worldEffect);
+            LogBaseAttempt(baseResult, seal, effect.worldEffect, successHintState);
             EvaluateFloorCompletion();
             return new ProcessedSpell { baseResult = baseResult };
         }
@@ -292,7 +307,9 @@ namespace MagicExamHall
             var result = OverlayRecognizer.Recognize(strokes, sealView.seal);
             if (!result.success)
             {
-                magicNote.Show(result.feedbackReason);
+                CurrentAssistLevel = 1;
+                LastHintText = OverlayActionHint(result, sealView.seal);
+                magicNote.Show(BuildOverlayFailureNote(result, sealView.seal));
                 pulses.Add(new ParticlePulse(center, new Color(0.75f, 0.75f, 0.82f), weak: true));
                 LogOverlayAttempt(result, sealView.seal, center, strokeCount, "failed");
                 return new ProcessedSpell { overlayResult = result };
@@ -301,10 +318,14 @@ namespace MagicExamHall
             var op = result.recognizedOperator!.Value;
             if (sealView.seal.overlayStack.Contains(op))
             {
+                CurrentAssistLevel = 1;
+                LastHintText = "같은 장식 대신 아직 비어 있는 다른 장식을 seal 위에 그려 보세요.";
                 magicNote.Show($"{SpellLabels.Korean(op)} 장식은 이미 이 seal에 붙어 있습니다.");
             }
             else if (sealView.seal.overlayStack.Count >= 3)
             {
+                CurrentAssistLevel = 1;
+                LastHintText = "새 base seal을 만든 뒤 남은 장식을 붙여 보세요.";
                 magicNote.Show("하나의 seal에는 overlay를 3개까지만 안정적으로 붙일 수 있습니다.");
             }
             else
@@ -314,7 +335,9 @@ namespace MagicExamHall
                 sealView.AddOverlayMark(op);
                 endingReport.RecordOverlay(op);
                 var effect = ApplyOverlayToGoals(sealView.seal, op, center);
-                magicNote.Show(effect.note);
+                CurrentAssistLevel = 0;
+                LastHintText = "";
+                magicNote.Show(BuildOverlaySuccessNote(sealView.seal, op, effect));
                 LogOverlayAttempt(result, sealView.seal, center, strokeCount, effect.worldEffect);
                 EvaluateFloorCompletion();
             }
@@ -357,6 +380,71 @@ namespace MagicExamHall
             }
 
             return new GoalEffect($"{seal.Label}: overlay stack이 빛났습니다.", "overlay_stack");
+        }
+
+        private int GetBaseFailureCount(SpellFamily family)
+        {
+            return baseFailureCounts.TryGetValue(family, out var count) ? count : 0;
+        }
+
+        private static string BuildBaseFailureNote(SpellResult result, HintState hintState)
+        {
+            return
+                $"노트: {SpellLabels.Korean(hintState.family)} 문양이 아직 안정되지 않았습니다.\n" +
+                $"{result.feedbackReason}\n" +
+                $"{hintState.title}: {hintState.body}";
+        }
+
+        private static string BuildBaseSuccessNote(CompiledSeal seal, GoalEffect effect, HintState hintState)
+        {
+            var assisted = hintState.assisted ? " 이전 힌트가 이번 시전에 도움이 되었습니다." : "";
+            return $"{SpellLabels.Korean(seal.baseFamily)} seal 성공.{assisted}\n{effect.note}";
+        }
+
+        private static string BuildOverlayFailureNote(OverlayRecognitionResult result, CompiledSeal seal)
+        {
+            return
+                "노트: 장식이 seal에 안정적으로 붙지 않았습니다.\n" +
+                $"{result.feedbackReason}\n" +
+                $"다음: {OverlayActionHint(result, seal)}";
+        }
+
+        private static string BuildOverlaySuccessNote(CompiledSeal seal, OverlayOperator op, GoalEffect effect)
+        {
+            return $"{SpellLabels.Korean(op)} 장식 성공. {seal.Label}\n{effect.note}";
+        }
+
+        private static string OverlayActionHint(OverlayRecognitionResult result, CompiledSeal seal)
+        {
+            if (result.recognizedOperator == OverlayOperator.MartialAxis && !seal.overlayStack.Contains(OverlayOperator.VoidCut))
+            {
+                return "먼저 같은 seal에 대각선 절단(void_cut)을 붙인 뒤, 중심을 가르는 축을 다시 그리세요.";
+            }
+
+            if (result.scaleRatio > 0f && result.scaleRatio < 0.10f)
+            {
+                return "장식이 너무 작습니다. seal 중심을 기준으로 조금 더 크게 그려 보세요.";
+            }
+
+            if (result.scaleRatio > 0.64f)
+            {
+                return "장식이 너무 큽니다. seal 안쪽에 들어오도록 작게 줄여 보세요.";
+            }
+
+            return AnchorHint(result.anchorZone);
+        }
+
+        private static string AnchorHint(string anchorZone)
+        {
+            return anchorZone switch
+            {
+                "upper_right" => "seal의 오른쪽 위 가장자리에서 짧고 또렷하게 다시 그려 보세요.",
+                "right" => "seal의 오른쪽 가장자리 옆에 붙이듯 다시 그려 보세요.",
+                "lower_right" => "seal의 오른쪽 아래 가장자리에서 다시 그려 보세요.",
+                "upper" => "seal의 위쪽 가장자리 가까이에서 다시 그려 보세요.",
+                "left" => "seal의 왼쪽 가장자리 가까이에서 다시 그려 보세요.",
+                _ => "seal 중심 가까이에 작게, 한 가지 장식만 다시 그려 보세요."
+            };
         }
 
         private void ActivateGoal(WorldStateGoal goal, string effect)
@@ -549,8 +637,9 @@ namespace MagicExamHall
             return new SealView(root, seal, text);
         }
 
-        private void LogBaseAttempt(BaseRecognitionResult result, CompiledSeal seal, string worldEffect)
+        private void LogBaseAttempt(BaseRecognitionResult result, CompiledSeal seal, string worldEffect, HintState hintState = null)
         {
+            var success = result.spell.status == RecognitionStatus.Recognized;
             logger.LogAttempt(new AttemptLog
             {
                 sessionId = sessionId,
@@ -577,10 +666,10 @@ namespace MagicExamHall
                 attemptIndex = trialCounter,
                 elapsedMs = Mathf.RoundToInt((Time.time - floorStartedAt) * 1000f),
                 feedbackViewed = true,
-                success = result.spell.status == RecognitionStatus.Recognized,
-                hintShown = result.spell.status != RecognitionStatus.Recognized,
-                assistLevel = result.spell.status == RecognitionStatus.Recognized ? 0 : 1,
-                assisted = false
+                success = success,
+                hintShown = hintState?.hintShown ?? !success,
+                assistLevel = hintState?.AssistLevelNumber ?? (success ? 0 : 1),
+                assisted = hintState?.assisted ?? false
             });
         }
 
@@ -614,7 +703,7 @@ namespace MagicExamHall
                 feedbackViewed = true,
                 success = result.success,
                 hintShown = !result.success,
-                assistLevel = result.success ? 0 : 1,
+                assistLevel = result.success ? 0 : CurrentAssistLevel,
                 assisted = false
             });
         }

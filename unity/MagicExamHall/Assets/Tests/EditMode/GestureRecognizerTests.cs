@@ -54,7 +54,8 @@ namespace MagicExamHall.Tests
 
             Assert.That(result.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.success, Is.False);
-            Assert.That(result.feedbackReason, Does.Contain("void_cut"));
+            Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.MartialAxis));
+            Assert.That(result.feedbackReason, Does.Contain("절단").And.Contain("void_cut"));
         }
 
         [Test]

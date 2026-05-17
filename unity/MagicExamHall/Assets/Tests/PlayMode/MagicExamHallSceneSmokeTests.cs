@@ -120,6 +120,36 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator SameComboReadsAsBridgeOnFloorThreeAndStabilizerOnFloorFour()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(2);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, Vector2.zero);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(3));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("공중 다리"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("흐름"));
+
+            controller.LoadFloorForTests(3);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, Vector2.zero);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(4));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("균열"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("안전 지점"));
+            Assert.That(Vector2.Distance(controller.SafePositionForTests, new Vector2(-5.2f, 2.4f)), Is.LessThan(0.01f));
+        }
+
+        [UnityTest]
         public IEnumerator FloorTransitionsHazardResetAndEndingReportWork()
         {
             SceneManager.LoadScene("MagicExamHall");

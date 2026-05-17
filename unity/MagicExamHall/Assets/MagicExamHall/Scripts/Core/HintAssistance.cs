@@ -58,11 +58,11 @@ namespace MagicExamHall
         {
             return family switch
             {
-                SpellFamily.Fire => new[] { "꼭짓점 3개가 보이게 그리기", "마지막 점을 시작점 근처로 닫기", "삼각형을 위쪽으로 세우기" },
-                SpellFamily.Water => new[] { "한 획으로 둥글게 이어 그리기", "끝점을 시작점 근처로 닫기", "찌그러짐보다 큰 원형 흐름 유지" },
-                SpellFamily.Wind => new[] { "짧은 선 3개를 따로 그리기", "세 선을 비슷한 방향으로 놓기", "너무 닫힌 도형처럼 만들지 않기" },
-                SpellFamily.Earth => new[] { "사다리꼴 네 모서리 만들기", "아래 변을 더 넓게 그리기", "끝점을 닫아 안정감 만들기" },
-                SpellFamily.Life => new[] { "아래 줄기에서 위로 올라가기", "상단에서 좌우 가지 만들기", "닫힌 도형보다 열린 Y 형태 유지" },
+                SpellFamily.Fire => new[] { "세 꼭짓점을 크게 찍기", "마지막 선을 처음 아래 꼭짓점으로 돌려 닫기", "삼각형을 기울이지 말고 세우기" },
+                SpellFamily.Water => new[] { "한 획으로 둥글게 돌기", "끝점을 시작점 바로 옆에 놓기", "찌그러진 타원보다 고른 원 유지" },
+                SpellFamily.Wind => new[] { "위, 가운데, 아래 3획만 남기기", "세 선을 같은 기울기로 맞추기", "세 줄 사이 간격을 비슷하게 벌리기" },
+                SpellFamily.Earth => new[] { "윗변은 좁고 아랫변은 넓게 잡기", "네 모서리를 분명하게 꺾기", "마지막 선으로 사다리꼴을 닫기" },
+                SpellFamily.Life => new[] { "가운데 줄기를 먼저 세우기", "같은 분기점에서 좌우 가지 뻗기", "원처럼 닫지 말고 끝을 열어 두기" },
                 _ => Array.Empty<string>()
             };
         }
@@ -88,7 +88,7 @@ namespace MagicExamHall
 
             if (level == AssistLevel.ReasonHint)
             {
-                return result == null ? ActionHintFor(family) : result.nextHint;
+                return string.IsNullOrWhiteSpace(result?.nextHint) ? ActionHintFor(family) : result.nextHint;
             }
 
             if (level == AssistLevel.Checklist)
@@ -119,9 +119,9 @@ namespace MagicExamHall
             {
                 SpellFamily.Fire => "삼각형 꼭짓점 3개를 크게 잡고 마지막 점을 시작점 근처로 닫아 보세요.",
                 SpellFamily.Water => "한 획으로 둥글게 돌린 뒤 끝점을 시작점 가까이에 놓아 보세요.",
-                SpellFamily.Wind => "짧은 평행선 3개를 서로 비슷한 간격으로 따로 그려 보세요.",
+                SpellFamily.Wind => "위, 가운데, 아래에 짧은 평행선 3개를 같은 간격으로 따로 그려 보세요.",
                 SpellFamily.Earth => "윗변이 좁고 아랫변이 넓은 사다리꼴을 닫힌 모양으로 그려 보세요.",
-                SpellFamily.Life => "아래 줄기에서 올라와 좌우 가지로 갈라지는 열린 Y 형태를 만들어 보세요.",
+                SpellFamily.Life => "가운데 줄기에서 좌우 가지가 갈라지는 열린 Y 형태를 만들어 보세요.",
                 _ => "큰 실루엣을 먼저 맞추고 세부 속도는 나중에 조정하세요."
             };
         }
@@ -132,9 +132,9 @@ namespace MagicExamHall
             {
                 SpellFamily.Fire => "불꽃은 닫힌 삼각형입니다. 아래 꼭짓점에서 시작해 위 양쪽 꼭짓점을 찍고 처음으로 돌아오세요.",
                 SpellFamily.Water => "물은 닫힌 원입니다. 한 번에 둥글게 돌리고 끝점을 시작점 바로 옆에 놓으세요.",
-                SpellFamily.Wind => "바람은 도형이 아니라 세 줄입니다. 같은 방향의 짧은 선 3개만 남기세요.",
+                SpellFamily.Wind => "바람은 도형이 아니라 3획입니다. 위, 가운데, 아래에 같은 기울기의 짧은 선 3개만 남기세요.",
                 SpellFamily.Earth => "땅은 닫힌 사다리꼴입니다. 네 모서리를 만들고 마지막 선으로 틈을 막으세요.",
-                SpellFamily.Life => "생명은 열린 가지입니다. 줄기 하나와 좌우 가지를 만들고 원처럼 닫지 마세요.",
+                SpellFamily.Life => "생명은 열린 Y입니다. 줄기 하나를 세운 뒤 같은 분기점에서 왼쪽 가지와 오른쪽 가지를 뻗고 끝을 닫지 마세요.",
                 _ => "문양을 더 크게, 더 단순하게 그린 뒤 다시 시전하세요."
             };
         }

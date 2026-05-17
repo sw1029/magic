@@ -94,8 +94,8 @@ namespace MagicExamHall
                     targetFamily = targetFamily,
                     confidence = 0f,
                     quality = new QualityVector(),
-                    feedbackReason = "No stroke was captured.",
-                    nextHint = "Hold right mouse on the map floor and draw the spell."
+                    feedbackReason = "아직 바닥에 그려진 선이 없습니다.",
+                    nextHint = "오른쪽 마우스를 누른 채 바닥에 목표 문양을 그려 보세요."
                 };
             }
 
@@ -109,8 +109,14 @@ namespace MagicExamHall
             var top = scored[0];
             var second = scored.Count > 1 ? scored[1] : top;
             var margin = top.score - second.score;
+            var parallelism = EstimateParallelism(drawable);
+            var windSpacing = EstimateWindSpacingBalance(drawable);
             var status = ResolveStatus(top, margin, quality, drawable.Count);
             if (targetFamily == SpellFamily.Wind && drawable.Count < 3)
+            {
+                status = RecognitionStatus.Incomplete;
+            }
+            else if (targetFamily == SpellFamily.Wind && (parallelism < 0.62f || windSpacing < 0.45f))
             {
                 status = RecognitionStatus.Incomplete;
             }
@@ -129,8 +135,8 @@ namespace MagicExamHall
                 confidence = Mathf.Clamp01(top.score),
                 quality = quality,
                 success = success,
-                feedbackReason = BuildReason(targetFamily, top, second, status, quality),
-                nextHint = BuildHint(targetFamily, top, status, quality, drawable.Count)
+                feedbackReason = BuildReason(targetFamily, top, second, status, quality, drawable.Count, parallelism, windSpacing),
+                nextHint = BuildHint(targetFamily, top, status, quality, drawable.Count, parallelism, windSpacing)
             };
         }
 
@@ -232,16 +238,24 @@ namespace MagicExamHall
             (SpellTemplate template, float score, float distance) top,
             (SpellTemplate template, float score, float distance) second,
             RecognitionStatus status,
-            QualityVector quality)
+            QualityVector quality,
+            int strokeCount,
+            float parallelism,
+            float windSpacing)
         {
             if (RequiresClosure(target) && quality.closure < 0.62f)
             {
-                return "닫힌 문양의 끝점이 충분히 맞닿지 않아 미완성으로 남았습니다.";
+                return ClosureReasonFor(target);
             }
 
-            if (target == SpellFamily.Wind && status == RecognitionStatus.Incomplete)
+            if (target == SpellFamily.Wind && status != RecognitionStatus.Recognized)
             {
-                return "바람 문양은 평행한 선 3개가 필요합니다.";
+                return WindReasonFor(strokeCount, parallelism, windSpacing);
+            }
+
+            if (target == SpellFamily.Life && status != RecognitionStatus.Recognized)
+            {
+                return LifeReasonFor(strokeCount, quality);
             }
 
             if (status == RecognitionStatus.Recognized && top.template.family == target)
@@ -256,12 +270,12 @@ namespace MagicExamHall
 
             if (status == RecognitionStatus.Incomplete && RequiresClosure(top.template.family) && quality.closure < 0.62f)
             {
-                return "닫힌 문양의 끝점이 충분히 맞닿지 않아 미완성으로 남았습니다.";
+                return ClosureReasonFor(top.template.family);
             }
 
             if (status == RecognitionStatus.Incomplete && top.template.family == SpellFamily.Wind)
             {
-                return "바람 문양은 평행한 선 3개가 필요합니다.";
+                return WindReasonFor(strokeCount, parallelism, windSpacing);
             }
 
             if (status == RecognitionStatus.Ambiguous)
@@ -277,16 +291,43 @@ namespace MagicExamHall
             (SpellTemplate template, float score, float distance) top,
             RecognitionStatus status,
             QualityVector quality,
-            int strokeCount)
+            int strokeCount,
+            float parallelism,
+            float windSpacing)
         {
             if (target == SpellFamily.Wind && strokeCount < 3)
             {
-                return "짧은 평행선을 3획으로 나누어 그려 보세요.";
+                return "마우스를 세 번 끊어 위, 가운데, 아래에 짧은 평행선을 하나씩 그려 보세요.";
+            }
+
+            if (target == SpellFamily.Wind && strokeCount > 3)
+            {
+                return "추가 선을 줄이고 위, 가운데, 아래 3획만 남겨 보세요.";
+            }
+
+            if (target == SpellFamily.Wind && parallelism < 0.62f)
+            {
+                return "세 줄을 모두 왼쪽에서 오른쪽으로 같은 기울기로 맞춰 그려 보세요.";
+            }
+
+            if (target == SpellFamily.Wind && windSpacing < 0.45f)
+            {
+                return "윗줄과 가운데, 가운데와 아랫줄 사이 간격을 비슷하게 벌려 보세요.";
             }
 
             if (RequiresClosure(target) && quality.closure < 0.72f)
             {
-                return "마지막 점을 시작점 근처로 가져와 닫힌 모양을 만들어 보세요.";
+                return ClosureHintFor(target);
+            }
+
+            if (target == SpellFamily.Life && quality.closure > 0.62f)
+            {
+                return "끝점을 서로 붙이지 말고 줄기 아래와 가지 끝을 열어 둔 Y 형태로 그려 보세요.";
+            }
+
+            if (target == SpellFamily.Life)
+            {
+                return "가운데 줄기를 먼저 세우고 한 지점에서 왼쪽 가지와 오른쪽 가지가 갈라지게 그려 보세요.";
             }
 
             if (quality.rotationBias > 0.55f)
@@ -300,6 +341,73 @@ namespace MagicExamHall
             }
 
             return $"{SpellLabels.Korean(target)}의 큰 실루엣을 먼저 맞추고 세부 속도는 나중에 조정하세요.";
+        }
+
+        private static string ClosureReasonFor(SpellFamily family)
+        {
+            return family switch
+            {
+                SpellFamily.Fire => "불꽃 삼각형의 마지막 점이 시작점으로 돌아오지 않아 틈이 남았습니다.",
+                SpellFamily.Water => "물 원의 끝점이 시작점 옆에 닿지 않아 열린 곡선으로 읽혔습니다.",
+                SpellFamily.Earth => "땅 사다리꼴의 마지막 변이 닫히지 않아 바닥이 고정되지 않았습니다.",
+                _ => "끝점이 시작점 가까이 닿지 않아 닫힌 문양으로 읽히지 않았습니다."
+            };
+        }
+
+        private static string ClosureHintFor(SpellFamily family)
+        {
+            return family switch
+            {
+                SpellFamily.Fire => "세 꼭짓점을 찍은 뒤 마지막 선을 처음 아래 꼭짓점으로 되돌려 삼각형을 닫으세요.",
+                SpellFamily.Water => "한 획으로 원을 돌리고 끝점을 시작점 바로 옆에 놓아 고리를 닫으세요.",
+                SpellFamily.Earth => "윗변은 좁게, 아랫변은 넓게 만든 뒤 마지막 선으로 네 모서리를 닫으세요.",
+                _ => "마지막 점을 시작점 근처로 가져와 닫힌 모양을 만들어 보세요."
+            };
+        }
+
+        private static string WindReasonFor(int strokeCount, float parallelism, float spacingBalance)
+        {
+            if (strokeCount < 3)
+            {
+                return $"바람은 짧은 선 3획입니다. 지금은 {strokeCount}획만 보여 위, 가운데, 아래 흐름을 읽지 못했습니다.";
+            }
+
+            if (strokeCount > 3)
+            {
+                return "바람은 세 줄만 남겨야 합니다. 획이 많아 평행한 흐름이 흐려졌습니다.";
+            }
+
+            if (parallelism < 0.62f)
+            {
+                return "바람 세 줄의 기울기가 서로 달라 같은 방향의 흐름으로 읽히지 않았습니다.";
+            }
+
+            if (spacingBalance < 0.45f)
+            {
+                return "바람 세 줄 사이 간격이 고르지 않아 한 묶음의 평행선으로 읽히지 않았습니다.";
+            }
+
+            return "바람 세 줄의 방향과 간격이 아직 충분히 맞지 않았습니다.";
+        }
+
+        private static string LifeReasonFor(int strokeCount, QualityVector quality)
+        {
+            if (quality.closure > 0.62f)
+            {
+                return "생명은 닫힌 도형이 아니라 줄기에서 가지가 갈라지는 열린 Y 형태입니다.";
+            }
+
+            if (strokeCount < 2)
+            {
+                return "생명 문양에서 줄기는 보였지만 좌우로 갈라지는 가지가 부족합니다.";
+            }
+
+            if (strokeCount > 3)
+            {
+                return "획이 많아 생명 문양의 한 줄기와 두 갈래 가지 구조가 흐려졌습니다.";
+            }
+
+            return "생명 문양의 줄기와 좌우 가지가 만나는 분기점이 아직 분명하지 않습니다.";
         }
 
         private static IReadOnlyList<SpellTemplate> BuildTemplates()
@@ -487,6 +595,30 @@ namespace MagicExamHall
             var mean = Mathf.Atan2(y, x) * 0.5f;
             var deviation = angles.Average(angle => Mathf.Abs(NormalizeHalfPi(angle - mean)));
             return Mathf.Clamp01(1f - deviation / (Mathf.PI / 6f));
+        }
+
+        private static float EstimateWindSpacingBalance(List<List<StrokeSample>> strokes)
+        {
+            var centers = strokes
+                .Where(stroke => stroke.Count >= 2)
+                .Select(stroke => new Vector2(stroke.Average(sample => sample.position.x), stroke.Average(sample => sample.position.y)))
+                .OrderBy(center => center.y)
+                .ToList();
+
+            if (centers.Count < 3)
+            {
+                return 0f;
+            }
+
+            var lowerGap = Mathf.Abs(centers[1].y - centers[0].y);
+            var upperGap = Mathf.Abs(centers[2].y - centers[1].y);
+            var totalSpan = Mathf.Abs(centers[2].y - centers[0].y);
+            if (totalSpan < 0.001f)
+            {
+                return 0f;
+            }
+
+            return Mathf.Clamp01(1f - Mathf.Abs(lowerGap - upperGap) / totalSpan);
         }
 
         private static int CountDominantCorners(List<List<StrokeSample>> strokes)

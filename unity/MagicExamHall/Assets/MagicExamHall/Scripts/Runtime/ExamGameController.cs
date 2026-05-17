@@ -42,6 +42,7 @@ namespace MagicExamHall
         private float pendingAdvanceAt = -1f;
         private Vector2 velocity;
         private Vector2 safePosition;
+        private bool finalCompletionCelebrated;
 
         public int CurrentFloorNumber => floorController?.CurrentFloorNumber ?? 1;
         public int FloorCount => floorController?.FloorCount ?? 5;
@@ -54,8 +55,11 @@ namespace MagicExamHall
         public int CurrentAssistLevel { get; private set; }
         public string LastHintText { get; private set; } = "";
         public string LastMagicNoteText => magicNote?.Text ?? "";
+        public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
+        public int ActivePulseCountForTests => pulses.Count;
         public string OutputDirectory => logger?.OutputDirectory ?? "";
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
+        private bool IsFinalFloor => floorController.CurrentFloorIndex >= floorController.FloorCount - 1;
 
         private void Awake()
         {
@@ -206,6 +210,8 @@ namespace MagicExamHall
         private void LoadFloor(int index)
         {
             pendingAdvanceAt = -1f;
+            finalCompletionCelebrated = false;
+            reportPanel.gameObject.SetActive(false);
             ClearFloorObjects();
             floorController.Load(index);
             safePosition = new Vector2(0f, -4.05f);
@@ -470,8 +476,41 @@ namespace MagicExamHall
                 return;
             }
 
-            magicNote.Show(floorController.Current.completeNote);
-            pendingAdvanceAt = Time.time + 1.4f;
+            magicNote.Show(BuildFloorCompletionNote());
+            pendingAdvanceAt = Time.time + (IsFinalFloor ? 1.9f : 1.4f);
+        }
+
+        private string BuildFloorCompletionNote()
+        {
+            if (!IsFinalFloor)
+            {
+                return floorController.Current.completeNote;
+            }
+
+            CelebrateFinalCompletion();
+            return
+                "성좌심 완성.\n" +
+                "여섯 요구치가 하나의 마법진으로 닫혔고, 탑이 당신의 문양 언어를 인정합니다.";
+        }
+
+        private void CelebrateFinalCompletion()
+        {
+            if (finalCompletionCelebrated)
+            {
+                return;
+            }
+
+            finalCompletionCelebrated = true;
+            pulses.Add(new ParticlePulse(Vector2.zero, new Color(1f, 0.92f, 0.45f), scaleMultiplier: 2.15f, durationSeconds: 1.65f, sortingOrder: 34));
+            pulses.Add(new ParticlePulse(Vector2.zero, new Color(0.48f, 0.84f, 1f), scaleMultiplier: 1.55f, durationSeconds: 1.25f, sortingOrder: 33));
+            foreach (var goal in activeGoals)
+            {
+                if (goal.body != null)
+                {
+                    goal.body.transform.localScale *= 1.08f;
+                }
+                pulses.Add(new ParticlePulse(goal.position, Color.Lerp(goal.color, Color.white, 0.25f), scaleMultiplier: 1.28f, durationSeconds: 1.2f, sortingOrder: 32));
+            }
         }
 
         private void TickFloorAdvance()
@@ -555,11 +594,12 @@ namespace MagicExamHall
                 pulse.age += Time.deltaTime;
                 if (pulse.body == null)
                 {
-                    pulse.body = CreateWorldSprite("Spell Pulse", pulse.position, Vector3.one * (pulse.weak ? 0.22f : 0.35f), pulse.color, Color.white, PixelSpriteKind.Pulse, 28);
+                    pulse.body = CreateWorldSprite("Spell Pulse", pulse.position, Vector3.one * (pulse.weak ? 0.22f : 0.35f) * pulse.scaleMultiplier, pulse.color, Color.white, PixelSpriteKind.Pulse, pulse.sortingOrder);
                 }
 
-                var t = pulse.age / (pulse.weak ? 0.7f : 0.95f);
-                pulse.body.transform.localScale = Vector3.one * Mathf.Lerp(pulse.weak ? 0.35f : 0.45f, pulse.weak ? 1.4f : 2.5f, t);
+                var duration = pulse.durationSeconds > 0f ? pulse.durationSeconds : pulse.weak ? 0.7f : 0.95f;
+                var t = pulse.age / duration;
+                pulse.body.transform.localScale = Vector3.one * Mathf.Lerp(pulse.weak ? 0.35f : 0.45f, pulse.weak ? 1.4f : 2.5f, t) * pulse.scaleMultiplier;
                 var renderer = pulse.body.GetComponent<SpriteRenderer>();
                 renderer.sharedMaterial = PixelMaterialProvider.SpriteMaterial;
                 renderer.color = new Color(1f, 1f, 1f, Mathf.Lerp(0.8f, 0f, t));
@@ -579,6 +619,16 @@ namespace MagicExamHall
             }
 
             var floor = floorController.Current;
+            if (finalCompletionCelebrated && IsFinalFloor && pendingAdvanceAt > 0f)
+            {
+                hudTitle.text = "성좌심 완성";
+                hudCopy.text = "여섯 요구치가 하나의 마법진으로 닫혔습니다.\n곧 입학 시험 보고서가 열립니다.";
+                floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {activeGoals.Count}/{activeGoals.Count}   final seal";
+                notePanel.gameObject.SetActive(magicNote.Visible);
+                noteText.text = magicNote.Text;
+                return;
+            }
+
             hudTitle.text = $"층 {floor.number}: {floor.title}";
             hudCopy.text = $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요.";
             var completed = activeGoals.Count(goal => goal.completed);
@@ -591,6 +641,7 @@ namespace MagicExamHall
         {
             reportPanel.gameObject.SetActive(true);
             notePanel.gameObject.SetActive(false);
+            hudTitle.text = "입학 시험 완료";
             hudCopy.text = "입학 마법진이 다시 밝아졌습니다.";
             logger.LogSurvey(new SurveyLog
             {
@@ -875,14 +926,20 @@ namespace MagicExamHall
             public readonly Vector2 position;
             public readonly Color color;
             public readonly bool weak;
+            public readonly float scaleMultiplier;
+            public readonly float durationSeconds;
+            public readonly int sortingOrder;
             public GameObject body;
             public float age;
 
-            public ParticlePulse(Vector2 position, Color color, bool weak = false)
+            public ParticlePulse(Vector2 position, Color color, bool weak = false, float scaleMultiplier = 1f, float durationSeconds = 0f, int sortingOrder = 28)
             {
                 this.position = position;
                 this.color = color;
                 this.weak = weak;
+                this.scaleMultiplier = scaleMultiplier;
+                this.durationSeconds = durationSeconds;
+                this.sortingOrder = sortingOrder;
             }
         }
 
@@ -989,15 +1046,36 @@ namespace MagicExamHall
             var favoriteOverlay = overlayUse.Count == 0 ? "없음" : SpellLabels.Korean(overlayUse.OrderByDescending(item => item.Value).First().Key);
             var averageQuality = qualityScores.Count == 0 ? 0f : qualityScores.Average() * 100f;
             return
-                "입학 마법진 복구 완료\n\n" +
-                $"총 시도: {totalAttempts}\n" +
+                "입학 시험 완료 - 성좌심 복구 보고서\n\n" +
+                "당신은 정답표를 따라간 것이 아니라, 탑이 알아들을 수 있는 문법을 끝까지 조립했습니다.\n\n" +
+                "플레이 기록\n" +
+                $"전체 시도: {totalAttempts}회\n" +
                 $"가장 많이 사용한 base: {favoriteBase}\n" +
                 $"가장 많이 사용한 overlay: {favoriteOverlay}\n" +
-                $"발견한 반응: {discoveries.Count}\n" +
-                $"평균 품질 경향: {averageQuality:0}%\n\n" +
-                "마법 노트가 마지막 문장을 남깁니다.\n" +
-                "\"정답을 외운 것이 아니라, 탑이 알아들을 문법을 만들었다.\"\n\n" +
+                $"발견한 세계 반응: {discoveries.Count}개\n" +
+                $"평균 문양 안정도: {averageQuality:0}%\n\n" +
+                BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
                 $"로그 저장 위치:\n{outputDirectory}";
+        }
+
+        private static string BuildReflectionLine(string favoriteBase, string favoriteOverlay, int discoveryCount)
+        {
+            if (discoveryCount == 0)
+            {
+                return "마지막 보고서는 아직 발견되지 않은 반응을 남겨 둡니다. 다음 시도에서는 탑의 상태 변화를 더 넓게 관찰해 보세요.";
+            }
+
+            if (favoriteBase == "없음")
+            {
+                return $"{favoriteOverlay} 장식을 중심으로 흐름을 조절했습니다. 이제 같은 장식을 다른 base와 묶으면 더 많은 해석이 열립니다.";
+            }
+
+            if (favoriteOverlay == "없음")
+            {
+                return $"{favoriteBase} base로 탑의 언어를 안정시켰습니다. overlay를 더하면 같은 문양도 다른 의도를 갖게 됩니다.";
+            }
+
+            return $"{favoriteBase} base와 {favoriteOverlay} 장식을 가장 자주 실험했습니다. 탑은 그 반복을 단순한 성공이 아니라 당신만의 문법으로 기록했습니다.";
         }
     }
 

@@ -163,7 +163,21 @@ namespace MagicExamHall
                     shapeConfidence = top.shapeConfidence,
                     scaleRatio = features.scaleRatio,
                     anchorZone = top.anchorZone,
-                    feedbackReason = "축 장식은 먼저 절단(void_cut)이 붙은 seal에서만 고정됩니다. 먼저 대각선 절단을 붙인 뒤 축을 그리세요."
+                    feedbackReason = "축 장식은 먼저 절단 장식이 붙은 seal에서만 섭니다. 대각선 절단을 붙인 뒤 중심을 가르는 축을 그리세요."
+                };
+            }
+
+            if (top.shapeConfidence >= 0.74f && ScaleIsFarOutside(features.scaleRatio, top))
+            {
+                return new OverlayRecognitionResult
+                {
+                    status = RecognitionStatus.Incomplete,
+                    recognizedOperator = top.op,
+                    score = top.score,
+                    shapeConfidence = top.shapeConfidence,
+                    scaleRatio = features.scaleRatio,
+                    anchorZone = top.anchorZone,
+                    feedbackReason = BuildOverlayFailureReason(top, features, ambiguous: false)
                 };
             }
 
@@ -191,7 +205,7 @@ namespace MagicExamHall
                     shapeConfidence = top.shapeConfidence,
                     scaleRatio = features.scaleRatio,
                     anchorZone = top.anchorZone,
-                    feedbackReason = "장식 후보가 겹쳐 아직 seal에 붙이지 않았습니다. 모양을 더 단순하게 다시 그려 보세요."
+                    feedbackReason = BuildOverlayFailureReason(top, features, ambiguous: true)
                 };
             }
 
@@ -202,7 +216,7 @@ namespace MagicExamHall
                 shapeConfidence = top.shapeConfidence,
                 scaleRatio = features.scaleRatio,
                 anchorZone = top.anchorZone,
-                feedbackReason = "장식의 모양, 위치, 크기가 seal과 충분히 맞지 않았습니다."
+                feedbackReason = BuildOverlayFailureReason(top, features, ambiguous: false)
             };
         }
 
@@ -297,7 +311,49 @@ namespace MagicExamHall
                 op = template.op,
                 score = Mathf.Clamp01(score),
                 shapeConfidence = Mathf.Clamp01(shape),
-                anchorZone = template.preferredAnchor
+                anchorZone = template.preferredAnchor,
+                minScale = template.minScale,
+                maxScale = template.maxScale
+            };
+        }
+
+        private static string BuildOverlayFailureReason(OverlayScore top, OverlayFeatures features, bool ambiguous)
+        {
+            if (features.scaleRatio > 0f && features.scaleRatio < top.minScale * 0.75f)
+            {
+                return $"{SpellLabels.Korean(top.op)} 장식처럼 보였지만 너무 작아 seal에 고정되지 않았습니다.";
+            }
+
+            if (features.scaleRatio > top.maxScale * 1.15f)
+            {
+                return $"{SpellLabels.Korean(top.op)} 장식처럼 보였지만 너무 커서 seal 안쪽 기준을 벗어났습니다.";
+            }
+
+            if (top.shapeConfidence >= 0.55f)
+            {
+                return $"{SpellLabels.Korean(top.op)} 장식 모양은 보였지만 위치가 {AnchorLabel(top.anchorZone)} 기준과 맞지 않았습니다.";
+            }
+
+            return ambiguous
+                ? "장식 후보가 겹쳐 아직 seal에 붙이지 않았습니다. 한 번에 한 가지 장식만 더 단순하게 그려 보세요."
+                : "장식의 모양과 위치가 seal 기준과 충분히 맞지 않았습니다.";
+        }
+
+        private static bool ScaleIsFarOutside(float scaleRatio, OverlayScore top)
+        {
+            return scaleRatio > 0f && (scaleRatio < top.minScale * 0.55f || scaleRatio > top.maxScale * 1.35f);
+        }
+
+        private static string AnchorLabel(string anchorZone)
+        {
+            return anchorZone switch
+            {
+                "upper_right" => "오른쪽 위 가장자리",
+                "right" => "오른쪽 가장자리",
+                "lower_right" => "오른쪽 아래 가장자리",
+                "upper" => "위쪽 가장자리",
+                "left" => "왼쪽 가장자리",
+                _ => "중심"
             };
         }
 
@@ -530,6 +586,8 @@ namespace MagicExamHall
             public float score;
             public float shapeConfidence;
             public string anchorZone = "";
+            public float minScale;
+            public float maxScale;
         }
 
         private readonly struct NormalizedGesture

@@ -55,7 +55,21 @@ namespace MagicExamHall.Tests
             Assert.That(result.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.success, Is.False);
             Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.MartialAxis));
-            Assert.That(result.feedbackReason, Does.Contain("절단").And.Contain("void_cut"));
+            Assert.That(result.feedbackReason, Does.Contain("절단 장식").And.Contain("축"));
+            Assert.That(result.feedbackReason, Does.Not.Contain("void_cut"));
+        }
+
+        [Test]
+        public void TinyOverlayExplainsScaleMismatch()
+        {
+            var seal = CreateWorldSeal();
+            var strokes = OverlayRecognizer.CreateCanonicalSamples(OverlayOperator.IceBar, seal.worldCenter, seal.worldScale * 0.03f);
+            var result = OverlayRecognizer.Recognize(strokes, seal);
+
+            Assert.That(result.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.success, Is.False);
+            Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.IceBar));
+            Assert.That(result.feedbackReason, Does.Contain("너무 작"));
         }
 
         [Test]

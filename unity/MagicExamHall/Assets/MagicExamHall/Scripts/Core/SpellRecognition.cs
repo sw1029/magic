@@ -112,7 +112,7 @@ namespace MagicExamHall
             var parallelism = EstimateParallelism(drawable);
             var windSpacing = EstimateWindSpacingBalance(drawable);
             var status = ResolveStatus(top, margin, quality, drawable.Count);
-            if (targetFamily == SpellFamily.Wind && drawable.Count < 3)
+            if (targetFamily == SpellFamily.Wind && drawable.Count != 3)
             {
                 status = RecognitionStatus.Incomplete;
             }
@@ -315,6 +315,11 @@ namespace MagicExamHall
                 return "윗줄과 가운데, 가운데와 아랫줄 사이 간격을 비슷하게 벌려 보세요.";
             }
 
+            if (status == RecognitionStatus.Recognized && top.template.family == target)
+            {
+                return "좋습니다. 같은 문양을 유지하면 다음 시험으로 넘어갈 수 있습니다.";
+            }
+
             if (RequiresClosure(target) && quality.closure < 0.72f)
             {
                 return ClosureHintFor(target);
@@ -333,11 +338,6 @@ namespace MagicExamHall
             if (quality.rotationBias > 0.55f)
             {
                 return "문양을 조금 더 정면 방향으로 세워 그리면 안정도가 올라갑니다.";
-            }
-
-            if (status == RecognitionStatus.Recognized && top.template.family == target)
-            {
-                return "좋습니다. 같은 문양을 유지하면 다음 시험으로 넘어갈 수 있습니다.";
             }
 
             return $"{SpellLabels.Korean(target)}의 큰 실루엣을 먼저 맞추고 세부 속도는 나중에 조정하세요.";

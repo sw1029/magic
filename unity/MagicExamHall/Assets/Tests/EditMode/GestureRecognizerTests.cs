@@ -111,6 +111,25 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void ExtraWindStrokeRemainsIncompleteWithActionHint()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeLine(70, 120, 390, 118, 0f),
+                MakeLine(70, 190, 390, 188, 0.2f),
+                MakeLine(70, 260, 390, 258, 0.4f),
+                MakeLine(70, 330, 390, 328, 0.6f)
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Wind);
+
+            Assert.That(result.status, Is.EqualTo(RecognitionStatus.Incomplete));
+            Assert.That(result.success, Is.False);
+            Assert.That(result.feedbackReason, Does.Contain("세 줄").And.Contain("획이 많"));
+            Assert.That(result.nextHint, Does.Contain("추가 선").And.Contain("3획"));
+        }
+
+        [Test]
         public void LifeFailureDistinguishesStemAndBranches()
         {
             var strokes = new List<List<StrokeSample>>
@@ -123,6 +142,17 @@ namespace MagicExamHall.Tests
             Assert.That(result.success, Is.False);
             Assert.That(result.feedbackReason, Does.Contain("줄기").And.Contain("가지"));
             Assert.That(result.nextHint, Does.Contain("가운데 줄기").And.Contain("왼쪽 가지").And.Contain("오른쪽 가지"));
+        }
+
+        [Test]
+        public void SuccessfulLifeKeepsPositiveNextHint()
+        {
+            var result = GestureRecognizer.Recognize(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Life), SpellFamily.Life);
+
+            Assert.That(result.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.success, Is.True);
+            Assert.That(result.nextHint, Does.Contain("좋습니다"));
+            Assert.That(result.nextHint, Does.Not.Contain("가지가 갈라지게"));
         }
 
         [Test]

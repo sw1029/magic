@@ -88,7 +88,7 @@ namespace MagicExamHall
 
             if (level == AssistLevel.ReasonHint)
             {
-                return result == null ? ActionHintFor(family) : result.nextHint;
+                return string.IsNullOrWhiteSpace(result?.nextHint) ? ActionHintFor(family) : result.nextHint;
             }
 
             if (level == AssistLevel.Checklist)

@@ -38,6 +38,7 @@ The first implementation is thin but complete: start on floor 1, climb through a
 - Base families: fire, water, wind, earth, life
 - Overlay operators: steel_brace, electric_fork, ice_bar, soul_dot, void_cut, martial_axis
 - `martial_axis` requires `void_cut` to already be attached to the same seal.
+- Overlay and combo goals only react when the attached seal or overlay stroke is near the target object.
 - Failed recognition creates a weak ripple and a short magic-note hint instead of health loss or death.
 
 ## Logs

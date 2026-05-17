@@ -76,6 +76,43 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator OverlayAndComboGoalsRequireNearbyWorldCasting()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(1);
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, Vector2.zero);
+            var offTargetOverlay = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, Vector2.zero);
+            yield return null;
+            Assert.That(offTargetOverlay.success, Is.True);
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-0.65f, 3.0f));
+            var onTargetOverlay = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, new Vector2(-0.65f, 3.0f));
+            yield return null;
+            Assert.That(onTargetOverlay.success, Is.True);
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+
+            controller.LoadFloorForTests(2);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            var offTargetCombo = controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, Vector2.zero);
+            yield return null;
+            Assert.That(offTargetCombo.success, Is.True);
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, new Vector2(-4.6f, 1.8f));
+            var onTargetCombo = controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, new Vector2(-4.6f, 1.8f));
+            yield return null;
+            Assert.That(onTargetCombo.success, Is.True);
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+        }
+
+        [UnityTest]
         public IEnumerator FailedBaseCastsEscalateMagicNoteHints()
         {
             SceneManager.LoadScene("MagicExamHall");

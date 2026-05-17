@@ -2,6 +2,12 @@
 
 - 
 
+## Related Issues
+
+- Closes:
+- Related:
+- Follow-up:
+
 ## Verification
 
 - [ ] `npm run validate:docs`
@@ -31,8 +37,3 @@
 
 Add screenshots or a short observed flow only when UI/gameplay changed.
 
-## Related Issues
-
-- Closes:
-- Related:
-- Follow-up:

@@ -20,9 +20,9 @@
 | 구현 흐름 | 기준 | 의미 |
 | --- | --- | --- |
 | Web prototype | `origin/main` 최신 참조 | recognizer, overlay, tutorial, dashboard, datacard, survey 기능이 가장 많이 반영된 기준선 |
-| Unity game prototype | 현재 브랜치 `codex-unity-magic-exam-hall` | 실제 게임 플레이 형태인 2D 시험장 vertical slice |
+| Unity game prototype | `unity/MagicExamHall` | 실제 게임 플레이 형태인 2D 시험장 vertical slice |
 
-주의: 작성 시점 현재 브랜치는 `origin/main`보다 뒤처진 web 변경과 Unity 변경을 동시에 가지고 있습니다. 로드맵은 둘을 합쳐 최종 게임 기준으로 정리하되, 구현 상태 표에서는 Web과 Unity를 분리합니다.
+주의: 로드맵은 Web 연구 프로토타입과 Unity 플레이어블을 함께 다루며, 구현 상태 표에서는 Web과 Unity를 분리합니다.
 
 ## 2. 최종 게임 한 문장
 
@@ -92,12 +92,12 @@
 
 | Operator | 문양/조건 | 의미 | 현재 Web | 현재 Unity | 최종 역할 |
 | --- | --- | --- | --- | --- | --- |
-| `steel_brace` | 오른쪽 근처 열린 브레이스 | 강화, 방어 | 구현됨 | 미구현 | 방어력/지속시간 증가 |
-| `electric_fork` | 꺾이고 갈라지는 번개형 | 분기, 전기 | 구현됨 | 미구현 | 연쇄/전도 효과 |
-| `ice_bar` | 수평 막대 | 냉기, 고정 | 구현됨 | 미구현 | 빙결/정지 효과 |
-| `soul_dot` | 작고 닫힌 점 | 집중, 핵심점 | 구현됨 | 미구현 | 집중도/정밀도 증가 |
-| `void_cut` | 짧은 대각선 절단 | 무효화, 절단 | 구현됨 | 미구현 | 차단/해제 효과 |
-| `martial_axis` | `void_cut` 이후 축선 | 전투 축, 후속 결합 | 구현됨 | 미구현 | `void_cut` 이후 고급 공격 조합 |
+| `steel_brace` | 오른쪽 근처 열린 브레이스 | 강화, 방어 | 구현됨 | 구현됨 | 방어력/지속시간 증가 |
+| `electric_fork` | 꺾이고 갈라지는 번개형 | 분기, 전기 | 구현됨 | 구현됨 | 연쇄/전도 효과 |
+| `ice_bar` | 수평 막대 | 냉기, 고정 | 구현됨 | 구현됨 | 빙결/정지 효과 |
+| `soul_dot` | 작고 닫힌 점 | 집중, 핵심점 | 구현됨 | 구현됨 | 집중도/정밀도 증가 |
+| `void_cut` | 짧은 대각선 절단 | 무효화, 절단 | 구현됨 | 구현됨 | 차단/해제 효과 |
+| `martial_axis` | `void_cut` 이후 축선 | 전투 축, 후속 결합 | 구현됨 | 구현됨 | `void_cut` 이후 고급 공격 조합 |
 
 ### Final seal 규칙
 
@@ -146,19 +146,19 @@
 | Unity 프로젝트 골격 | 구현됨 | `unity/MagicExamHall` |
 | 2D top-down 시험장 | 구현됨 | `Assets/Scenes/MagicExamHall.unity`, scene builder |
 | 플레이어 이동 | 구현됨 | `ExamGameController.TickPlayer` |
-| 5개 시험대 | 구현됨 | `ExamGameController.StationSpecs` |
-| 패널형 드로잉 | 구현됨 | `SpellDrawingCanvas.cs`; 최종 게임 기준은 아니며 개발/테스트용으로 유지 가능 |
-| 맵 위 직접 드로잉 | 미구현 | 최종 게임의 기본 시전 방식 |
+| 5층 진행 루프 | 구현됨 | `FloorDefinition.BuildAll`, `ExamGameController` |
+| 패널형 드로잉 | 제외됨 | 기본 플레이는 별도 입력 패널 없이 월드 드로잉을 사용 |
+| 맵 위 직접 드로잉 | 구현됨 | `WorldDrawingController` |
 | 5개 base family 인식 | 구현됨 | `SpellRecognition.cs`, `GestureRecognizerTests.cs` |
 | 품질 벡터 | 구현됨 | `QualityAnalyzer` |
 | 실패 이유/다음 힌트 | 구현됨 | `GestureRecognizer.BuildReason`, `BuildHint` |
 | 보조 단계 escalator | 구현됨 | `HintAssistance.cs` |
-| 성공 이펙트/진행도 | 구현됨 | `ExamStationView.cs`, `ExamGameController.cs` |
+| 성공 이펙트/진행도 | 구현됨 | `ExamGameController.cs`, `PixelArtFactory.cs` |
 | 시도 로그 CSV/JSONL | 구현됨 | `ExamLogging.cs` |
-| 사후 설문 | 구현됨 | `ExamGameController.CreateSurveyUi`, `ExamLogging.cs` |
+| 엔딩 리포트/자동 설문 로그 | 구현됨 | `EndingReport`, `ExamLogging.cs` |
 | EditMode/PlayMode 테스트 | 구현됨 | `Assets/Tests/*` |
-| overlay operator | 미구현 | Unity에는 아직 base station 흐름만 있음 |
-| final seal compile | 미구현 | Unity에는 아직 overlay stack/compile UI 없음 |
+| overlay operator | 구현됨 | `OverlayRecognizer`, `GestureRecognizerTests.cs` |
+| final seal compile | 부분 구현 | base seal에 overlay stack을 붙이고 world goal 효과에 반영 |
 | user profile 보정 | 미구현 | Unity 품질 분석은 있으나 web profile 정책 미연결 |
 | datacard/what-if/dashboard | 미구현 | Web 검증 도구로만 존재 |
 
@@ -179,12 +179,12 @@
 
 | 기능 | 최종 요구 | 현재 상태 |
 | --- | --- | --- |
-| 마법탑 탐색 | 플레이어가 맵을 이동하고 층별 목표를 관찰 | Unity 부분 구현 |
-| 문양 입력 | 맵 바닥에 우클릭으로 직접 stroke 입력 | 최종 설계 확정, Unity 미구현 |
+| 마법탑 탐색 | 플레이어가 맵을 이동하고 층별 목표를 관찰 | Unity 구현됨 |
+| 문양 입력 | 맵 바닥에 우클릭으로 직접 stroke 입력 | Unity 구현됨 |
 | 기본 주문 | 5개 base family 인식과 성공/실패 판정 | Web/Unity 구현됨 |
-| 고급 주문 | base 이후 overlay operator 누적 | Web 구현됨, Unity 미구현 |
-| final seal | base와 overlay stack을 최종 주문으로 compile | Web 구현됨, Unity 미구현 |
-| 주문 효과 | family/operator에 맞는 세계 변화와 피드백 | Unity 기본 성공 pulse만 구현 |
+| 고급 주문 | base 이후 overlay operator 누적 | Web/Unity 구현됨 |
+| final seal | base와 overlay stack을 최종 주문으로 compile | Web 구현됨, Unity 부분 구현 |
+| 주문 효과 | family/operator에 맞는 세계 변화와 피드백 | Unity 부분 구현 |
 | 진행도 | 5개 시험 완료 상태 표시 | Unity 구현됨 |
 | 재시도 | 실패 후 다시 그리기 | Unity 구현됨 |
 | 힌트 단계 | 실패 횟수에 따라 힌트 강도 상승 | Unity 구현됨 |
@@ -199,8 +199,8 @@
 | 개인화 보정 | 반복 입력 profile 기반 adjusted quality와 후보 보조 | Web 구현됨, Unity 미구현 |
 | shadow 판독 | 실제 판정과 별도 보조 판독/비교 | Web 구현됨, Unity 미구현 |
 | 잘못된 입력 차단 | incomplete/invalid가 personalization으로 성공 처리되지 않음 | Web/Unity 일부 구현 |
-| operator dependency | `martial_axis`는 `void_cut` 이후만 | Web 구현됨 |
-| anchor zone | overlay 위치/크기/기준 프레임 검사 | Web 구현됨 |
+| operator dependency | `martial_axis`는 `void_cut` 이후만 | Web/Unity 구현됨 |
+| anchor zone | overlay 위치/크기/기준 프레임 검사 | Web/Unity 구현됨 |
 
 ### 튜토리얼/피드백 기능
 
@@ -240,7 +240,7 @@ Unity line
   unity/MagicExamHall/Assets/MagicExamHall/Scripts/Core
                         C# gesture recognition, quality, hints, logging
   unity/MagicExamHall/Assets/MagicExamHall/Scripts/Runtime
-                        scene controller, canvas, stations, pixel sprites
+                        scene controller, floor goals, world drawing, pixel sprites
   unity/MagicExamHall/Assets/Tests
                         EditMode and PlayMode tests
 ```
@@ -263,7 +263,7 @@ Web research lab
 
 Unity playable game
   player movement and scene
-  station and spell interaction
+  floor goal and spell interaction
   final seal gameplay
   polished feedback and logging
 ```
@@ -284,25 +284,25 @@ Unity playable game
 | 작업 | 상태 | 완료 조건 |
 | --- | --- | --- |
 | 통합 로드맵 작성 | 구현됨 | `docs/PROJECT_ROADMAP.md` 존재 |
-| README의 잘못된 docs 안내 수정 | 미구현 | 실제 docs 구조와 검증 결과가 일치 |
+| README의 잘못된 docs 안내 수정 | 구현됨 | 실제 docs 구조와 검증 결과가 일치 |
 | work queue/task 문서 정책 결정 | 미구현 | task 문서를 만들지, 큐를 단순화할지 결정 |
-| Unity 브랜치와 최신 `origin/main` 통합 계획 수립 | 미구현 | web 최신 기능과 Unity 변경이 충돌 없이 병합 가능 |
+| Unity 브랜치와 최신 `origin/main` 통합 계획 수립 | 구현됨 | Unity 플레이어블이 `main`에 통합됨 |
 
 ### M1. Playable Unity vertical slice
 
-목표: 현재 Unity 시험장 프로토타입을 안정화하되, 최종 입력 기준은 패널형이 아니라 맵 위 직접 드로잉임을 분리한다.
+목표: Unity 시험장 프로토타입을 맵 위 직접 드로잉 중심의 짧은 플레이어블로 안정화한다.
 
 | 작업 | 상태 | 완료 조건 |
 | --- | --- | --- |
-| 시험장 scene 구성 | 구현됨 | 카메라, 플레이어, 5 station, UGUI, EventSystem 존재 |
+| 시험장 scene 구성 | 구현됨 | 카메라, 플레이어, 5층 월드, UGUI, EventSystem 존재 |
 | 이동/상호작용 | 구현됨 | WASD/방향키 이동 |
-| 패널형 문양 입력 UI | 구현됨 | drawing panel에서 stroke 입력 가능; 최종 경험에서는 숨김/개발용 |
-| 맵 위 직접 드로잉 | 미구현 | 우클릭 hold로 바닥에 stroke를 그리고 버퍼 종료 시 주문 판정 |
+| 패널형 문양 입력 UI | 제외됨 | 기본 플레이에서는 입력 패널을 사용하지 않음 |
+| 맵 위 직접 드로잉 | 구현됨 | 우클릭 hold로 바닥에 stroke를 그리고 버퍼 종료 시 주문 판정 |
 | 5개 family 인식 | 구현됨 | canonical sample 테스트 통과 |
 | 실패 피드백 | 구현됨 | reason, hint, quality 지표 표시 |
 | 힌트 escalator | 구현됨 | 1회 실패 reason hint, 2회 checklist, 3회 ghost trace |
 | 세션 로그 | 구현됨 | attempts/survey CSV/JSONL 저장 |
-| PlayMode smoke test | 구현됨 | scene load, first hint behavior 검증 |
+| PlayMode smoke test | 구현됨 | scene load, world casting, overlay, hazard, ending report 검증 |
 | 빌드 산출물 | 미구현 | Windows/WebGL 등 실행 파일 생성과 smoke test |
 
 ### M2. World casting and overlay/final seal Unity 이식
@@ -311,15 +311,15 @@ Unity playable game
 
 | 작업 | 상태 | 완료 조건 |
 | --- | --- | --- |
-| 월드 드로잉 입력 | 미구현 | 우클릭 hold/release와 0.8초 stroke buffer로 주문군 생성 |
-| 월드 stroke 시각화 | 미구현 | 맵 바닥에 빛나는 선이 잠깐 남고 fade-out |
-| base seal instance | 미구현 | base 성공 시 문양 중심에 임시 seal 생성 |
-| Unity overlay 입력 단계 | 미구현 | base seal 근처 후속 stroke가 overlay로 붙음 |
-| operator recognizer C# 이식 | 미구현 | 6개 operator 판정과 테스트 |
-| anchor zone 시각화 | 미구현 | seal 주변 장식 위치와 붙임새 피드백 표시 |
-| dependency 처리 | 미구현 | `martial_axis`는 `void_cut` 없으면 차단 |
-| final spell feedback | 미구현 | 문양 위 작은 룬 라벨과 spell effect 표시 |
-| world state effect mapping | 미구현 | 주문이 주변 오브젝트 상태를 바꾸고 방 목표에 기여 |
+| 월드 드로잉 입력 | 구현됨 | 우클릭 hold/release와 stroke buffer로 주문군 생성 |
+| 월드 stroke 시각화 | 구현됨 | 맵 바닥에 빛나는 선이 잠깐 남고 fade-out |
+| base seal instance | 구현됨 | base 성공 시 문양 중심에 임시 seal 생성 |
+| Unity overlay 입력 단계 | 구현됨 | base seal 근처 후속 stroke가 overlay로 붙음 |
+| operator recognizer C# 이식 | 구현됨 | 6개 operator 판정과 테스트 |
+| anchor zone 시각화 | 부분 구현 | anchor/scale 판정과 실패 힌트는 있으나 전용 guide visual은 없음 |
+| dependency 처리 | 구현됨 | `martial_axis`는 `void_cut` 없으면 차단 |
+| final spell feedback | 부분 구현 | 문양 위 룬 라벨과 overlay stack feedback 표시 |
+| world state effect mapping | 구현됨 | 주문이 주변 오브젝트 상태를 바꾸고 방 목표에 기여 |
 
 ### M3. 튜토리얼과 피드백 고도화
 
@@ -339,10 +339,10 @@ Unity playable game
 
 | 작업 | 상태 | 완료 조건 |
 | --- | --- | --- |
-| station별 세계 반응 | 부분 구현 | 성공 pulse 외에 fire/water/wind/earth/life 효과 존재 |
-| 1개 overlay tutorial station | 미구현 | base 성공 뒤 overlay 하나를 배우는 시험 |
-| 1개 final seal challenge | 미구현 | base + 2 overlay 조합으로 해결 |
-| 실패/성공 연출 | 부분 구현 | 사운드, 화면 shake, particle, station animation |
+| 층별 세계 반응 | 구현됨 | base/overlay/combo 목표가 층별 진행에 기여 |
+| overlay tutorial floor | 구현됨 | 2층에서 6개 overlay를 모두 실험 |
+| final seal challenge | 부분 구현 | 5층 성좌심에서 base/combo 요구치를 채움 |
+| 실패/성공 연출 | 부분 구현 | 사운드, 화면 shake, particle, goal animation |
 | 엔딩 요약 | 미구현 | 완료 시간, 시도 수, assist 사용량, quality 평균 표시 |
 
 ### M5. 연구 검증 패키지
@@ -394,11 +394,11 @@ Unity playable game
 
 | ID | 작업 | 우선순위 | 상태 |
 | --- | --- | --- | --- |
-| C1 | 5 station vertical slice 안정화 | P0 | 구현됨 |
-| C2 | final seal challenge 1개 추가 | P0 | 미구현 |
-| C3 | family별 world effect 추가 | P1 | 부분 구현 |
-| C4 | overlay별 effect modifier 추가 | P1 | 미구현 |
-| C5 | 엔딩 결과 요약 화면 추가 | P1 | 미구현 |
+| C1 | 5층 vertical slice 안정화 | P0 | 구현됨 |
+| C2 | final seal challenge 1개 추가 | P0 | 부분 구현 |
+| C3 | family별 world effect 추가 | P1 | 구현됨 |
+| C4 | overlay별 effect modifier 추가 | P1 | 부분 구현 |
+| C5 | 엔딩 결과 요약 화면 추가 | P1 | 구현됨 |
 | C6 | 실행 빌드 생성과 버전 표기 | P1 | 미구현 |
 
 ### Epic D. Tutorial and feedback
@@ -434,7 +434,7 @@ Unity playable game
 
 ### 반드시 포함
 
-- Unity에서 바로 플레이 가능한 5 station 시험장.
+- Unity에서 바로 플레이 가능한 5층 시험장.
 - Fire, Water, Wind, Earth, Life 5개 문양 입력과 성공/실패.
 - 실패 이유, 품질 지표, 재시도, 단계적 힌트.
 - 세션 로그와 설문 저장.
@@ -473,7 +473,7 @@ Unity playable game
 1. Unity scene이 새 clone 환경에서 열린다.
 2. Web prototype은 `npm test`, `npm run build`, `npm run validate:docs`가 통과한다.
 3. Unity EditMode/PlayMode 테스트가 통과한다.
-4. 5개 station을 사람이 직접 플레이해 완료할 수 있다.
+4. 5개 층을 사람이 직접 플레이해 완료할 수 있다.
 5. 최소 1개 실패, 1개 성공, 1개 assisted success가 로그에 남는다.
 6. 설문 CSV/JSONL이 저장된다.
 7. README와 로드맵의 상태 표기가 실제 코드와 맞다.
@@ -488,16 +488,16 @@ Unity playable game
 | `npm test` | Web recognizer/demo/survey 테스트 |
 | `npm run build` | TypeScript 타입과 Vite build 확인 |
 | Unity EditMode tests | GestureRecognizer, HintAssistance, ExamLogger 검증 |
-| Unity PlayMode tests | scene load, station setup, first failure hint 검증 |
+| Unity PlayMode tests | scene load, world casting, overlay stack, hazard reset, ending report 검증 |
 
 ### 수동 플레이 테스트
 
 1. Unity scene을 연다.
-2. 플레이어가 첫 station 근처로 이동한다.
+2. 플레이어가 첫 층의 목표 오브젝트 근처로 이동한다.
 3. 일부러 틀린 입력을 넣어 첫 힌트를 확인한다.
-4. 같은 station에서 두 번 더 실패해 checklist/ghost trace를 확인한다.
-5. 성공 입력을 넣어 다음 station으로 진행한다.
-6. 5개 station을 모두 완료한다.
+4. 같은 목표에서 두 번 더 실패해 checklist/ghost trace를 확인한다.
+5. 성공 입력을 넣어 다음 목표와 다음 층으로 진행한다.
+6. 5개 층을 모두 완료한다.
 7. 설문을 저장하고 로그 파일을 확인한다.
 
 ### HCI 측정 지표
@@ -505,7 +505,7 @@ Unity playable game
 | 지표 | 의미 |
 | --- | --- |
 | 첫 시도 성공률 | 모범 문양을 보고 바로 성공하는 비율 |
-| station 완료 시간 | 각 시험을 완료하는 데 걸린 시간 |
+| 층 완료 시간 | 각 시험을 완료하는 데 걸린 시간 |
 | 재시도 수 | 문양별 난이도와 피드백 효과 |
 | assist level 사용률 | 힌트 escalator가 얼마나 필요한지 |
 | 실패 피드백 이해도 | 사용자가 다음에 무엇을 고칠지 설명할 수 있는지 |
@@ -519,8 +519,8 @@ Unity playable game
 | Web과 Unity recognizer가 갈라짐 | 같은 입력인데 플랫폼별 결과가 달라질 수 있음 | family/operator/quality contract 문서화와 fixture 공유 |
 | 브랜치 divergence | 최신 Web 기능과 Unity 기능이 충돌할 수 있음 | Unity 변경을 최신 main에 재적용하는 통합 브랜치 생성 |
 | 문서와 실제 파일 구조 불일치 | 새 작업자가 혼란스러움 | README/docs queue 정리 |
-| 맵 위 직접 드로잉 이식이 늦어짐 | 최종 게임 감각이 패널형 데모에 머무름 | 월드 드로잉을 M2의 선행 작업으로 둔다 |
-| overlay를 Unity에 늦게 이식 | 조합 실험과 창의적 해결이 부족해짐 | 월드 base seal 위에 operator 1개부터 후속 장식으로 붙인다 |
+| 맵 위 직접 드로잉 조작감이 불안정함 | 최종 게임 감각이 흐려질 수 있음 | 입력 버퍼와 seal 유지 시간을 플레이 테스트로 조정한다 |
+| overlay 목표 판정이 느슨함 | 조합 실험이 위치 없는 체크리스트처럼 느껴질 수 있음 | 목표 오브젝트 근처 시전과 anchor/scale 피드백을 강화한다 |
 | 피드백 문구가 기술적임 | 사용자가 원인을 이해하지 못함 | user-facing 용어 사전과 why summary 작성 |
 | 로그가 개인정보/원시데이터를 과하게 담음 | 공개/제출 위험 | raw capture와 contact data 분리, anonymized export 유지 |
 | 범위가 커짐 | 제출 가능한 게임 완성도가 떨어짐 | MVP는 맵 위 직접 드로잉 + 1개 완성 층 + 로그/리포트로 고정 |
@@ -542,9 +542,9 @@ Unity playable game
 3. `docs/GAME_DESIGN.md`를 기준으로 직접 드로잉 조작감과 층 구조를 더 구체화한다.
 4. Web의 operator spec을 Unity C# contract로 옮길 표를 만든다.
 5. Unity에 우클릭 월드 stroke 입력과 0.8초 입력 버퍼를 설계/구현한다.
-6. base seal instance와 seal 근처 overlay 후속 입력 규칙을 설계/구현한다.
-7. 세계 상태 목표 판정 모델을 설계한다.
-8. 1층 발착층을 맵 위 직접 드로잉 튜토리얼로 재설계한다.
+6. base seal instance와 seal 근처 overlay 후속 입력 규칙을 플레이 테스트로 조정한다.
+7. 세계 상태 목표 판정 모델을 세분화한다.
+8. 1층 발착층을 맵 위 직접 드로잉 튜토리얼로 다듬는다.
 9. 마법 노트 관찰문과 반복 실패 힌트 문구를 작성한다.
 10. 사용자 테스트 시나리오와 성찰형 리포트 항목을 작성한다.
 

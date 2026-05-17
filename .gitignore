@@ -16,6 +16,21 @@ __pycache__/
 .codex
 chat
 task-*
-*.md
-.gitignore
-*.png
+
+# Unity generated state
+unity/**/Library/
+unity/**/Temp/
+unity/**/Obj/
+unity/**/Build/
+unity/**/Builds/
+unity/**/Logs/
+unity/**/UserSettings/
+unity/**/*.csproj
+unity/**/*.sln
+unity/**/*.user
+unity/**/*.pidb
+unity/**/*.booproj
+unity/**/*.svd
+unity/**/TestResults.xml
+unity/**/PlayModeTestResults.xml
+unity/**/*.log

@@ -15,8 +15,11 @@
 * JSON 로그 export
 * 문서 상태 동기화 검증
 * `Magic Exam Hall` 게임 기획/로드맵 문서화
+* Unity 기반 `Magic Exam Hall` 5층 월드 캐스팅 플레이 루프
 
 ## 요구 사항
+
+웹 프로토타입:
 
 * Node.js `20.x` 이상
 * npm `10.x` 이상
@@ -27,6 +30,11 @@
 node -v
 npm -v
 ```
+
+Unity 플레이어블:
+
+* Unity `6000.3.14f1`
+* 유효한 Unity Editor 라이선스
 
 ## 빠른 시작
 
@@ -45,6 +53,18 @@ npm run dev
 ```
 
 Vite가 출력하는 로컬 주소를 브라우저에서 열면 됩니다. 보통은 `http://localhost:5173` 입니다.
+
+Unity 플레이어블 실행:
+
+```text
+unity/MagicExamHall
+```
+
+1. Unity Hub 또는 Unity Editor에서 위 프로젝트 폴더를 엽니다.
+2. `Assets/Scenes/MagicExamHall.unity`를 엽니다.
+3. Play를 누릅니다.
+
+조작은 WASD/방향키 이동, 우클릭 hold/release 월드 드로잉입니다. 기본 플레이에서는 별도 입력 패널이나 `마법 시전` 버튼을 사용하지 않습니다.
 
 ## 초기 검증 튜토리얼
 
@@ -199,6 +219,14 @@ npm run test:watch     # Vitest watch
 npm run validate:docs  # docs 상태/의존성 검증
 ```
 
+Unity 검증 명령 예시:
+
+```powershell
+& 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallSceneBuilder.BuildAll
+& 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform editmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\TestResults.xml'
+& 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform playmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\PlayModeTestResults.xml'
+```
+
 ## 디렉토리 구조
 
 ```text
@@ -206,6 +234,7 @@ src/       웹 데모와 recognizer 코어
 tests/     Vitest 테스트
 scripts/   문서 검증 스크립트
 docs/      방향/큐/task 문서
+unity/     Unity Magic Exam Hall 플레이어블
 ```
 
 ## 문서 읽기 순서
@@ -231,3 +260,11 @@ npm ci
 ```bash
 npm run validate:docs
 ```
+
+Unity batchmode에서 아래 메시지가 보이면 코드 컴파일 실패가 아니라 라이선스 초기화 문제입니다.
+
+```text
+No valid Unity Editor license found. Please activate your license.
+```
+
+로그 끝의 `abort_threads: Failed aborting id ... mono_thread_manage will ignore it` 메시지는 Unity/Mono 종료 과정에서 남는 노이즈일 수 있습니다. 같은 로그 안에 `Exception`, `CS#### error`, `Test run failed`가 함께 있는지 먼저 확인하세요.

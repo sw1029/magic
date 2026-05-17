@@ -115,6 +115,27 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator OversizedOverlayShowsScaleActionHint()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            var result = controller.CastSyntheticOverlayForTests(OverlayOperator.SoulDot, Vector2.zero, 1f);
+            yield return null;
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.SoulDot));
+            Assert.That(result.scaleHint, Is.EqualTo(OverlayScaleHint.TooLarge));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("너무 커"));
+            Assert.That(controller.LastHintText, Does.Contain("너무 큽니다"));
+        }
+
+        [UnityTest]
         public IEnumerator FailedBaseCastsEscalateMagicNoteHints()
         {
             SceneManager.LoadScene("MagicExamHall");

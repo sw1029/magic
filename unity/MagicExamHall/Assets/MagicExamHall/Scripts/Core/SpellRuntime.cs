@@ -22,6 +22,13 @@ namespace MagicExamHall
         MartialAxis
     }
 
+    public enum OverlayScaleHint
+    {
+        None,
+        TooSmall,
+        TooLarge
+    }
+
     [Serializable]
     public sealed class OverlayRecognitionResult
     {
@@ -30,6 +37,7 @@ namespace MagicExamHall
         public float score;
         public float shapeConfidence;
         public float scaleRatio;
+        public OverlayScaleHint scaleHint;
         public string anchorZone = "";
         public string feedbackReason = "";
         public bool success => status == RecognitionStatus.Recognized && recognizedOperator.HasValue;
@@ -152,6 +160,7 @@ namespace MagicExamHall
             var top = scored[0];
             var second = scored.Count > 1 ? scored[1] : top;
             var margin = top.score - second.score;
+            var scaleHint = ScaleHintFor(features.scaleRatio, top);
 
             if (top.op == OverlayOperator.MartialAxis && !seal.overlayStack.Contains(OverlayOperator.VoidCut))
             {
@@ -162,6 +171,7 @@ namespace MagicExamHall
                     score = top.score,
                     shapeConfidence = top.shapeConfidence,
                     scaleRatio = features.scaleRatio,
+                    scaleHint = scaleHint,
                     anchorZone = top.anchorZone,
                     feedbackReason = "축 장식은 먼저 절단 장식이 붙은 seal에서만 섭니다. 대각선 절단을 붙인 뒤 중심을 가르는 축을 그리세요."
                 };
@@ -176,8 +186,9 @@ namespace MagicExamHall
                     score = top.score,
                     shapeConfidence = top.shapeConfidence,
                     scaleRatio = features.scaleRatio,
+                    scaleHint = scaleHint,
                     anchorZone = top.anchorZone,
-                    feedbackReason = BuildOverlayFailureReason(top, features, ambiguous: false)
+                    feedbackReason = BuildOverlayFailureReason(top, scaleHint, ambiguous: false)
                 };
             }
 
@@ -191,6 +202,7 @@ namespace MagicExamHall
                     score = top.score,
                     shapeConfidence = top.shapeConfidence,
                     scaleRatio = features.scaleRatio,
+                    scaleHint = scaleHint,
                     anchorZone = top.anchorZone,
                     feedbackReason = $"{SpellLabels.Korean(top.op)} 장식이 seal에 붙었습니다."
                 };
@@ -204,8 +216,9 @@ namespace MagicExamHall
                     score = top.score,
                     shapeConfidence = top.shapeConfidence,
                     scaleRatio = features.scaleRatio,
+                    scaleHint = scaleHint,
                     anchorZone = top.anchorZone,
-                    feedbackReason = BuildOverlayFailureReason(top, features, ambiguous: true)
+                    feedbackReason = BuildOverlayFailureReason(top, scaleHint, ambiguous: true)
                 };
             }
 
@@ -215,8 +228,9 @@ namespace MagicExamHall
                 score = top.score,
                 shapeConfidence = top.shapeConfidence,
                 scaleRatio = features.scaleRatio,
+                scaleHint = scaleHint,
                 anchorZone = top.anchorZone,
-                feedbackReason = BuildOverlayFailureReason(top, features, ambiguous: false)
+                feedbackReason = BuildOverlayFailureReason(top, scaleHint, ambiguous: false)
             };
         }
 
@@ -317,14 +331,14 @@ namespace MagicExamHall
             };
         }
 
-        private static string BuildOverlayFailureReason(OverlayScore top, OverlayFeatures features, bool ambiguous)
+        private static string BuildOverlayFailureReason(OverlayScore top, OverlayScaleHint scaleHint, bool ambiguous)
         {
-            if (features.scaleRatio > 0f && features.scaleRatio < top.minScale * 0.75f)
+            if (scaleHint == OverlayScaleHint.TooSmall)
             {
                 return $"{SpellLabels.Korean(top.op)} 장식처럼 보였지만 너무 작아 seal에 고정되지 않았습니다.";
             }
 
-            if (features.scaleRatio > top.maxScale * 1.15f)
+            if (scaleHint == OverlayScaleHint.TooLarge)
             {
                 return $"{SpellLabels.Korean(top.op)} 장식처럼 보였지만 너무 커서 seal 안쪽 기준을 벗어났습니다.";
             }
@@ -342,6 +356,21 @@ namespace MagicExamHall
         private static bool ScaleIsFarOutside(float scaleRatio, OverlayScore top)
         {
             return scaleRatio > 0f && (scaleRatio < top.minScale * 0.55f || scaleRatio > top.maxScale * 1.35f);
+        }
+
+        private static OverlayScaleHint ScaleHintFor(float scaleRatio, OverlayScore top)
+        {
+            if (scaleRatio > 0f && scaleRatio < top.minScale * 0.75f)
+            {
+                return OverlayScaleHint.TooSmall;
+            }
+
+            if (scaleRatio > top.maxScale * 1.15f)
+            {
+                return OverlayScaleHint.TooLarge;
+            }
+
+            return OverlayScaleHint.None;
         }
 
         private static string AnchorLabel(string anchorZone)

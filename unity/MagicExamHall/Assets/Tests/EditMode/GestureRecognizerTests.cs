@@ -69,6 +69,7 @@ namespace MagicExamHall.Tests
             Assert.That(result.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.success, Is.False);
             Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.IceBar));
+            Assert.That(result.scaleHint, Is.EqualTo(OverlayScaleHint.TooSmall));
             Assert.That(result.feedbackReason, Does.Contain("너무 작"));
         }
 

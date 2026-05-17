@@ -93,10 +93,10 @@ namespace MagicExamHall
             return ProcessBase(strokes, worldCenter, strokes.Count).baseResult;
         }
 
-        public OverlayRecognitionResult CastSyntheticOverlayForTests(OverlayOperator op, Vector2 worldCenter)
+        public OverlayRecognitionResult CastSyntheticOverlayForTests(OverlayOperator op, Vector2 worldCenter, float sealScaleRatio = 0.24f)
         {
             var nearestSeal = FindAttachableSeal(worldCenter);
-            var scale = nearestSeal == null ? 0.48f : nearestSeal.seal.worldScale * 0.24f;
+            var scale = nearestSeal == null ? 0.48f : nearestSeal.seal.worldScale * sealScaleRatio;
             var strokes = OverlayRecognizer.CreateCanonicalSamples(op, worldCenter, scale, 0.03f);
             return ProcessSpellGroup(strokes, worldCenter, strokes.Count).overlayResult;
         }
@@ -477,12 +477,12 @@ namespace MagicExamHall
                 return "먼저 같은 seal에 대각선 절단 장식을 붙인 뒤, 중심을 가르는 축을 다시 그리세요.";
             }
 
-            if (result.scaleRatio > 0f && result.scaleRatio < 0.10f)
+            if (result.scaleHint == OverlayScaleHint.TooSmall)
             {
                 return "장식이 너무 작습니다. seal 중심을 기준으로 조금 더 크게 그려 보세요.";
             }
 
-            if (result.scaleRatio > 0.64f)
+            if (result.scaleHint == OverlayScaleHint.TooLarge)
             {
                 return "장식이 너무 큽니다. seal 안쪽에 들어오도록 작게 줄여 보세요.";
             }

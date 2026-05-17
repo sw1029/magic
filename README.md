@@ -1,10 +1,12 @@
-# Magic Recognizer V1.5
+# Magic Recognizer V1.5 / Magic Exam Hall
 
-기본 5문양 base seal recognizer를 유지하면서, 같은 캔버스에서 overlay operator를 누적하고 `final seal`로 compile 결과를 확정하는 마법진 인식체계 프로토타입입니다.
+마법 문양을 직접 그려 주문을 시전하는 게임 경험을 검증하기 위한 프로젝트입니다.
+
+현재 저장소의 중심은 Web 기반 `Magic Recognizer V1.5` 프로토타입이며, 게임 기획 기준은 `Magic Exam Hall`입니다. `Magic Exam Hall`은 별도 입력창이 아니라 맵 위 바닥에 직접 문양을 그리고, base family와 overlay operator를 조합해 세계 상태를 바꾸는 2D top-down 마법 드로잉 퍼즐 어드벤처를 목표로 합니다.
 
 현재 범위:
 
-* 웹 캔버스 입력
+* 웹 캔버스 기반 recognizer 연구 프로토타입
 * 기본 5문양 base family 인식
 * user input profile 누적
 * raw quality / adjusted quality 분리
@@ -12,6 +14,7 @@
 * `final seal` compile 결과 표시
 * JSON 로그 export
 * 문서 상태 동기화 검증
+* `Magic Exam Hall` 게임 기획/로드맵 문서화
 * Unity 기반 `Magic Exam Hall` 5층 월드 캐스팅 플레이 루프
 
 ## 요구 사항
@@ -78,7 +81,7 @@ npm run validate:docs
 기대 결과:
 
 ```bash
-validated 21 task documents against work queue
+validated 0 task documents against work queue
 ```
 
 ### 2. 자동 테스트 실행
@@ -231,7 +234,6 @@ src/       웹 데모와 recognizer 코어
 tests/     Vitest 테스트
 scripts/   문서 검증 스크립트
 docs/      방향/큐/task 문서
-chat/      원본 논의 보관소
 unity/     Unity Magic Exam Hall 플레이어블
 ```
 
@@ -239,12 +241,11 @@ unity/     Unity Magic Exam Hall 플레이어블
 
 문서 기준을 먼저 보고 싶다면 아래 순서가 가장 빠릅니다.
 
-1. `docs/README.md`
-2. `docs/10_direction/final-direction.md`
-3. `docs/10_direction/prototype-target.md`
+1. `docs/GAME_DESIGN.md`
+2. `docs/PROJECT_ROADMAP.md`
+3. `docs/PROJECT_OVERVIEW.md`
 4. `docs/20_queue/work-queue.md`
-5. `docs/30_tasks/epic-02-symbols-and-input/task-01-base-symbol-prototypes.md`
-6. `docs/30_tasks/epic-02-symbols-and-input/task-02-input-interpretation-rules.md`
+5. `docs/30_tasks/README.md`
 
 ## 트러블슈팅
 
@@ -254,7 +255,7 @@ unity/     Unity Magic Exam Hall 플레이어블
 npm ci
 ```
 
-문서 검증이 실패하면 `work-queue.md`와 각 task 문서의 frontmatter 상태/의존성이 어긋난 것입니다. 먼저 아래를 다시 실행해 원인을 확인합니다.
+문서 검증이 실패하면 `work-queue.md`와 task 문서의 frontmatter 상태/의존성이 어긋난 것입니다. 현재 main 기준 task 문서는 아직 없으므로 정상 결과는 `validated 0 task documents against work queue`입니다. 먼저 아래를 다시 실행해 원인을 확인합니다.
 
 ```bash
 npm run validate:docs

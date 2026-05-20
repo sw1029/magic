@@ -72,9 +72,12 @@ EditMode tests cover base recognition, overlay recognition, `martial_axis` depen
 ```powershell
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallSceneBuilder.BuildAll
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallBuildPipeline.BuildWindowsPlayer -magicExamHallBuildPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\Builds\MagicExamHall.exe' -logFile 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\unity-build.log'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-magic-exam-hall-player.ps1 -BuildPath 'unity/MagicExamHall/Builds/MagicExamHall.exe' -LogPath 'unity/MagicExamHall/player-smoke.log'
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform editmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\TestResults.xml'
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform playmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\PlayModeTestResults.xml'
 ```
+
+The player smoke script starts the generated Windows build headlessly, waits for the scene startup log markers, and fails if the player exits early or logs a fatal startup pattern. Manual release QA should still confirm WASD movement and right-mouse world drawing in the visible player.
 
 ## Troubleshooting
 

@@ -48,6 +48,7 @@ namespace MagicExamHall
         public int FloorCount => floorController?.FloorCount ?? 5;
         public int ActiveSealCount => seals.Count;
         public int ActiveGoalCount => activeGoals.Count;
+        public int CompletedGoalCountForTests => activeGoals.Count(goal => goal.completed);
         public Vector2 PlayerPosition => player == null ? Vector2.zero : player.position;
         public bool HasEndingReport => reportPanel != null && reportPanel.gameObject.activeSelf;
         public bool IsDrawingPanelVisible => false;
@@ -55,6 +56,8 @@ namespace MagicExamHall
         public int CurrentAssistLevel { get; private set; }
         public string LastHintText { get; private set; } = "";
         public string LastMagicNoteText => magicNote?.Text ?? "";
+        public string HudCopyForTests => hudCopy == null ? "" : hudCopy.text;
+        public string FloorProgressForTests => floorProgress == null ? "" : floorProgress.text;
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
         public int ActivePulseCountForTests => pulses.Count;
         public string OutputDirectory => logger?.OutputDirectory ?? "";
@@ -222,7 +225,7 @@ namespace MagicExamHall
             activeHazards.Clear();
             activeHazards.AddRange(floorController.Current.hazards.Select(hazard => hazard.Clone()));
             BuildFloorArt(floorController.Current);
-            magicNote.Show(floorController.Current.entryNote);
+            magicNote.Show(IsFinalFloor ? $"{floorController.Current.entryNote}\n{BuildNextFinalGoalHint()}" : floorController.Current.entryNote);
         }
 
         private void BuildFloorArt(FloorDefinition floor)
@@ -246,6 +249,10 @@ namespace MagicExamHall
                 if (goal.kind == PixelSpriteKind.RuneCircle)
                 {
                     body.transform.localScale *= 1.45f;
+                }
+                if (floor.number == 5)
+                {
+                    goal.label = CreateGoalLabel(goal, floorRoot.transform);
                 }
             }
 
@@ -367,7 +374,7 @@ namespace MagicExamHall
                 if (goal.MatchesBase(family, center))
                 {
                     ActivateGoal(goal, SpellLabels.English(family));
-                    return new GoalEffect($"{goal.discoveryNote}", goal.id);
+                    return new GoalEffect(BuildGoalDiscoveryNote(goal), goal.id);
                 }
             }
 
@@ -381,7 +388,7 @@ namespace MagicExamHall
                 if (goal.MatchesOverlay(seal, op, center))
                 {
                     ActivateGoal(goal, SpellLabels.English(op));
-                    return new GoalEffect($"{goal.discoveryNote}", goal.id);
+                    return new GoalEffect(BuildGoalDiscoveryNote(goal), goal.id);
                 }
             }
 
@@ -464,6 +471,12 @@ namespace MagicExamHall
             if (goal.body != null)
             {
                 goal.body.transform.localScale *= 1.15f;
+            }
+            if (goal.label != null)
+            {
+                goal.label.text = $"완료: {goal.title}";
+                goal.label.color = Color.Lerp(goal.color, Color.white, 0.6f);
+                goal.label.fontStyle = FontStyle.Bold;
             }
             endingReport.RecordDiscovery(goal.id, effect);
             pulses.Add(new ParticlePulse(goal.position, goal.color));
@@ -630,11 +643,59 @@ namespace MagicExamHall
             }
 
             hudTitle.text = $"층 {floor.number}: {floor.title}";
-            hudCopy.text = $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요.";
             var completed = activeGoals.Count(goal => goal.completed);
-            floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   seal {seals.Count}";
+            if (IsFinalFloor)
+            {
+                hudCopy.text = $"{floor.objective}\n남은 요구: {BuildRemainingFinalGoalSummary()}";
+                floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   다음 {BuildNextFinalGoalShortLabel()}";
+            }
+            else
+            {
+                hudCopy.text = $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요.";
+                floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   seal {seals.Count}";
+            }
             notePanel.gameObject.SetActive(magicNote.Visible);
             noteText.text = magicNote.Text;
+        }
+
+        private string BuildGoalDiscoveryNote(WorldStateGoal goal)
+        {
+            if (!IsFinalFloor)
+            {
+                return goal.discoveryNote;
+            }
+
+            return $"{goal.discoveryNote}\n{BuildNextFinalGoalHint()}";
+        }
+
+        private string BuildRemainingFinalGoalSummary()
+        {
+            var remaining = activeGoals.Where(goal => !goal.completed).ToList();
+            if (remaining.Count == 0)
+            {
+                return "모든 요구치 완료";
+            }
+
+            var shown = remaining.Take(2).Select(goal => $"{goal.title}({goal.RequirementLabel})");
+            var suffix = remaining.Count > 2 ? $" 외 {remaining.Count - 2}" : "";
+            return string.Join(" / ", shown) + suffix;
+        }
+
+        private string BuildNextFinalGoalHint()
+        {
+            var next = activeGoals.FirstOrDefault(goal => !goal.completed);
+            if (next == null)
+            {
+                return "다음 목표: 모든 요구치가 채워졌습니다.";
+            }
+
+            return $"다음 목표: {next.title} - {next.RequirementLabel}을 목표 표식 근처에서 완성하세요.";
+        }
+
+        private string BuildNextFinalGoalShortLabel()
+        {
+            var next = activeGoals.FirstOrDefault(goal => !goal.completed);
+            return next == null ? "완료" : $"{next.title}({next.RequirementLabel})";
         }
 
         private void ShowEndingReport()
@@ -795,6 +856,28 @@ namespace MagicExamHall
             pixelSprite.tiledSize = tiledSize == default ? Vector2.one : tiledSize;
             pixelSprite.Apply();
             return body;
+        }
+
+        private Text CreateGoalLabel(WorldStateGoal goal, Transform parent)
+        {
+            var canvasObject = new GameObject($"{goal.title} Goal Label");
+            canvasObject.transform.SetParent(parent, false);
+            canvasObject.transform.position = goal.position + new Vector2(0f, -0.86f);
+            var worldCanvas = canvasObject.AddComponent<Canvas>();
+            worldCanvas.renderMode = RenderMode.WorldSpace;
+            worldCanvas.overrideSorting = true;
+            worldCanvas.sortingOrder = 42;
+            var rect = canvasObject.GetComponent<RectTransform>() ?? canvasObject.AddComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(3.4f, 0.72f);
+            canvasObject.transform.localScale = Vector3.one * 0.018f;
+
+            var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, rect.sizeDelta, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, 0.82f));
+            background.raycastTarget = false;
+            var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 22, FontStyle.Bold, Vector2.zero, rect.sizeDelta, Anchor.Center);
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.Lerp(goal.color, Color.white, 0.28f);
+            text.raycastTarget = false;
+            return text;
         }
 
         private Image CreateImage(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
@@ -1231,6 +1314,7 @@ namespace MagicExamHall
         public float visualScale = 1f;
         public GameObject body;
         public SpriteRenderer renderer;
+        public Text label;
 
         private WorldStateGoal(string id, string title, Vector2 position, Color color, PixelSpriteKind kind, string discoveryNote)
         {
@@ -1271,6 +1355,31 @@ namespace MagicExamHall
                 visualScale = 0.85f
             };
         }
+
+        public string RequirementLabel
+        {
+            get
+            {
+                if (comboBase.HasValue && comboOverlay.HasValue)
+                {
+                    return $"{SpellLabels.Korean(comboBase.Value)} + {SpellLabels.Korean(comboOverlay.Value)}";
+                }
+
+                if (requiredBase.HasValue)
+                {
+                    return SpellLabels.Korean(requiredBase.Value);
+                }
+
+                if (requiredOverlay.HasValue)
+                {
+                    return SpellLabels.Korean(requiredOverlay.Value);
+                }
+
+                return "관찰";
+            }
+        }
+
+        public string OpenLabel => $"{title}\n{RequirementLabel}";
 
         public bool MatchesBase(SpellFamily family, Vector2 center)
         {

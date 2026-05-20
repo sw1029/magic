@@ -14,6 +14,14 @@ The scene contains a top-down exam tower room, player, world-space casting input
 Magic Exam Hall/Rebuild Demo Scene
 ```
 
+To create a Windows player from the editor, use:
+
+```text
+Magic Exam Hall/Build Windows Player
+```
+
+The default output is `unity/MagicExamHall/Builds/MagicExamHall.exe`.
+
 ## Controls
 
 - Move: WASD or arrow keys
@@ -63,6 +71,7 @@ EditMode tests cover base recognition, overlay recognition, `martial_axis` depen
 
 ```powershell
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallSceneBuilder.BuildAll
+& 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallBuildPipeline.BuildWindowsPlayer -magicExamHallBuildPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\Builds\MagicExamHall.exe' -logFile 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\unity-build.log'
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform editmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\TestResults.xml'
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform playmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\PlayModeTestResults.xml'
 ```

@@ -14,12 +14,20 @@ The scene contains a top-down exam tower room, player, world-space casting input
 Magic Exam Hall/Rebuild Demo Scene
 ```
 
+To create a Windows player from the editor, use:
+
+```text
+Magic Exam Hall/Build Windows Player
+```
+
+The default output is `unity/MagicExamHall/Builds/MagicExamHall.exe`.
+
 ## Controls
 
 - Move: WASD or arrow keys
 - Draw spell: hold right mouse button on the map floor
 - Cast: release right mouse button
-- Multi-stroke input: start the next stroke within 0.8 seconds
+- Multi-stroke input: start the next stroke within about 1 second
 
 There is no default drawing panel, cast button, or station modal in the playable flow.
 
@@ -38,6 +46,7 @@ The first implementation is thin but complete: start on floor 1, climb through a
 - Base families: fire, water, wind, earth, life
 - Overlay operators: steel_brace, electric_fork, ice_bar, soul_dot, void_cut, martial_axis
 - `martial_axis` requires `void_cut` to already be attached to the same seal.
+- Overlay and combo goals only react when the attached seal or overlay stroke is near the target object.
 - Failed recognition creates a weak ripple and a short magic-note hint instead of health loss or death.
 
 ## Logs
@@ -63,9 +72,13 @@ EditMode tests cover base recognition, overlay recognition, `martial_axis` depen
 
 ```powershell
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallSceneBuilder.BuildAll
+& 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallBuildPipeline.BuildWindowsPlayer -magicExamHallBuildPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\Builds\MagicExamHall.exe' -logFile 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\unity-build.log'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-magic-exam-hall-player.ps1 -BuildPath 'unity/MagicExamHall/Builds/MagicExamHall.exe' -LogPath 'unity/MagicExamHall/player-smoke.log'
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform editmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\TestResults.xml'
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform playmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\PlayModeTestResults.xml'
 ```
+
+The player smoke script starts the generated Windows build headlessly, waits for the scene startup log markers, and fails if the player exits early or logs a fatal startup pattern. Manual release QA should still confirm WASD movement and right-mouse world drawing in the visible player.
 
 ## Troubleshooting
 

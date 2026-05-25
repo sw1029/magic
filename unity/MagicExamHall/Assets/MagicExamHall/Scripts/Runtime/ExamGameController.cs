@@ -95,10 +95,10 @@ namespace MagicExamHall
             return ProcessBase(strokes, worldCenter, strokes.Count).baseResult;
         }
 
-        public OverlayRecognitionResult CastSyntheticOverlayForTests(OverlayOperator op, Vector2 worldCenter)
+        public OverlayRecognitionResult CastSyntheticOverlayForTests(OverlayOperator op, Vector2 worldCenter, float sealScaleRatio = 0.24f)
         {
             var nearestSeal = FindAttachableSeal(worldCenter);
-            var scale = nearestSeal == null ? 0.48f : nearestSeal.seal.worldScale * 0.24f;
+            var scale = nearestSeal == null ? 0.48f : nearestSeal.seal.worldScale * sealScaleRatio;
             var strokes = OverlayRecognizer.CreateCanonicalSamples(op, worldCenter, scale, 0.03f);
             return ProcessSpellGroup(strokes, worldCenter, strokes.Count).overlayResult;
         }
@@ -267,6 +267,12 @@ namespace MagicExamHall
                 return ProcessOverlay(strokes, center, strokeCount, nearestSeal);
             }
 
+            var detachedOverlay = FindDetachedOverlayCandidate(strokes, center);
+            if (detachedOverlay != null)
+            {
+                return ProcessDetachedOverlay(center, strokeCount, detachedOverlay);
+            }
+
             return ProcessBase(strokes, center, strokeCount);
         }
 
@@ -349,12 +355,54 @@ namespace MagicExamHall
             return new ProcessedSpell { overlayResult = result };
         }
 
+        private ProcessedSpell ProcessDetachedOverlay(
+            Vector2 center,
+            int strokeCount,
+            DetachedOverlayCandidate candidate)
+        {
+            var result = candidate.result;
+            result.status = RecognitionStatus.Invalid;
+            result.feedbackReason = BuildDetachedOverlayReason(result, candidate.sealView.seal, center);
+            CurrentAssistLevel = 1;
+            LastHintText = DetachedOverlayActionHint(candidate.sealView.seal);
+            magicNote.Show(BuildDetachedOverlayFailureNote(result, candidate.sealView.seal));
+            pulses.Add(new ParticlePulse(center, new Color(0.75f, 0.75f, 0.82f), weak: true));
+            LogOverlayAttempt(result, candidate.sealView.seal, center, strokeCount, "detached_overlay");
+            return new ProcessedSpell { overlayResult = result };
+        }
+
         private SealView FindAttachableSeal(Vector2 center)
         {
             return seals
                 .Where(seal => Time.time <= seal.seal.expiresAt)
                 .OrderBy(seal => Vector2.Distance(center, seal.seal.worldCenter))
                 .FirstOrDefault(seal => Vector2.Distance(center, seal.seal.worldCenter) <= Mathf.Max(1.35f, seal.seal.worldScale * 0.95f));
+        }
+
+        private DetachedOverlayCandidate FindDetachedOverlayCandidate(List<List<StrokeSample>> strokes, Vector2 center)
+        {
+            var nearestSeal = seals
+                .Where(seal => Time.time <= seal.seal.expiresAt)
+                .OrderBy(seal => Vector2.Distance(center, seal.seal.worldCenter))
+                .FirstOrDefault();
+            if (nearestSeal == null)
+            {
+                return null;
+            }
+
+            var basePreview = SpellRuntime.RecognizeBase(strokes);
+            if (basePreview.spell.status == RecognitionStatus.Recognized && basePreview.spell.recognizedFamily.HasValue)
+            {
+                return null;
+            }
+
+            var result = OverlayRecognizer.Recognize(strokes, nearestSeal.seal);
+            if (result.success || result.recognizedOperator.HasValue || result.score >= 0.48f || result.shapeConfidence >= 0.55f)
+            {
+                return new DetachedOverlayCandidate(nearestSeal, result);
+            }
+
+            return null;
         }
 
         private GoalEffect ApplyBaseToGoals(SpellFamily family, Vector2 center)
@@ -414,27 +462,47 @@ namespace MagicExamHall
 
         private static string BuildOverlaySuccessNote(CompiledSeal seal, OverlayOperator op, GoalEffect effect)
         {
-            return $"{SpellLabels.Korean(op)} 장식 성공. {seal.Label}\n{effect.note}";
+            return $"{SpellLabels.Korean(op)} 장식이 seal 가장자리에 붙었습니다.\n현재 seal: {seal.Label}\n{effect.note}";
+        }
+
+        private static string BuildDetachedOverlayFailureNote(OverlayRecognitionResult result, CompiledSeal seal)
+        {
+            return
+                "노트: 장식이 seal에 안정적으로 붙지 않았습니다.\n" +
+                $"{result.feedbackReason}\n" +
+                $"다음: {DetachedOverlayActionHint(seal)}";
         }
 
         private static string OverlayActionHint(OverlayRecognitionResult result, CompiledSeal seal)
         {
             if (result.recognizedOperator == OverlayOperator.MartialAxis && !seal.overlayStack.Contains(OverlayOperator.VoidCut))
             {
-                return "먼저 같은 seal에 대각선 절단(void_cut)을 붙인 뒤, 중심을 가르는 축을 다시 그리세요.";
+                return "먼저 같은 seal에 대각선 절단 장식을 붙인 뒤, 중심을 가르는 축을 다시 그리세요.";
             }
 
-            if (result.scaleRatio > 0f && result.scaleRatio < 0.10f)
+            if (result.scaleHint == OverlayScaleHint.TooSmall)
             {
                 return "장식이 너무 작습니다. seal 중심을 기준으로 조금 더 크게 그려 보세요.";
             }
 
-            if (result.scaleRatio > 0.64f)
+            if (result.scaleHint == OverlayScaleHint.TooLarge)
             {
                 return "장식이 너무 큽니다. seal 안쪽에 들어오도록 작게 줄여 보세요.";
             }
 
             return AnchorHint(result.anchorZone);
+        }
+
+        private static string BuildDetachedOverlayReason(OverlayRecognitionResult result, CompiledSeal seal, Vector2 center)
+        {
+            var operatorName = result.recognizedOperator.HasValue ? SpellLabels.Korean(result.recognizedOperator.Value) : "장식";
+            var distance = Vector2.Distance(center, seal.worldCenter);
+            return $"{operatorName} 모양은 보였지만 seal에서 너무 멀어 붙지 않았습니다. 현재 거리 {distance:0.0}, seal 중심 가까이에서 다시 그리세요.";
+        }
+
+        private static string DetachedOverlayActionHint(CompiledSeal seal)
+        {
+            return $"{SpellLabels.Korean(seal.baseFamily)} seal의 빛나는 원 안쪽이나 가장자리 바로 옆에 장식을 다시 그리세요.";
         }
 
         private static string AnchorHint(string anchorZone)
@@ -871,6 +939,18 @@ namespace MagicExamHall
         {
             public BaseRecognitionResult baseResult = null;
             public OverlayRecognitionResult overlayResult = null;
+        }
+
+        private sealed class DetachedOverlayCandidate
+        {
+            public readonly SealView sealView;
+            public readonly OverlayRecognitionResult result;
+
+            public DetachedOverlayCandidate(SealView sealView, OverlayRecognitionResult result)
+            {
+                this.sealView = sealView;
+                this.result = result;
+            }
         }
 
         private sealed class ParticlePulse

@@ -248,7 +248,7 @@ namespace MagicExamHall.Tests
             var attemptsCsv = System.IO.File.ReadAllText(System.IO.Path.Combine(logger.OutputDirectory, "attempts.csv"));
             Assert.That(attemptsCsv, Does.Contain("phase,baseFamily,overlayStack,sealId,floorId,targetObject,worldEffect"));
             Assert.That(attemptsCsv, Does.Contain("hintShown,assistLevel,assisted"));
-            Assert.That(attemptsCsv, Does.Contain("true,2,true"));
+            AssertLastAttemptCsvFields(logger, success: true, hintShown: true, assistLevel: 2, assisted: true);
         }
 
         [Test]
@@ -290,6 +290,73 @@ namespace MagicExamHall.Tests
             Assert.That(strong.body, Does.Not.Contain("Invalid"));
         }
 
+        [TestCase(0, AssistLevel.ReasonHint, false)]
+        [TestCase(1, AssistLevel.Checklist, true)]
+        [TestCase(2, AssistLevel.GhostTrace, true)]
+        [TestCase(7, AssistLevel.GhostTrace, true)]
+        public void FailureEscalationStateCarriesStableMetadata(int priorFailures, AssistLevel expectedLevel, bool expectedAssisted)
+        {
+            var failedResult = GestureRecognizer.Recognize(new List<List<StrokeSample>>(), SpellFamily.Wind);
+            var state = HintAssistance.ForAttempt(SpellFamily.Wind, priorFailures, false, failedResult);
+
+            Assert.That(state.family, Is.EqualTo(SpellFamily.Wind));
+            Assert.That(state.failureCount, Is.EqualTo(priorFailures));
+            Assert.That(state.currentLevel, Is.EqualTo(expectedLevel));
+            Assert.That(state.AssistLevelNumber, Is.EqualTo((int)expectedLevel));
+            Assert.That(state.hintShown, Is.True);
+            Assert.That(state.assisted, Is.EqualTo(expectedAssisted));
+            Assert.That(state.body, Is.Not.Empty);
+
+            if (expectedLevel == AssistLevel.ReasonHint)
+            {
+                Assert.That(state.body, Is.EqualTo(failedResult.nextHint));
+            }
+            else if (expectedLevel == AssistLevel.Checklist)
+            {
+                foreach (var checklistItem in HintAssistance.ChecklistFor(SpellFamily.Wind))
+                {
+                    Assert.That(state.body, Does.Contain(checklistItem));
+                }
+            }
+            else
+            {
+                Assert.That(state.body, Is.Not.EqualTo(failedResult.nextHint));
+                Assert.That(state.body, Does.Not.Contain(" · "));
+            }
+        }
+
+        [TestCase(0, AssistLevel.None, false, false)]
+        [TestCase(1, AssistLevel.ReasonHint, true, true)]
+        [TestCase(2, AssistLevel.Checklist, true, true)]
+        [TestCase(5, AssistLevel.GhostTrace, true, true)]
+        public void SuccessAssistStateReflectsPriorFailures(int priorFailures, AssistLevel expectedLevel, bool expectedHintShown, bool expectedAssisted)
+        {
+            var successfulResult = GestureRecognizer.Recognize(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Life), SpellFamily.Life);
+            var state = HintAssistance.ForAttempt(SpellFamily.Life, priorFailures, true, successfulResult);
+
+            Assert.That(state.currentLevel, Is.EqualTo(expectedLevel));
+            Assert.That(state.hintShown, Is.EqualTo(expectedHintShown));
+            Assert.That(state.assisted, Is.EqualTo(expectedAssisted));
+            Assert.That(state.failureCount, Is.EqualTo(priorFailures));
+            Assert.That(state.body, Is.Not.Empty);
+        }
+
+        [Test]
+        public void ReasonHintFallsBackWhenRecognitionHintIsMissing()
+        {
+            var resultWithoutHint = new SpellResult
+            {
+                status = RecognitionStatus.Invalid,
+                targetFamily = SpellFamily.Earth,
+                nextHint = ""
+            };
+
+            var state = HintAssistance.ForAttempt(SpellFamily.Earth, 0, false, resultWithoutHint);
+
+            Assert.That(state.currentLevel, Is.EqualTo(AssistLevel.ReasonHint));
+            Assert.That(state.body, Does.Contain("사다리꼴"));
+        }
+
         [Test]
         public void SuccessAfterAssistIsLoggedAsAssisted()
         {
@@ -324,8 +391,7 @@ namespace MagicExamHall.Tests
                 assisted = hintState.assisted
             });
 
-            var attemptsCsv = System.IO.File.ReadAllText(System.IO.Path.Combine(logger.OutputDirectory, "attempts.csv"));
-            Assert.That(attemptsCsv, Does.Contain("true,2,true"));
+            AssertLastAttemptCsvFields(logger, success: true, hintShown: true, assistLevel: 2, assisted: true);
         }
 
         [Test]
@@ -367,6 +433,18 @@ namespace MagicExamHall.Tests
             return strokes
                 .Select(stroke => stroke.Select(sample => new StrokeSample(sample.position - Vector2.one * canonicalCenter + center, sample.time)).ToList())
                 .ToList();
+        }
+
+        private static void AssertLastAttemptCsvFields(ExamLogger logger, bool success, bool hintShown, int assistLevel, bool assisted)
+        {
+            var csvPath = System.IO.Path.Combine(logger.OutputDirectory, "attempts.csv");
+            var lastRow = System.IO.File.ReadAllLines(csvPath).Last();
+            var fields = lastRow.Split(',');
+
+            Assert.That(fields[^4], Is.EqualTo(success ? "true" : "false"));
+            Assert.That(fields[^3], Is.EqualTo(hintShown ? "true" : "false"));
+            Assert.That(fields[^2], Is.EqualTo(assistLevel.ToString()));
+            Assert.That(fields[^1], Is.EqualTo(assisted ? "true" : "false"));
         }
     }
 }

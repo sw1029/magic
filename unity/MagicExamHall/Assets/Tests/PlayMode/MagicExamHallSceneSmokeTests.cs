@@ -28,7 +28,10 @@ namespace MagicExamHall.Tests
             Assert.That(controller.ActiveGoalCount, Is.EqualTo(5));
             Assert.That(Object.FindFirstObjectByType<Canvas>(), Is.Not.Null);
             Assert.That(Object.FindFirstObjectByType<EventSystem>(), Is.Not.Null);
-            Assert.That(Object.FindFirstObjectByType<WorldDrawingController>(), Is.Not.Null);
+            var drawing = Object.FindFirstObjectByType<WorldDrawingController>();
+            Assert.That(drawing, Is.Not.Null);
+            Assert.That(drawing.bufferSeconds, Is.EqualTo(WorldDrawingController.DefaultBufferSeconds).Within(0.001f));
+            Assert.That(drawing.minPointDistance, Is.EqualTo(WorldDrawingController.DefaultMinPointDistance).Within(0.001f));
             Assert.That(controller.OutputDirectory, Does.Contain("MagicExamHallLogs"));
         }
 
@@ -48,6 +51,7 @@ namespace MagicExamHall.Tests
             Assert.That(result.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Fire));
             Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
+            Assert.That(controller.LastSealLifetimeSecondsForTests, Is.EqualTo(SpellRuntime.DefaultSealDurationSeconds).Within(0.001f));
             Assert.That(controller.IsDrawingPanelVisible, Is.False);
             Assert.That(controller.IsResultPanelVisible, Is.False);
         }
@@ -69,6 +73,43 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.VoidCut), Is.True);
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.MartialAxis), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator OverlayAndComboGoalsRequireNearbyWorldCasting()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(1);
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, Vector2.zero);
+            var offTargetOverlay = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, Vector2.zero);
+            yield return null;
+            Assert.That(offTargetOverlay.success, Is.True);
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-0.65f, 3.0f));
+            var onTargetOverlay = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, new Vector2(-0.65f, 3.0f));
+            yield return null;
+            Assert.That(onTargetOverlay.success, Is.True);
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+
+            controller.LoadFloorForTests(2);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            var offTargetCombo = controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, Vector2.zero);
+            yield return null;
+            Assert.That(offTargetCombo.success, Is.True);
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, new Vector2(-4.6f, 1.8f));
+            var onTargetCombo = controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, new Vector2(-4.6f, 1.8f));
+            yield return null;
+            Assert.That(onTargetCombo.success, Is.True);
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
         }
 
         [UnityTest]
@@ -117,6 +158,44 @@ namespace MagicExamHall.Tests
             Assert.That(controller.CurrentAssistLevel, Is.EqualTo(2));
             Assert.That(controller.LastMagicNoteText, Does.Contain("이전 힌트"));
             Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator SameComboReadsAsBridgeOnFloorThreeAndStabilizerOnFloorFour()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(2);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, Vector2.zero);
+            yield return null;
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
+
+            var bridgePosition = new Vector2(-4.6f, 1.8f);
+            controller.LoadFloorForTests(2);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, bridgePosition);
+            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, bridgePosition);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(3));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("공중 다리"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("흐름"));
+
+            var stabilizerPosition = new Vector2(-5.2f, 2.4f);
+            controller.LoadFloorForTests(3);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, stabilizerPosition);
+            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, stabilizerPosition);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(4));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("균열"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("안전 지점"));
+            Assert.That(Vector2.Distance(controller.SafePositionForTests, stabilizerPosition), Is.LessThan(0.01f));
         }
 
         [UnityTest]

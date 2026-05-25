@@ -161,6 +161,44 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator SameComboReadsAsBridgeOnFloorThreeAndStabilizerOnFloorFour()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(2);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, Vector2.zero);
+            yield return null;
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
+
+            var bridgePosition = new Vector2(-4.6f, 1.8f);
+            controller.LoadFloorForTests(2);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, bridgePosition);
+            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, bridgePosition);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(3));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("공중 다리"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("흐름"));
+
+            var stabilizerPosition = new Vector2(-5.2f, 2.4f);
+            controller.LoadFloorForTests(3);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, stabilizerPosition);
+            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, stabilizerPosition);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(4));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("균열"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("안전 지점"));
+            Assert.That(Vector2.Distance(controller.SafePositionForTests, stabilizerPosition), Is.LessThan(0.01f));
+        }
+
+        [UnityTest]
         public IEnumerator FloorTransitionsHazardResetAndEndingReportWork()
         {
             SceneManager.LoadScene("MagicExamHall");

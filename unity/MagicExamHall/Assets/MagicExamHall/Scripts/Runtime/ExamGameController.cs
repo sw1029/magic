@@ -49,6 +49,7 @@ namespace MagicExamHall
         public int ActiveGoalCount => activeGoals.Count;
         public int CompletedGoalCountForTests => activeGoals.Count(goal => goal.completed);
         public Vector2 PlayerPosition => player == null ? Vector2.zero : player.position;
+        public Vector2 SafePositionForTests => safePosition;
         public bool HasEndingReport => reportPanel != null && reportPanel.gameObject.activeSelf;
         public bool IsDrawingPanelVisible => false;
         public bool IsResultPanelVisible => false;
@@ -462,8 +463,73 @@ namespace MagicExamHall
             {
                 goal.body.transform.localScale *= 1.15f;
             }
+            ApplyGoalReaction(goal);
             endingReport.RecordDiscovery(goal.id, effect);
             pulses.Add(new ParticlePulse(goal.position, goal.color));
+        }
+
+        private void ApplyGoalReaction(WorldStateGoal goal)
+        {
+            switch (goal.reactionKind)
+            {
+                case WorldReactionKind.BridgeFlow:
+                    CreateBridgeReaction(goal);
+                    break;
+                case WorldReactionKind.HazardStabilizer:
+                    StabilizeHazardReaction(goal);
+                    break;
+            }
+        }
+
+        private void CreateBridgeReaction(WorldStateGoal goal)
+        {
+            var direction = goal.position.sqrMagnitude < 0.01f ? Vector2.up : goal.position.normalized;
+            var midpoint = goal.position * 0.5f;
+            var span = CreateWorldSprite(
+                $"Flow Bridge {goal.id}",
+                midpoint,
+                new Vector3(0.42f, Mathf.Max(goal.position.magnitude, 1f), 1f),
+                new Color(0.10f, 0.36f, 0.46f),
+                Color.Lerp(goal.color, Color.white, 0.35f),
+                PixelSpriteKind.Rug,
+                -3);
+            span.transform.rotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.up, direction));
+            floorObjects.Add(span);
+
+            var node = CreateWorldSprite(
+                $"Flow Node {goal.id}",
+                goal.position,
+                Vector3.one * 0.72f,
+                Color.Lerp(goal.color, Color.white, 0.15f),
+                Color.white,
+                PixelSpriteKind.Pulse,
+                5);
+            floorObjects.Add(node);
+        }
+
+        private void StabilizeHazardReaction(WorldStateGoal goal)
+        {
+            safePosition = goal.position;
+            var orderedHazards = activeHazards
+                .OrderBy(hazard => Vector2.Distance(hazard.position, goal.position))
+                .ToList();
+
+            for (var index = 0; index < orderedHazards.Count; index++)
+            {
+                var hazard = orderedHazards[index];
+                hazard.Stabilize(index == 0 ? 0.74f : 0.90f);
+                pulses.Add(new ParticlePulse(hazard.position, Color.Lerp(hazard.color, goal.color, 0.35f), weak: index > 0));
+            }
+
+            var pin = CreateWorldSprite(
+                $"Stability Pin {goal.id}",
+                goal.position,
+                Vector3.one * 0.68f,
+                goal.color,
+                Color.white,
+                PixelSpriteKind.Target,
+                6);
+            floorObjects.Add(pin);
         }
 
         private void EvaluateFloorCompletion()
@@ -1080,34 +1146,34 @@ namespace MagicExamHall
                 {
                     number = 3,
                     title = "흐름층",
-                    objective = "base + overlay 조합으로 끊어진 공중 다리의 네 경로를 연결하세요.",
-                    entryNote = "노트: 길은 하나가 아니다. 같은 목표도 여러 문법으로 이어진다.",
-                    completeNote = "다리 조각들이 이어져 발밑에 경로가 생겼습니다.",
+                    objective = "base + overlay 조합으로 끊어진 공중 다리의 네 흐름 경로를 연결하세요.",
+                    entryNote = "노트: 길은 하나가 아니다. 조합이 맞으면 흐름이 다리처럼 이어진다.",
+                    completeNote = "네 흐름 경로가 이어져 발밑에 공중 다리가 생겼습니다.",
                     accentColor = new Color(0.48f, 0.8f, 0.92f),
                     rugColor = new Color(0.12f, 0.34f, 0.42f),
                     goals =
                     {
-                        WorldStateGoal.Combo("brace_bridge", "보강 지지대", SpellFamily.Earth, OverlayOperator.SteelBrace, new Vector2(-4.6f, 1.8f), new Color(0.74f, 0.55f, 0.32f), "땅과 보강이 떠 있는 돌을 지지합니다."),
-                        WorldStateGoal.Combo("axis_bridge", "축 정렬 발판", SpellFamily.Wind, OverlayOperator.MartialAxis, new Vector2(4.6f, 1.8f), new Color(0.44f, 0.72f, 0.74f), "바람과 축이 발판의 방향을 맞춥니다."),
-                        WorldStateGoal.Combo("vine_bridge", "덩굴 고리", SpellFamily.Life, OverlayOperator.SoulDot, new Vector2(-3.2f, -2.3f), new Color(0.35f, 0.86f, 0.42f), "생명과 집중이 고리 모양 덩굴을 키웁니다."),
-                        WorldStateGoal.Combo("ice_bridge", "얼음 다리", SpellFamily.Water, OverlayOperator.IceBar, new Vector2(3.2f, -2.3f), new Color(0.48f, 0.84f, 1f), "물과 얼음이 잠깐 딛고 설 길을 만듭니다.")
+                        WorldStateGoal.Combo("brace_bridge", "보강 지지대", SpellFamily.Earth, OverlayOperator.SteelBrace, new Vector2(-4.6f, 1.8f), new Color(0.74f, 0.55f, 0.32f), "땅과 보강이 공중 다리의 첫 흐름을 받쳐 줍니다.").WithReaction(WorldReactionKind.BridgeFlow),
+                        WorldStateGoal.Combo("axis_bridge", "축 정렬 발판", SpellFamily.Wind, OverlayOperator.MartialAxis, new Vector2(4.6f, 1.8f), new Color(0.44f, 0.72f, 0.74f), "바람과 축이 공중 다리의 방향을 맞추며 경로를 엽니다.").WithReaction(WorldReactionKind.BridgeFlow),
+                        WorldStateGoal.Combo("vine_bridge", "덩굴 고리", SpellFamily.Life, OverlayOperator.SoulDot, new Vector2(-3.2f, -2.3f), new Color(0.35f, 0.86f, 0.42f), "생명과 집중이 다리 아래를 묶는 흐름 고리를 만듭니다.").WithReaction(WorldReactionKind.BridgeFlow),
+                        WorldStateGoal.Combo("ice_bridge", "얼음 다리", SpellFamily.Water, OverlayOperator.IceBar, new Vector2(3.2f, -2.3f), new Color(0.48f, 0.84f, 1f), "물과 얼음이 빛나는 발판을 굳혀 공중 다리를 완성합니다.").WithReaction(WorldReactionKind.BridgeFlow)
                     }
                 },
                 new()
                 {
                     number = 4,
                     title = "균열층",
-                    objective = "위험한 균열을 피해 룬 폭주를 안정화하세요.",
-                    entryNote = "노트: 실패는 떨어지는 것이 아니라, 안전한 자리에서 다시 보는 일이다.",
-                    completeNote = "균열의 박동이 잦아들고 통로가 안정됩니다.",
+                    objective = "위험한 균열을 피해 폭주 지점을 하나씩 고정하고 안전 지점을 늘리세요.",
+                    entryNote = "노트: 같은 조합도 여기서는 길을 잇지 않고 균열을 붙잡는다.",
+                    completeNote = "균열의 박동이 잦아들고 안전 지점들이 통로를 붙잡습니다.",
                     accentColor = new Color(1f, 0.42f, 0.28f),
                     rugColor = new Color(0.42f, 0.10f, 0.16f),
                     goals =
                     {
-                        WorldStateGoal.Base("earth_stable", "흔들림 고정", SpellFamily.Earth, new Vector2(-5.2f, 2.4f), new Color(0.74f, 0.55f, 0.32f), "땅의 주문이 균열의 가장자리를 붙잡습니다."),
-                        WorldStateGoal.Overlay("ice_still", "냉각 정지", OverlayOperator.IceBar, new Vector2(-1.7f, 2.9f), new Color(0.48f, 0.84f, 1f), "얼음 막대가 폭주의 열을 낮춥니다."),
-                        WorldStateGoal.Overlay("void_split", "오염 분리", OverlayOperator.VoidCut, new Vector2(1.8f, 2.9f), new Color(0.58f, 0.42f, 0.92f), "절단이 위험한 흐름을 끊어 냅니다."),
-                        WorldStateGoal.Overlay("fork_ground", "전도 분산", OverlayOperator.ElectricFork, new Vector2(5.2f, 2.4f), new Color(1f, 0.9f, 0.22f), "번개 갈래가 남은 전하를 흩습니다.")
+                        WorldStateGoal.Combo("earth_stable", "흔들림 고정", SpellFamily.Earth, OverlayOperator.SteelBrace, new Vector2(-5.2f, 2.4f), new Color(0.74f, 0.55f, 0.32f), "땅과 보강이 이번에는 공중 다리가 아니라 균열 가장자리를 고정합니다. 새 안전 지점이 생깁니다.").WithReaction(WorldReactionKind.HazardStabilizer),
+                        WorldStateGoal.Overlay("ice_still", "냉각 정지", OverlayOperator.IceBar, new Vector2(-1.7f, 2.9f), new Color(0.48f, 0.84f, 1f), "얼음 막대가 폭주의 열을 낮추고 가까운 균열 반경을 줄입니다.").WithReaction(WorldReactionKind.HazardStabilizer),
+                        WorldStateGoal.Overlay("void_split", "오염 분리", OverlayOperator.VoidCut, new Vector2(1.8f, 2.9f), new Color(0.58f, 0.42f, 0.92f), "절단이 위험한 흐름을 끊어 내며 재시작 위치를 앞으로 당깁니다.").WithReaction(WorldReactionKind.HazardStabilizer),
+                        WorldStateGoal.Overlay("fork_ground", "전도 분산", OverlayOperator.ElectricFork, new Vector2(5.2f, 2.4f), new Color(1f, 0.9f, 0.22f), "번개 갈래가 남은 전하를 흩고 균열의 위협을 더 작게 만듭니다.").WithReaction(WorldReactionKind.HazardStabilizer)
                     },
                     hazards =
                     {
@@ -1154,6 +1220,7 @@ namespace MagicExamHall
         public SpellFamily? comboBase;
         public OverlayOperator? comboOverlay;
         public string discoveryNote;
+        public WorldReactionKind reactionKind;
         public bool completed;
         public float radius = 2.15f;
         public float visualScale = 1f;
@@ -1200,6 +1267,12 @@ namespace MagicExamHall
             };
         }
 
+        public WorldStateGoal WithReaction(WorldReactionKind reactionKind)
+        {
+            this.reactionKind = reactionKind;
+            return this;
+        }
+
         public bool MatchesBase(SpellFamily family, Vector2 center)
         {
             return requiredBase == family && Vector2.Distance(center, position) <= radius;
@@ -1234,10 +1307,18 @@ namespace MagicExamHall
                 requiredOverlay = requiredOverlay,
                 comboBase = comboBase,
                 comboOverlay = comboOverlay,
+                reactionKind = reactionKind,
                 radius = radius,
                 visualScale = visualScale
             };
         }
+    }
+
+    public enum WorldReactionKind
+    {
+        None,
+        BridgeFlow,
+        HazardStabilizer
     }
 
     public sealed class HazardZone
@@ -1259,6 +1340,22 @@ namespace MagicExamHall
         public HazardZone Clone()
         {
             return new HazardZone(title, position, radius, color);
+        }
+
+        public void Stabilize(float radiusMultiplier)
+        {
+            radius = Mathf.Max(0.58f, radius * radiusMultiplier);
+            color = Color.Lerp(color, new Color(0.46f, 0.30f, 0.28f), 0.32f);
+            if (body == null)
+            {
+                return;
+            }
+
+            var renderer = body.GetComponent<SpriteRenderer>();
+            if (renderer != null)
+            {
+                renderer.color = new Color(1f, 1f, 1f, 0.68f);
+            }
         }
 
         public void Tick(float time)

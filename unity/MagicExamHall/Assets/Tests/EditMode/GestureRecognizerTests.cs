@@ -96,7 +96,8 @@ namespace MagicExamHall.Tests
 
             Assert.That(result.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.success, Is.False);
-            Assert.That(result.feedbackReason, Does.Contain("미완성").Or.Contain("닫힌"));
+            Assert.That(result.feedbackReason, Does.Contain("불꽃").And.Contain("틈"));
+            Assert.That(result.nextHint, Does.Contain("마지막 선").And.Contain("삼각형"));
         }
 
         [Test]
@@ -112,6 +113,81 @@ namespace MagicExamHall.Tests
 
             Assert.That(result.status, Is.EqualTo(RecognitionStatus.Incomplete).Or.EqualTo(RecognitionStatus.Ambiguous));
             Assert.That(result.success, Is.False);
+            Assert.That(result.feedbackReason, Does.Contain("3획").And.Contain("위, 가운데, 아래"));
+            Assert.That(result.nextHint, Does.Contain("세 번").And.Contain("평행선"));
+        }
+
+        [Test]
+        public void UnevenWindLinesExplainSpacing()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeLine(70, 120, 390, 118, 0f),
+                MakeLine(70, 150, 390, 148, 0.2f),
+                MakeLine(70, 330, 390, 328, 0.4f)
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Wind);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.feedbackReason, Does.Contain("간격"));
+            Assert.That(result.nextHint, Does.Contain("간격").And.Contain("비슷"));
+        }
+
+        [Test]
+        public void ExtraWindStrokeRemainsIncompleteWithActionHint()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeLine(70, 120, 390, 118, 0f),
+                MakeLine(70, 190, 390, 188, 0.2f),
+                MakeLine(70, 260, 390, 258, 0.4f),
+                MakeLine(70, 330, 390, 328, 0.6f)
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Wind);
+
+            Assert.That(result.status, Is.EqualTo(RecognitionStatus.Incomplete));
+            Assert.That(result.success, Is.False);
+            Assert.That(result.feedbackReason, Does.Contain("세 줄").And.Contain("획이 많"));
+            Assert.That(result.nextHint, Does.Contain("추가 선").And.Contain("3획"));
+        }
+
+        [Test]
+        public void LifeFailureDistinguishesStemAndBranches()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeLine(220, 80, 220, 360, 0f)
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Life);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.feedbackReason, Does.Contain("줄기").And.Contain("가지"));
+            Assert.That(result.nextHint, Does.Contain("가운데 줄기").And.Contain("왼쪽 가지").And.Contain("오른쪽 가지"));
+        }
+
+        [Test]
+        public void SuccessfulLifeKeepsPositiveNextHint()
+        {
+            var result = GestureRecognizer.Recognize(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Life), SpellFamily.Life);
+
+            Assert.That(result.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.success, Is.True);
+            Assert.That(result.nextHint, Does.Contain("좋습니다"));
+            Assert.That(result.nextHint, Does.Not.Contain("가지가 갈라지게"));
+        }
+
+        [Test]
+        public void EmptyBaseFailureUsesPlayerFacingCopy()
+        {
+            var result = GestureRecognizer.Recognize(new List<List<StrokeSample>>(), SpellFamily.Water);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.feedbackReason, Does.Contain("바닥").And.Contain("선"));
+            Assert.That(result.nextHint, Does.Contain("오른쪽 마우스"));
+            Assert.That(result.feedbackReason, Does.Not.Contain("No stroke"));
         }
 
         [Test]
@@ -189,6 +265,29 @@ namespace MagicExamHall.Tests
             Assert.That(secondFailure.currentLevel, Is.EqualTo(AssistLevel.Checklist));
             Assert.That(thirdFailure.currentLevel, Is.EqualTo(AssistLevel.GhostTrace));
             Assert.That(laterFailure.currentLevel, Is.EqualTo(AssistLevel.GhostTrace));
+        }
+
+        [TestCase(SpellFamily.Fire, "삼각형")]
+        [TestCase(SpellFamily.Water, "원")]
+        [TestCase(SpellFamily.Wind, "3획")]
+        [TestCase(SpellFamily.Earth, "사다리꼴")]
+        [TestCase(SpellFamily.Life, "가지")]
+        public void RepeatedFailureCopyEscalatesWithFamilySpecificActions(SpellFamily family, string expectedWord)
+        {
+            var failedResult = GestureRecognizer.Recognize(new List<List<StrokeSample>>(), family);
+
+            var checklist = HintAssistance.ForAttempt(family, 1, false, failedResult);
+            var strong = HintAssistance.ForAttempt(family, 2, false, failedResult);
+
+            Assert.That(checklist.body, Does.Contain(expectedWord));
+            Assert.That(strong.body, Does.Contain(expectedWord));
+            Assert.That(checklist.body, Is.Not.EqualTo(strong.body));
+            Assert.That(checklist.body, Does.Not.Contain("closure"));
+            Assert.That(checklist.body, Does.Not.Contain("Incomplete"));
+            Assert.That(checklist.body, Does.Not.Contain("Invalid"));
+            Assert.That(strong.body, Does.Not.Contain("closure"));
+            Assert.That(strong.body, Does.Not.Contain("Incomplete"));
+            Assert.That(strong.body, Does.Not.Contain("Invalid"));
         }
 
         [Test]

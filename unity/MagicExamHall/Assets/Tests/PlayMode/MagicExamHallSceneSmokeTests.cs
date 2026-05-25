@@ -263,6 +263,62 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator FinalFloorCompletionShowsFinalSealCelebrationBeforeReport()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(4);
+            yield return null;
+
+            controller.CompleteCurrentFloorForTests();
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(5));
+            Assert.That(controller.HasEndingReport, Is.False);
+            Assert.That(controller.LastMagicNoteText, Does.Contain("성좌심 완성"));
+            Assert.That(controller.ActivePulseCountForTests, Is.GreaterThan(controller.ActiveGoalCount));
+        }
+
+        [UnityTest]
+        public IEnumerator FinalFloorShowsRemainingGoalGuideAndNextHint()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(4);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(5));
+            Assert.That(controller.ActiveGoalCount, Is.EqualTo(6));
+            Assert.That(controller.HudCopyForTests, Does.Contain("남은 요구"));
+            Assert.That(controller.HudCopyForTests, Does.Contain("안정"));
+            Assert.That(controller.HudCopyForTests, Does.Contain("정화"));
+            Assert.That(controller.FloorProgressForTests, Does.Contain("다음 안정"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("다음 목표"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("땅 + 보강"));
+
+            var stabilityPosition = new Vector2(-4.8f, 2.6f);
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, stabilityPosition);
+            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, stabilityPosition);
+            yield return null;
+
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("다음 목표"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("정화"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("물"));
+            Assert.That(controller.FloorProgressForTests, Does.Contain("다음 정화"));
+        }
+
+        [UnityTest]
         public IEnumerator FloorTransitionsHazardResetAndEndingReportWork()
         {
             SceneManager.LoadScene("MagicExamHall");
@@ -290,6 +346,11 @@ namespace MagicExamHall.Tests
             }
 
             Assert.That(controller.HasEndingReport, Is.True);
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("입학 시험 완료"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("가장 많이 사용한 base"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("가장 많이 사용한 overlay"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("평균 문양 안정도"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("MagicExamHallLogs"));
         }
     }
 }

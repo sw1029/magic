@@ -19,7 +19,7 @@ Magic Exam Hall/Rebuild Demo Scene
 - Move: WASD or arrow keys
 - Draw spell: hold right mouse button on the map floor
 - Cast: release right mouse button
-- Multi-stroke input: start the next stroke within 0.8 seconds
+- Multi-stroke input: start the next stroke within about 1 second
 
 There is no default drawing panel, cast button, or station modal in the playable flow.
 
@@ -38,6 +38,7 @@ The first implementation is thin but complete: start on floor 1, climb through a
 - Base families: fire, water, wind, earth, life
 - Overlay operators: steel_brace, electric_fork, ice_bar, soul_dot, void_cut, martial_axis
 - `martial_axis` requires `void_cut` to already be attached to the same seal.
+- Overlay and combo goals only react when the attached seal or overlay stroke is near the target object.
 - Failed recognition creates a weak ripple and a short magic-note hint instead of health loss or death.
 
 ## Logs

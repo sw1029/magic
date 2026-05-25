@@ -47,6 +47,7 @@ namespace MagicExamHall
         public int FloorCount => floorController?.FloorCount ?? 5;
         public int ActiveSealCount => seals.Count;
         public int ActiveGoalCount => activeGoals.Count;
+        public int CompletedGoalCountForTests => activeGoals.Count(goal => goal.completed);
         public Vector2 PlayerPosition => player == null ? Vector2.zero : player.position;
         public bool HasEndingReport => reportPanel != null && reportPanel.gameObject.activeSelf;
         public bool IsDrawingPanelVisible => false;
@@ -55,6 +56,7 @@ namespace MagicExamHall
         public string LastHintText { get; private set; } = "";
         public string LastMagicNoteText => magicNote?.Text ?? "";
         public string OutputDirectory => logger?.OutputDirectory ?? "";
+        public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
 
         private void Awake()
@@ -184,6 +186,7 @@ namespace MagicExamHall
         {
             worldDrawing = gameObject.GetComponent<WorldDrawingController>() ?? gameObject.AddComponent<WorldDrawingController>();
             worldDrawing.mainCamera = mainCamera;
+            worldDrawing.ApplyPlayableDefaults();
             worldDrawing.SpellBuffered += OnSpellBuffered;
         }
 
@@ -1138,6 +1141,9 @@ namespace MagicExamHall
 
     public sealed class WorldStateGoal
     {
+        private const float OverlayGoalRadius = 1.45f;
+        private const float ComboGoalRadius = 2.05f;
+
         public string id;
         public string title;
         public Vector2 position;
@@ -1178,7 +1184,7 @@ namespace MagicExamHall
             return new WorldStateGoal(id, title, position, color, PixelSpriteKind.RuneCircle, note)
             {
                 requiredOverlay = op,
-                radius = 99f,
+                radius = OverlayGoalRadius,
                 visualScale = 0.75f
             };
         }
@@ -1189,7 +1195,7 @@ namespace MagicExamHall
             {
                 comboBase = family,
                 comboOverlay = op,
-                radius = 99f,
+                radius = ComboGoalRadius,
                 visualScale = 0.85f
             };
         }
@@ -1201,12 +1207,23 @@ namespace MagicExamHall
 
         public bool MatchesOverlay(CompiledSeal seal, OverlayOperator op, Vector2 center)
         {
+            if (!CastTouchedGoalArea(seal, center))
+            {
+                return false;
+            }
+
             if (requiredOverlay == op)
             {
                 return true;
             }
 
             return comboBase == seal.baseFamily && comboOverlay == op;
+        }
+
+        private bool CastTouchedGoalArea(CompiledSeal seal, Vector2 center)
+        {
+            return Vector2.Distance(center, position) <= radius ||
+                Vector2.Distance(seal.worldCenter, position) <= radius;
         }
 
         public WorldStateGoal Clone()

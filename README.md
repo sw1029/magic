@@ -66,6 +66,8 @@ unity/MagicExamHall
 
 조작은 WASD/방향키 이동, 우클릭 hold/release 월드 드로잉입니다. 기본 플레이에서는 별도 입력 패널이나 `마법 시전` 버튼을 사용하지 않습니다.
 
+제출 후보를 만들 때는 [Release Checklist](docs/RELEASE_CHECKLIST.md)를 따라 Web 검증, Unity 테스트, Windows 빌드, player smoke, 수동 5층 완주, 로그/개인정보 확인을 함께 점검합니다.
+
 ## 초기 검증 튜토리얼
 
 처음 받았을 때는 아래 순서로 확인하면 됩니다.

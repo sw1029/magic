@@ -13,6 +13,7 @@ namespace MagicExamHall
         [Header("Scene References")]
         public Camera mainCamera = null!;
         public Transform player = null!;
+        public Transform mentor = null!;
         public Canvas canvas = null!;
 
         private readonly List<SealView> seals = new();
@@ -29,10 +30,13 @@ namespace MagicExamHall
         private EndingReport endingReport = null!;
         private RectTransform hudPanel = null!;
         private RectTransform notePanel = null!;
+        private RectTransform guidePanel = null!;
         private RectTransform reportPanel = null!;
         private Text hudTitle = null!;
         private Text hudCopy = null!;
         private Text floorProgress = null!;
+        private Text guideName = null!;
+        private Text guideText = null!;
         private Text noteText = null!;
         private Text reportText = null!;
         private Font uiFont = null!;
@@ -59,6 +63,7 @@ namespace MagicExamHall
         public string LastMagicNoteText => magicNote?.Text ?? "";
         public string HudCopyForTests => hudCopy == null ? "" : hudCopy.text;
         public string FloorProgressForTests => floorProgress == null ? "" : floorProgress.text;
+        public string GuideDialogueForTests => guideText == null ? "" : guideText.text;
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
         public int ActivePulseCountForTests => pulses.Count;
         public string OutputDirectory => logger?.OutputDirectory ?? "";
@@ -150,10 +155,11 @@ namespace MagicExamHall
                 cameraObject.tag = "MainCamera";
                 cameraObject.transform.position = new Vector3(0f, 0f, -10f);
                 mainCamera = cameraObject.AddComponent<Camera>();
-                mainCamera.orthographic = true;
-                mainCamera.orthographicSize = 6.2f;
-                mainCamera.backgroundColor = new Color(0.06f, 0.08f, 0.11f);
             }
+
+            mainCamera.orthographic = true;
+            mainCamera.orthographicSize = 5f;
+            mainCamera.backgroundColor = new Color(0.06f, 0.08f, 0.11f);
 
             if (player == null)
             {
@@ -169,6 +175,25 @@ namespace MagicExamHall
                 player = playerObject.transform;
             }
 
+            if (mentor == null)
+            {
+                var mentorObject = GameObject.Find("Exam Mentor") ?? new GameObject("Exam Mentor");
+                mentorObject.transform.position = new Vector3(6.05f, -3.55f, 0f);
+                mentorObject.transform.localScale = Vector3.one * 0.84f;
+                if (mentorObject.GetComponent<SpriteRenderer>() == null)
+                {
+                    mentorObject.AddComponent<SpriteRenderer>();
+                }
+
+                var sprite = mentorObject.GetComponent<PixelSpriteView>() ?? mentorObject.AddComponent<PixelSpriteView>();
+                sprite.kind = PixelSpriteKind.Mentor;
+                sprite.primary = new Color(0.92f, 0.78f, 0.62f);
+                sprite.secondary = new Color(0.47f, 0.32f, 0.74f);
+                sprite.sortingOrder = 31;
+                sprite.Apply();
+                mentor = mentorObject.transform;
+            }
+
             if (canvas == null)
             {
                 var canvasObject = new GameObject("Exam Canvas");
@@ -177,7 +202,7 @@ namespace MagicExamHall
                 canvas.renderMode = RenderMode.ScreenSpaceOverlay;
                 var scaler = canvasObject.AddComponent<CanvasScaler>();
                 scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1280, 720);
+                scaler.referenceResolution = new Vector2(1280, 800);
                 canvasObject.AddComponent<GraphicRaycaster>();
             }
 
@@ -200,10 +225,19 @@ namespace MagicExamHall
         private void BuildUi()
         {
             ClearChildren(canvas.transform);
-            hudPanel = CreatePanel("HUD", canvas.transform, new Vector2(20, -20), new Vector2(560, 132), Anchor.TopLeft, new Color(0.04f, 0.055f, 0.075f, 0.88f));
-            hudTitle = CreateText("HUD Title", hudPanel, "Magic Exam Hall", 24, FontStyle.Bold, new Vector2(16, -12), new Vector2(520, 28), Anchor.TopLeft);
-            hudCopy = CreateText("HUD Copy", hudPanel, "", 15, FontStyle.Normal, new Vector2(16, -46), new Vector2(520, 60), Anchor.TopLeft);
-            floorProgress = CreateText("Floor Progress", hudPanel, "", 15, FontStyle.Bold, new Vector2(16, 12), new Vector2(520, 24), Anchor.BottomLeft);
+            hudPanel = CreatePanel("HUD", canvas.transform, new Vector2(20, -20), new Vector2(430, 76), Anchor.TopLeft, new Color(0.04f, 0.055f, 0.075f, 0.82f));
+            hudTitle = CreateText("HUD Title", hudPanel, "Magic Exam Hall", 22, FontStyle.Bold, new Vector2(16, -10), new Vector2(390, 28), Anchor.TopLeft);
+            hudCopy = CreateText("HUD Copy", hudPanel, "", 1, FontStyle.Normal, new Vector2(0, 0), new Vector2(1, 1), Anchor.TopLeft);
+            hudCopy.gameObject.SetActive(false);
+            floorProgress = CreateText("Floor Progress", hudPanel, "", 14, FontStyle.Bold, new Vector2(16, 10), new Vector2(390, 24), Anchor.BottomLeft);
+
+            guidePanel = CreatePanel("Mentor Dialogue", canvas.transform, new Vector2(-20, 20), new Vector2(500, 124), Anchor.BottomRight, new Color(0.035f, 0.04f, 0.055f, 0.9f));
+            guideName = CreateText("Mentor Name", guidePanel, "시험관 루미", 16, FontStyle.Bold, new Vector2(18, -12), new Vector2(460, 24), Anchor.TopLeft);
+            guideName.color = new Color(1f, 0.84f, 0.36f);
+            guideText = CreateText("Mentor Text", guidePanel, "", 15, FontStyle.Normal, new Vector2(18, -42), new Vector2(460, 72), Anchor.TopLeft);
+            var dialogueTail = CreateImage("Mentor Dialogue Tail", guidePanel, new Vector2(-36, -8), new Vector2(20, 20), Anchor.BottomRight, new Color(0.035f, 0.04f, 0.055f, 0.9f));
+            dialogueTail.raycastTarget = false;
+            dialogueTail.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 45f);
 
             notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(560, 112), Anchor.BottomLeft, new Color(0.04f, 0.055f, 0.075f, 0.84f));
             noteText = CreateText("Note Text", notePanel, "", 14, FontStyle.Normal, new Vector2(14, -12), new Vector2(530, 88), Anchor.TopLeft);
@@ -235,12 +269,12 @@ namespace MagicExamHall
         {
             var floorRoot = new GameObject($"Floor {floor.number} - {floor.title}");
             floorObjects.Add(floorRoot);
-            CreateWorldSprite("Stone Tile Floor", Vector2.zero, Vector3.one, new Color(0.15f, 0.17f, 0.22f), new Color(0.09f, 0.11f, 0.15f), PixelSpriteKind.FloorTile, -7, true, new Vector2(16.4f, 10f), floorRoot.transform);
-            CreateWorldSprite("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, new Color(0.22f, 0.20f, 0.27f), floor.accentColor, PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 1.15f), floorRoot.transform);
-            CreateWorldSprite("South Carved Wall", new Vector2(0f, -4.95f), Vector3.one, new Color(0.18f, 0.17f, 0.22f), new Color(0.50f, 0.40f, 0.20f), PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 0.8f), floorRoot.transform);
+            CreateWorldSprite("Stone Tile Floor", Vector2.zero, Vector3.one, new Color(0.15f, 0.17f, 0.22f), new Color(0.09f, 0.11f, 0.15f), PixelSpriteKind.FloorTile, -7, true, new Vector2(16f, 10f), floorRoot.transform);
+            CreateWorldSprite("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, new Color(0.22f, 0.20f, 0.27f), floor.accentColor, PixelSpriteKind.WallTrim, -4, true, new Vector2(16f, 1.15f), floorRoot.transform);
+            CreateWorldSprite("South Carved Wall", new Vector2(0f, -4.95f), Vector3.one, new Color(0.18f, 0.17f, 0.22f), new Color(0.50f, 0.40f, 0.20f), PixelSpriteKind.WallTrim, -4, true, new Vector2(16f, 0.8f), floorRoot.transform);
             CreateWorldSprite("Center Runner", new Vector2(0f, 0.12f), Vector3.one, floor.rugColor, floor.accentColor, PixelSpriteKind.Rug, -5, true, new Vector2(2.2f, 7.6f), floorRoot.transform);
-            CreateWorldSprite("West Bookcase", new Vector2(-7.25f, 1.1f), Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
-            CreateWorldSprite("East Bookcase", new Vector2(7.25f, 1.1f), Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
+            CreateWorldSprite("West Bookcase", new Vector2(-6.9f, 1.1f), Vector3.one * 1.05f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
+            CreateWorldSprite("East Bookcase", new Vector2(6.9f, 1.1f), Vector3.one * 1.05f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
             CreateWorldSprite("Northwest Candle", new Vector2(-6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
             CreateWorldSprite("Northeast Candle", new Vector2(6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
 
@@ -694,7 +728,7 @@ namespace MagicExamHall
 
             velocity = Vector2.Lerp(velocity, input * 4.2f, Time.deltaTime * 12f);
             player.position += (Vector3)(velocity * Time.deltaTime);
-            player.position = new Vector3(Mathf.Clamp(player.position.x, -7.35f, 7.35f), Mathf.Clamp(player.position.y, -4.25f, 4.25f), 0f);
+            player.position = new Vector3(Mathf.Clamp(player.position.x, -7.15f, 7.15f), Mathf.Clamp(player.position.y, -4.25f, 4.25f), 0f);
         }
 
         private void TickHazards()
@@ -771,8 +805,10 @@ namespace MagicExamHall
             if (finalCompletionCelebrated && IsFinalFloor && pendingAdvanceAt > 0f)
             {
                 hudTitle.text = "성좌심 완성";
-                hudCopy.text = "여섯 요구치가 하나의 마법진으로 닫혔습니다.\n곧 입학 시험 보고서가 열립니다.";
+                hudCopy.text = "";
                 floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {activeGoals.Count}/{activeGoals.Count}   final seal";
+                guidePanel.gameObject.SetActive(true);
+                guideText.text = "좋아, 여섯 요구치가 하나의 마법진으로 닫혔어.\n곧 입학 시험 보고서를 열 테니 숨을 고르고 있어.";
                 notePanel.gameObject.SetActive(magicNote.Visible);
                 noteText.text = magicNote.Text;
                 return;
@@ -780,18 +816,29 @@ namespace MagicExamHall
 
             hudTitle.text = $"층 {floor.number}: {floor.title}";
             var completed = activeGoals.Count(goal => goal.completed);
+            hudCopy.text = "";
             if (IsFinalFloor)
             {
-                hudCopy.text = $"{floor.objective}\n남은 요구: {BuildRemainingFinalGoalSummary()}";
                 floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   다음 {BuildNextFinalGoalShortLabel()}";
             }
             else
             {
-                hudCopy.text = $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요.";
                 floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   seal {seals.Count}";
             }
+            guidePanel.gameObject.SetActive(true);
+            guideText.text = BuildMentorDialogue(floor);
             notePanel.gameObject.SetActive(magicNote.Visible);
             noteText.text = magicNote.Text;
+        }
+
+        private string BuildMentorDialogue(FloorDefinition floor)
+        {
+            if (IsFinalFloor)
+            {
+                return $"{floor.objective}\n남은 요구: {BuildRemainingFinalGoalSummary()}\n{BuildNextFinalGoalHint()}";
+            }
+
+            return $"{floor.objective}\nWASD로 이동하고, 우클릭 hold로 바닥에 직접 문양을 그려 보세요.";
         }
 
         private string BuildGoalDiscoveryNote(WorldStateGoal goal)
@@ -838,8 +885,9 @@ namespace MagicExamHall
         {
             reportPanel.gameObject.SetActive(true);
             notePanel.gameObject.SetActive(false);
+            guidePanel.gameObject.SetActive(false);
             hudTitle.text = "입학 시험 완료";
-            hudCopy.text = "입학 마법진이 다시 밝아졌습니다.";
+            hudCopy.text = "";
             logger.LogSurvey(new SurveyLog
             {
                 sessionId = sessionId,
@@ -1074,6 +1122,10 @@ namespace MagicExamHall
                     rect.anchorMin = rect.anchorMax = new Vector2(0f, 0f);
                     rect.pivot = new Vector2(0f, 0f);
                     break;
+                case Anchor.BottomRight:
+                    rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
+                    rect.pivot = new Vector2(1f, 0f);
+                    break;
                 case Anchor.Center:
                     rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
                     rect.pivot = new Vector2(0.5f, 0.5f);
@@ -1119,7 +1171,8 @@ namespace MagicExamHall
         {
             Center,
             TopLeft,
-            BottomLeft
+            BottomLeft,
+            BottomRight
         }
 
         private readonly struct GoalEffect

@@ -27,9 +27,10 @@ namespace MagicExamHall.Editor
             var camera = CreateCamera();
             CreateFloor();
             var player = CreatePlayer();
+            var mentor = CreateMentor();
             var canvas = CreateCanvas();
             CreateEventSystem();
-            CreateController(camera, player.transform, canvas);
+            CreateController(camera, player.transform, mentor.transform, canvas);
             SavePrefabs(player);
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -103,7 +104,7 @@ namespace MagicExamHall.Editor
             cameraObject.transform.position = new Vector3(0f, 0f, -10f);
             var camera = cameraObject.AddComponent<Camera>();
             camera.orthographic = true;
-            camera.orthographicSize = 6.2f;
+            camera.orthographicSize = 5f;
             camera.backgroundColor = new Color(0.06f, 0.08f, 0.11f);
             return camera;
         }
@@ -111,11 +112,11 @@ namespace MagicExamHall.Editor
         private static void CreateFloor()
         {
             CreatePixelObject("Stone Tile Floor", Vector2.zero, Vector3.one, PixelSpriteKind.FloorTile,
-                new Color(0.16f, 0.18f, 0.23f), new Color(0.10f, 0.12f, 0.16f), -7, true, new Vector2(16.4f, 10f));
+                new Color(0.16f, 0.18f, 0.23f), new Color(0.10f, 0.12f, 0.16f), -7, true, new Vector2(16f, 10f));
             CreatePixelObject("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, PixelSpriteKind.WallTrim,
-                new Color(0.22f, 0.20f, 0.27f), new Color(0.63f, 0.50f, 0.23f), -4, true, new Vector2(16.4f, 1.15f));
+                new Color(0.22f, 0.20f, 0.27f), new Color(0.63f, 0.50f, 0.23f), -4, true, new Vector2(16f, 1.15f));
             CreatePixelObject("South Carved Wall", new Vector2(0f, -4.95f), Vector3.one, PixelSpriteKind.WallTrim,
-                new Color(0.18f, 0.17f, 0.22f), new Color(0.50f, 0.40f, 0.20f), -4, true, new Vector2(16.4f, 0.8f));
+                new Color(0.18f, 0.17f, 0.22f), new Color(0.50f, 0.40f, 0.20f), -4, true, new Vector2(16f, 0.8f));
             CreatePixelObject("Center Runner", new Vector2(0f, 0.15f), Vector3.one, PixelSpriteKind.Rug,
                 new Color(0.55f, 0.10f, 0.17f), new Color(0.95f, 0.69f, 0.26f), -5, true, new Vector2(2.2f, 7.6f));
             CreatePixelObject("West Runner", new Vector2(-4.25f, 0f), Vector3.one, PixelSpriteKind.Rug,
@@ -123,9 +124,9 @@ namespace MagicExamHall.Editor
             CreatePixelObject("East Runner", new Vector2(4.25f, 0f), Vector3.one, PixelSpriteKind.Rug,
                 new Color(0.14f, 0.34f, 0.44f), new Color(0.80f, 0.65f, 0.32f), -5, true, new Vector2(1.45f, 4.8f));
 
-            CreateProp("West Bookcase", new Vector2(-7.25f, 1.25f), new Vector3(1.25f, 1.25f, 1f), PixelSpriteKind.Bookshelf,
+            CreateProp("West Bookcase", new Vector2(-6.9f, 1.25f), new Vector3(1.05f, 1.05f, 1f), PixelSpriteKind.Bookshelf,
                 new Color(0.42f, 0.23f, 0.12f), new Color(0.42f, 0.80f, 0.88f), -1);
-            CreateProp("East Bookcase", new Vector2(7.25f, 1.25f), new Vector3(1.25f, 1.25f, 1f), PixelSpriteKind.Bookshelf,
+            CreateProp("East Bookcase", new Vector2(6.9f, 1.25f), new Vector3(1.05f, 1.05f, 1f), PixelSpriteKind.Bookshelf,
                 new Color(0.42f, 0.23f, 0.12f), new Color(0.68f, 0.36f, 0.86f), -1);
             CreateProp("Northwest Candelabra", new Vector2(-6.85f, 3.65f), Vector3.one * 0.9f, PixelSpriteKind.Candle,
                 new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), 2);
@@ -168,6 +169,20 @@ namespace MagicExamHall.Editor
             return player;
         }
 
+        private static GameObject CreateMentor()
+        {
+            var mentor = new GameObject("Exam Mentor");
+            mentor.transform.position = new Vector3(6.05f, -3.55f, 0f);
+            mentor.transform.localScale = Vector3.one * 0.84f;
+            mentor.AddComponent<SpriteRenderer>();
+            var sprite = mentor.AddComponent<PixelSpriteView>();
+            sprite.kind = PixelSpriteKind.Mentor;
+            sprite.primary = new Color(0.92f, 0.78f, 0.62f);
+            sprite.secondary = new Color(0.47f, 0.32f, 0.74f);
+            sprite.sortingOrder = 31;
+            return mentor;
+        }
+
         private static Canvas CreateCanvas()
         {
             var canvasObject = new GameObject("Exam Canvas");
@@ -176,7 +191,7 @@ namespace MagicExamHall.Editor
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             var scaler = canvasObject.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1280, 720);
+            scaler.referenceResolution = new Vector2(1280, 800);
             canvasObject.AddComponent<GraphicRaycaster>();
             return canvas;
         }
@@ -188,12 +203,13 @@ namespace MagicExamHall.Editor
             eventSystem.AddComponent<StandaloneInputModule>();
         }
 
-        private static void CreateController(Camera camera, Transform player, Canvas canvas)
+        private static void CreateController(Camera camera, Transform player, Transform mentor, Canvas canvas)
         {
             var controllerObject = new GameObject("Exam Game Controller");
             var controller = controllerObject.AddComponent<ExamGameController>();
             controller.mainCamera = camera;
             controller.player = player;
+            controller.mentor = mentor;
             controller.canvas = canvas;
             var drawing = controllerObject.AddComponent<WorldDrawingController>();
             drawing.mainCamera = camera;

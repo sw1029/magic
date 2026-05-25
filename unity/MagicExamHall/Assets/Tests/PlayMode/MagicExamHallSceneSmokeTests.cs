@@ -26,8 +26,18 @@ namespace MagicExamHall.Tests
             Assert.That(controller.FloorCount, Is.EqualTo(5));
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1));
             Assert.That(controller.ActiveGoalCount, Is.EqualTo(5));
-            Assert.That(Object.FindFirstObjectByType<Canvas>(), Is.Not.Null);
+            var camera = Object.FindFirstObjectByType<Camera>();
+            Assert.That(camera, Is.Not.Null);
+            Assert.That(camera.orthographicSize, Is.EqualTo(5f).Within(0.001f));
+            var canvas = Object.FindFirstObjectByType<Canvas>();
+            Assert.That(canvas, Is.Not.Null);
+            var scaler = canvas.GetComponent<CanvasScaler>();
+            Assert.That(scaler, Is.Not.Null);
+            Assert.That(scaler.referenceResolution.x, Is.EqualTo(1280f).Within(0.001f));
+            Assert.That(scaler.referenceResolution.y, Is.EqualTo(800f).Within(0.001f));
             Assert.That(Object.FindFirstObjectByType<EventSystem>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Exam Mentor"), Is.Not.Null);
+            Assert.That(GameObject.Find("Mentor Dialogue"), Is.Not.Null);
             var drawing = Object.FindFirstObjectByType<WorldDrawingController>();
             Assert.That(drawing, Is.Not.Null);
             Assert.That(drawing.bufferSeconds, Is.EqualTo(WorldDrawingController.DefaultBufferSeconds).Within(0.001f));
@@ -299,9 +309,10 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(5));
             Assert.That(controller.ActiveGoalCount, Is.EqualTo(6));
-            Assert.That(controller.HudCopyForTests, Does.Contain("남은 요구"));
-            Assert.That(controller.HudCopyForTests, Does.Contain("안정"));
-            Assert.That(controller.HudCopyForTests, Does.Contain("정화"));
+            Assert.That(controller.HudCopyForTests, Does.Not.Contain("남은 요구"));
+            Assert.That(controller.GuideDialogueForTests, Does.Contain("남은 요구"));
+            Assert.That(controller.GuideDialogueForTests, Does.Contain("안정"));
+            Assert.That(controller.GuideDialogueForTests, Does.Contain("정화"));
             Assert.That(controller.FloorProgressForTests, Does.Contain("다음 안정"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("다음 목표"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("땅 + 보강"));

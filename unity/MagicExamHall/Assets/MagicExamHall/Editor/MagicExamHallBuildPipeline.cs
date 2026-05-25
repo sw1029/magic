@@ -11,6 +11,8 @@ namespace MagicExamHall.Editor
         private const string ScenePath = "Assets/Scenes/MagicExamHall.unity";
         private const string DefaultBuildPath = "Builds/MagicExamHall.exe";
         private const string BuildPathArgument = "-magicExamHallBuildPath";
+        private const int DefaultWindowWidth = 1280;
+        private const int DefaultWindowHeight = 800;
 
         [MenuItem("Magic Exam Hall/Build Windows Player")]
         public static void BuildWindowsPlayer()
@@ -26,6 +28,7 @@ namespace MagicExamHall.Editor
             }
 
             EnsureSceneRegistered();
+            ConfigureWindowedPlayerSettings();
 
             var absoluteOutputPath = Path.GetFullPath(outputPath);
             var outputDirectory = Path.GetDirectoryName(absoluteOutputPath);
@@ -105,6 +108,17 @@ namespace MagicExamHall.Editor
 
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
             AssetDatabase.SaveAssets();
+        }
+
+        private static void ConfigureWindowedPlayerSettings()
+        {
+            PlayerSettings.defaultScreenWidth = DefaultWindowWidth;
+            PlayerSettings.defaultScreenHeight = DefaultWindowHeight;
+            PlayerSettings.defaultIsNativeResolution = false;
+            PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
+            PlayerSettings.resizableWindow = true;
+            PlayerSettings.runInBackground = true;
+            PlayerSettings.allowFullscreenSwitch = true;
         }
     }
 }

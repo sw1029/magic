@@ -42,6 +42,7 @@ namespace MagicExamHall
         private float pendingAdvanceAt = -1f;
         private Vector2 velocity;
         private Vector2 safePosition;
+        private bool finalCompletionCelebrated;
 
         public int CurrentFloorNumber => floorController?.CurrentFloorNumber ?? 1;
         public int FloorCount => floorController?.FloorCount ?? 5;
@@ -56,9 +57,14 @@ namespace MagicExamHall
         public int CurrentAssistLevel { get; private set; }
         public string LastHintText { get; private set; } = "";
         public string LastMagicNoteText => magicNote?.Text ?? "";
+        public string HudCopyForTests => hudCopy == null ? "" : hudCopy.text;
+        public string FloorProgressForTests => floorProgress == null ? "" : floorProgress.text;
+        public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
+        public int ActivePulseCountForTests => pulses.Count;
         public string OutputDirectory => logger?.OutputDirectory ?? "";
         public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
+        private bool IsFinalFloor => floorController.CurrentFloorIndex >= floorController.FloorCount - 1;
 
         private void Awake()
         {
@@ -210,6 +216,8 @@ namespace MagicExamHall
         private void LoadFloor(int index)
         {
             pendingAdvanceAt = -1f;
+            finalCompletionCelebrated = false;
+            reportPanel.gameObject.SetActive(false);
             ClearFloorObjects();
             floorController.Load(index);
             safePosition = new Vector2(0f, -4.05f);
@@ -220,7 +228,7 @@ namespace MagicExamHall
             activeHazards.Clear();
             activeHazards.AddRange(floorController.Current.hazards.Select(hazard => hazard.Clone()));
             BuildFloorArt(floorController.Current);
-            magicNote.Show(floorController.Current.entryNote);
+            magicNote.Show(IsFinalFloor ? $"{floorController.Current.entryNote}\n{BuildNextFinalGoalHint()}" : floorController.Current.entryNote);
         }
 
         private void BuildFloorArt(FloorDefinition floor)
@@ -244,6 +252,10 @@ namespace MagicExamHall
                 if (goal.kind == PixelSpriteKind.RuneCircle)
                 {
                     body.transform.localScale *= 1.45f;
+                }
+                if (floor.number == 5)
+                {
+                    goal.label = CreateGoalLabel(goal, floorRoot.transform);
                 }
             }
 
@@ -413,7 +425,7 @@ namespace MagicExamHall
                 if (goal.MatchesBase(family, center))
                 {
                     ActivateGoal(goal, SpellLabels.English(family));
-                    return new GoalEffect($"{goal.discoveryNote}", goal.id);
+                    return new GoalEffect(BuildGoalDiscoveryNote(goal), goal.id);
                 }
             }
 
@@ -427,7 +439,7 @@ namespace MagicExamHall
                 if (goal.MatchesOverlay(seal, op, center))
                 {
                     ActivateGoal(goal, SpellLabels.English(op));
-                    return new GoalEffect($"{goal.discoveryNote}", goal.id);
+                    return new GoalEffect(BuildGoalDiscoveryNote(goal), goal.id);
                 }
             }
 
@@ -532,6 +544,12 @@ namespace MagicExamHall
                 goal.body.transform.localScale *= 1.15f;
             }
             ApplyGoalReaction(goal);
+            if (goal.label != null)
+            {
+                goal.label.text = $"완료: {goal.title}";
+                goal.label.color = Color.Lerp(goal.color, Color.white, 0.6f);
+                goal.label.fontStyle = FontStyle.Bold;
+            }
             endingReport.RecordDiscovery(goal.id, effect);
             pulses.Add(new ParticlePulse(goal.position, goal.color));
         }
@@ -607,8 +625,41 @@ namespace MagicExamHall
                 return;
             }
 
-            magicNote.Show(floorController.Current.completeNote);
-            pendingAdvanceAt = Time.time + 1.4f;
+            magicNote.Show(BuildFloorCompletionNote());
+            pendingAdvanceAt = Time.time + (IsFinalFloor ? 1.9f : 1.4f);
+        }
+
+        private string BuildFloorCompletionNote()
+        {
+            if (!IsFinalFloor)
+            {
+                return floorController.Current.completeNote;
+            }
+
+            CelebrateFinalCompletion();
+            return
+                "성좌심 완성.\n" +
+                "여섯 요구치가 하나의 마법진으로 닫혔고, 탑이 당신의 문양 언어를 인정합니다.";
+        }
+
+        private void CelebrateFinalCompletion()
+        {
+            if (finalCompletionCelebrated)
+            {
+                return;
+            }
+
+            finalCompletionCelebrated = true;
+            pulses.Add(new ParticlePulse(Vector2.zero, new Color(1f, 0.92f, 0.45f), scaleMultiplier: 2.15f, durationSeconds: 1.65f, sortingOrder: 34));
+            pulses.Add(new ParticlePulse(Vector2.zero, new Color(0.48f, 0.84f, 1f), scaleMultiplier: 1.55f, durationSeconds: 1.25f, sortingOrder: 33));
+            foreach (var goal in activeGoals)
+            {
+                if (goal.body != null)
+                {
+                    goal.body.transform.localScale *= 1.08f;
+                }
+                pulses.Add(new ParticlePulse(goal.position, Color.Lerp(goal.color, Color.white, 0.25f), scaleMultiplier: 1.28f, durationSeconds: 1.2f, sortingOrder: 32));
+            }
         }
 
         private void TickFloorAdvance()
@@ -692,11 +743,12 @@ namespace MagicExamHall
                 pulse.age += Time.deltaTime;
                 if (pulse.body == null)
                 {
-                    pulse.body = CreateWorldSprite("Spell Pulse", pulse.position, Vector3.one * (pulse.weak ? 0.22f : 0.35f), pulse.color, Color.white, PixelSpriteKind.Pulse, 28);
+                    pulse.body = CreateWorldSprite("Spell Pulse", pulse.position, Vector3.one * (pulse.weak ? 0.22f : 0.35f) * pulse.scaleMultiplier, pulse.color, Color.white, PixelSpriteKind.Pulse, pulse.sortingOrder);
                 }
 
-                var t = pulse.age / (pulse.weak ? 0.7f : 0.95f);
-                pulse.body.transform.localScale = Vector3.one * Mathf.Lerp(pulse.weak ? 0.35f : 0.45f, pulse.weak ? 1.4f : 2.5f, t);
+                var duration = pulse.durationSeconds > 0f ? pulse.durationSeconds : pulse.weak ? 0.7f : 0.95f;
+                var t = pulse.age / duration;
+                pulse.body.transform.localScale = Vector3.one * Mathf.Lerp(pulse.weak ? 0.35f : 0.45f, pulse.weak ? 1.4f : 2.5f, t) * pulse.scaleMultiplier;
                 var renderer = pulse.body.GetComponent<SpriteRenderer>();
                 renderer.sharedMaterial = PixelMaterialProvider.SpriteMaterial;
                 renderer.color = new Color(1f, 1f, 1f, Mathf.Lerp(0.8f, 0f, t));
@@ -716,18 +768,77 @@ namespace MagicExamHall
             }
 
             var floor = floorController.Current;
+            if (finalCompletionCelebrated && IsFinalFloor && pendingAdvanceAt > 0f)
+            {
+                hudTitle.text = "성좌심 완성";
+                hudCopy.text = "여섯 요구치가 하나의 마법진으로 닫혔습니다.\n곧 입학 시험 보고서가 열립니다.";
+                floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {activeGoals.Count}/{activeGoals.Count}   final seal";
+                notePanel.gameObject.SetActive(magicNote.Visible);
+                noteText.text = magicNote.Text;
+                return;
+            }
+
             hudTitle.text = $"층 {floor.number}: {floor.title}";
-            hudCopy.text = $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요.";
             var completed = activeGoals.Count(goal => goal.completed);
-            floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   seal {seals.Count}";
+            if (IsFinalFloor)
+            {
+                hudCopy.text = $"{floor.objective}\n남은 요구: {BuildRemainingFinalGoalSummary()}";
+                floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   다음 {BuildNextFinalGoalShortLabel()}";
+            }
+            else
+            {
+                hudCopy.text = $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요.";
+                floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   seal {seals.Count}";
+            }
             notePanel.gameObject.SetActive(magicNote.Visible);
             noteText.text = magicNote.Text;
+        }
+
+        private string BuildGoalDiscoveryNote(WorldStateGoal goal)
+        {
+            if (!IsFinalFloor)
+            {
+                return goal.discoveryNote;
+            }
+
+            return $"{goal.discoveryNote}\n{BuildNextFinalGoalHint()}";
+        }
+
+        private string BuildRemainingFinalGoalSummary()
+        {
+            var remaining = activeGoals.Where(goal => !goal.completed).ToList();
+            if (remaining.Count == 0)
+            {
+                return "모든 요구치 완료";
+            }
+
+            var shown = remaining.Take(2).Select(goal => $"{goal.title}({goal.RequirementLabel})");
+            var suffix = remaining.Count > 2 ? $" 외 {remaining.Count - 2}" : "";
+            return string.Join(" / ", shown) + suffix;
+        }
+
+        private string BuildNextFinalGoalHint()
+        {
+            var next = activeGoals.FirstOrDefault(goal => !goal.completed);
+            if (next == null)
+            {
+                return "다음 목표: 모든 요구치가 채워졌습니다.";
+            }
+
+            return $"다음 목표: {next.title} - {next.RequirementLabel}을 목표 표식 근처에서 완성하세요.";
+        }
+
+        private string BuildNextFinalGoalShortLabel()
+        {
+            var next = activeGoals.FirstOrDefault(goal => !goal.completed);
+            return next == null ? "완료" : $"{next.title}({next.RequirementLabel})";
         }
 
         private void ShowEndingReport()
         {
             reportPanel.gameObject.SetActive(true);
             notePanel.gameObject.SetActive(false);
+            hudTitle.text = "입학 시험 완료";
             hudCopy.text = "입학 마법진이 다시 밝아졌습니다.";
             logger.LogSurvey(new SurveyLog
             {
@@ -883,6 +994,28 @@ namespace MagicExamHall
             return body;
         }
 
+        private Text CreateGoalLabel(WorldStateGoal goal, Transform parent)
+        {
+            var canvasObject = new GameObject($"{goal.title} Goal Label");
+            canvasObject.transform.SetParent(parent, false);
+            canvasObject.transform.position = goal.position + new Vector2(0f, -0.86f);
+            var worldCanvas = canvasObject.AddComponent<Canvas>();
+            worldCanvas.renderMode = RenderMode.WorldSpace;
+            worldCanvas.overrideSorting = true;
+            worldCanvas.sortingOrder = 42;
+            var rect = canvasObject.GetComponent<RectTransform>() ?? canvasObject.AddComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(3.4f, 0.72f);
+            canvasObject.transform.localScale = Vector3.one * 0.018f;
+
+            var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, rect.sizeDelta, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, 0.82f));
+            background.raycastTarget = false;
+            var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 22, FontStyle.Bold, Vector2.zero, rect.sizeDelta, Anchor.Center);
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.Lerp(goal.color, Color.white, 0.28f);
+            text.raycastTarget = false;
+            return text;
+        }
+
         private Image CreateImage(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
         {
             var body = new GameObject(name);
@@ -1024,14 +1157,20 @@ namespace MagicExamHall
             public readonly Vector2 position;
             public readonly Color color;
             public readonly bool weak;
+            public readonly float scaleMultiplier;
+            public readonly float durationSeconds;
+            public readonly int sortingOrder;
             public GameObject body;
             public float age;
 
-            public ParticlePulse(Vector2 position, Color color, bool weak = false)
+            public ParticlePulse(Vector2 position, Color color, bool weak = false, float scaleMultiplier = 1f, float durationSeconds = 0f, int sortingOrder = 28)
             {
                 this.position = position;
                 this.color = color;
                 this.weak = weak;
+                this.scaleMultiplier = scaleMultiplier;
+                this.durationSeconds = durationSeconds;
+                this.sortingOrder = sortingOrder;
             }
         }
 
@@ -1138,15 +1277,36 @@ namespace MagicExamHall
             var favoriteOverlay = overlayUse.Count == 0 ? "없음" : SpellLabels.Korean(overlayUse.OrderByDescending(item => item.Value).First().Key);
             var averageQuality = qualityScores.Count == 0 ? 0f : qualityScores.Average() * 100f;
             return
-                "입학 마법진 복구 완료\n\n" +
-                $"총 시도: {totalAttempts}\n" +
+                "입학 시험 완료 - 성좌심 복구 보고서\n\n" +
+                "당신은 정답표를 따라간 것이 아니라, 탑이 알아들을 수 있는 문법을 끝까지 조립했습니다.\n\n" +
+                "플레이 기록\n" +
+                $"전체 시도: {totalAttempts}회\n" +
                 $"가장 많이 사용한 base: {favoriteBase}\n" +
                 $"가장 많이 사용한 overlay: {favoriteOverlay}\n" +
-                $"발견한 반응: {discoveries.Count}\n" +
-                $"평균 품질 경향: {averageQuality:0}%\n\n" +
-                "마법 노트가 마지막 문장을 남깁니다.\n" +
-                "\"정답을 외운 것이 아니라, 탑이 알아들을 문법을 만들었다.\"\n\n" +
+                $"발견한 세계 반응: {discoveries.Count}개\n" +
+                $"평균 문양 안정도: {averageQuality:0}%\n\n" +
+                BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
                 $"로그 저장 위치:\n{outputDirectory}";
+        }
+
+        private static string BuildReflectionLine(string favoriteBase, string favoriteOverlay, int discoveryCount)
+        {
+            if (discoveryCount == 0)
+            {
+                return "마지막 보고서는 아직 발견되지 않은 반응을 남겨 둡니다. 다음 시도에서는 탑의 상태 변화를 더 넓게 관찰해 보세요.";
+            }
+
+            if (favoriteBase == "없음")
+            {
+                return $"{favoriteOverlay} 장식을 중심으로 흐름을 조절했습니다. 이제 같은 장식을 다른 base와 묶으면 더 많은 해석이 열립니다.";
+            }
+
+            if (favoriteOverlay == "없음")
+            {
+                return $"{favoriteBase} base로 탑의 언어를 안정시켰습니다. overlay를 더하면 같은 문양도 다른 의도를 갖게 됩니다.";
+            }
+
+            return $"{favoriteBase} base와 {favoriteOverlay} 장식을 가장 자주 실험했습니다. 탑은 그 반복을 단순한 성공이 아니라 당신만의 문법으로 기록했습니다.";
         }
     }
 
@@ -1306,6 +1466,7 @@ namespace MagicExamHall
         public float visualScale = 1f;
         public GameObject body;
         public SpriteRenderer renderer;
+        public Text label;
 
         private WorldStateGoal(string id, string title, Vector2 position, Color color, PixelSpriteKind kind, string discoveryNote)
         {
@@ -1352,6 +1513,31 @@ namespace MagicExamHall
             this.reactionKind = reactionKind;
             return this;
         }
+
+        public string RequirementLabel
+        {
+            get
+            {
+                if (comboBase.HasValue && comboOverlay.HasValue)
+                {
+                    return $"{SpellLabels.Korean(comboBase.Value)} + {SpellLabels.Korean(comboOverlay.Value)}";
+                }
+
+                if (requiredBase.HasValue)
+                {
+                    return SpellLabels.Korean(requiredBase.Value);
+                }
+
+                if (requiredOverlay.HasValue)
+                {
+                    return SpellLabels.Korean(requiredOverlay.Value);
+                }
+
+                return "관찰";
+            }
+        }
+
+        public string OpenLabel => $"{title}\n{RequirementLabel}";
 
         public bool MatchesBase(SpellFamily family, Vector2 center)
         {

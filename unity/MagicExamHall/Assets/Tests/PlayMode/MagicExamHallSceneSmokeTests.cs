@@ -113,6 +113,70 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator DetachedOverlayShowsSealProximityHint()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            var result = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, new Vector2(4.8f, 0f));
+            yield return null;
+
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.success, Is.False);
+            Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.IceBar));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("seal에서 너무 멀"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("빛나는 원"));
+            Assert.That(controller.LastHintText, Does.Contain("빛나는 원"));
+        }
+
+        [UnityTest]
+        public IEnumerator MartialAxisFailureUsesPlayerFacingDependencyHint()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            var result = controller.CastSyntheticOverlayForTests(OverlayOperator.MartialAxis, Vector2.zero);
+            yield return null;
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.MartialAxis));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("절단 장식"));
+            Assert.That(controller.LastMagicNoteText, Does.Not.Contain("void_cut"));
+            Assert.That(controller.LastHintText, Does.Contain("절단 장식"));
+        }
+
+        [UnityTest]
+        public IEnumerator OversizedOverlayShowsScaleActionHint()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            var result = controller.CastSyntheticOverlayForTests(OverlayOperator.SoulDot, Vector2.zero, 1f);
+            yield return null;
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.SoulDot));
+            Assert.That(result.scaleHint, Is.EqualTo(OverlayScaleHint.TooLarge));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("너무 커"));
+            Assert.That(controller.LastHintText, Does.Contain("너무 큽니다"));
+        }
+
+        [UnityTest]
         public IEnumerator FailedBaseCastsEscalateMagicNoteHints()
         {
             SceneManager.LoadScene("MagicExamHall");

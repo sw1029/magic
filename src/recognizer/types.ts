@@ -19,6 +19,16 @@ export type OverlayAnchorZoneId =
   | "lower"
   | "lower_right";
 export type RecognitionStatus = "recognized" | "ambiguous" | "incomplete" | "invalid";
+export type RecognitionPolicyMode = "legacy" | "dynamic";
+export type DynamicRecognitionSourceHint =
+  | "live_user_survey_like"
+  | "random_stratified"
+  | "boundary_sweep"
+  | "survey_mutation"
+  | "survey_mutation_valid"
+  | "risk_boundary"
+  | "confusion_repair"
+  | "balanced_holdout";
 export type RitualPhase = "base" | "overlay" | "final";
 export type TutorialPersonalizationStage = "none" | "few_shot" | "enough_shot";
 export type TutorialCaptureReliability = "unvalidated" | "high" | "medium" | "feedback_only";
@@ -183,6 +193,24 @@ export interface ShadowRuntimeSummary<TLabel extends string = string> {
   personalizedCandidates?: ShadowScoreCandidate<TLabel>[];
 }
 
+export interface DynamicRecognitionPolicySummary {
+  mode: "legacy" | "dynamic";
+  decisionChanged: boolean;
+  reason: string;
+  sourceProfile: DynamicRecognitionSourceHint;
+  decisionFamily?: GlyphFamily;
+  acceptedFamily?: GlyphFamily;
+  calibratedPrecision: number;
+  confidence: number;
+  confidenceThreshold: number;
+  scoreGap: number;
+  scoreGapThreshold: number;
+  probabilityGap: number;
+  probabilityGapThreshold: number;
+  riskLevel: "none" | "caution" | "block";
+  riskReasons: string[];
+}
+
 export interface QualityVector {
   closure: number;
   symmetry: number;
@@ -211,6 +239,7 @@ export interface RecognitionResult {
   closureLine?: AxisLine;
   personalization?: PersonalizationRuntimeSummary;
   shadow?: ShadowRuntimeSummary<GlyphFamily>;
+  dynamicPolicy?: DynamicRecognitionPolicySummary;
 }
 
 export interface SealDetection {

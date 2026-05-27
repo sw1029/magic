@@ -41,7 +41,7 @@ describe("magic recognizer", () => {
     expect(result.canonicalFamily).toBeUndefined();
   });
 
-  it("marks a two-line wind attempt as incomplete", () => {
+  it("keeps a two-line wind attempt incomplete in legacy mode", () => {
     const session = makeSession([
       makeStroke(
         [
@@ -58,11 +58,12 @@ describe("magic recognizer", () => {
         140
       )
     ]);
-    const result = recognizeSession(session, { sealed: true });
+    const result = recognizeSession(session, { sealed: true, policyMode: "legacy" });
 
     expect(result.status).toBe("incomplete");
     expect(result.canonicalFamily).toBeUndefined();
     expect(result.topCandidate?.family).toBe("wind");
+    expect(result.dynamicPolicy?.mode).toBe("legacy");
   });
 
   it("does not force a circle-like distorted life into a wrong family", () => {

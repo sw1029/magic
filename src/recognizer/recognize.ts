@@ -13,6 +13,7 @@ import { createEmptyQualityVector } from "./user-profile";
 import { calculateAdjustedQuality, calculateQualityVector } from "./quality";
 import { deriveRecognitionFeatureVectorV2 } from "./feature-v2";
 import { buildGestureRecognitionSignals } from "./gesture-matcher";
+import { applyDynamicRecognitionPolicy } from "./dynamic-gating";
 import {
   buildBaseShadowSummary,
   rerankBaseCandidates,
@@ -22,7 +23,9 @@ import {
 import { GLYPH_TEMPLATES } from "./templates";
 import type {
   AxisLine,
+  DynamicRecognitionSourceHint,
   GlyphFamily,
+  RecognitionPolicyMode,
   RecognitionCandidate,
   RecognitionFeatures,
   RecognitionResult,
@@ -35,14 +38,24 @@ const TEMPLATE_BUNDLES = GLYPH_TEMPLATES.map((template) => ({
   normalized: normalizeStrokes(template.strokes)
 }));
 
+export interface RecognizeSessionOptions {
+  sealed: boolean;
+  profile?: UserInputProfile;
+  policyMode?: RecognitionPolicyMode;
+  sourceHint?: DynamicRecognitionSourceHint;
+}
+
 export function recognizeSession(
   session: StrokeSession,
-  options: { sealed: boolean; profile?: UserInputProfile }
+  options: RecognizeSessionOptions
 ): RecognitionResult {
   const strokes = session.strokes.filter((stroke) => stroke.points.length >= 2);
 
   if (strokes.length === 0) {
-    return emptyResult(options.sealed, "입력이 아직 없습니다.");
+    return applyDynamicRecognitionPolicy(emptyResult(options.sealed, "입력이 아직 없습니다."), {
+      mode: options.policyMode,
+      sourceHint: options.sourceHint
+    });
   }
 
   const normalized = normalizeStrokes(strokes);
@@ -95,7 +108,7 @@ export function recognizeSession(
     mlActualGate: effectiveThreshold.mlConfidenceGate < 1 ? "confidence_guard" : "none"
   } satisfies RecognitionResult["personalization"];
 
-  return {
+  const legacyResult: RecognitionResult = {
     status: decision.status,
     sealed: options.sealed,
     quality: rawQuality,
@@ -114,6 +127,11 @@ export function recognizeSession(
     symmetryAxis: buildSymmetryAxis(normalized.rawCentroid, normalized.rawAngleRadians, normalized.diagonal),
     closureLine: buildClosureLine(strokes)
   };
+
+  return applyDynamicRecognitionPolicy(legacyResult, {
+    mode: options.policyMode,
+    sourceHint: options.sourceHint
+  });
 }
 
 function resolveBaseRecognitionDecision(

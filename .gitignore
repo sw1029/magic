@@ -35,3 +35,6 @@ unity/**/TestResults.xml
 unity/**/EditModeTestResults*.xml
 unity/**/PlayModeTestResults*.xml
 unity/**/*.log
+
+# Survey analysis generated output
+survey-analysis-output/

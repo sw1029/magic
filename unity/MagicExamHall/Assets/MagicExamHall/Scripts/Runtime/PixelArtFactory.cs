@@ -49,6 +49,21 @@ namespace MagicExamHall
                 case PixelSpriteKind.RuneCircle:
                     DrawRuneCircle(texture, primary, secondary);
                     break;
+                case PixelSpriteKind.FireRune:
+                    DrawFireRune(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.WaterRune:
+                    DrawWaterRune(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.WindRune:
+                    DrawWindRune(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.EarthRune:
+                    DrawEarthRune(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.LifeRune:
+                    DrawLifeRune(texture, primary, secondary);
+                    break;
             }
 
             texture.Apply();
@@ -258,6 +273,142 @@ namespace MagicExamHall
             Set(texture, 3, 16, secondary);
         }
 
+        private static readonly Color RuneOutline = new Color(0.04f, 0.035f, 0.05f, 1f);
+
+        private static void DrawFireRune(Texture2D texture, Color primary, Color secondary)
+        {
+            var glow = Mix(primary, Color.white, 0.4f);
+            var deep = Shade(primary, 0.6f);
+
+            // Upward triangle, base at y=5 (bottom), apex at y=28 (top)
+            for (var y = 6; y <= 27; y++)
+            {
+                var progress = (y - 6) / 21f;
+                var halfW = Mathf.RoundToInt(Mathf.Lerp(11f, 0.5f, progress));
+                Line(texture, 16 - halfW, y, 16 + halfW, y, primary);
+            }
+            // Outline edges
+            Line(texture, 5, 5, 27, 5, RuneOutline);
+            Line(texture, 5, 5, 16, 28, RuneOutline);
+            Line(texture, 27, 5, 16, 28, RuneOutline);
+            // Bottom shadow band
+            Line(texture, 6, 6, 26, 6, deep);
+            // Inner flame core
+            Diamond(texture, 16, 13, 3, 5, glow);
+            Set(texture, 16, 17, Color.white);
+            // Spark dot near apex
+            Set(texture, 16, 26, secondary);
+        }
+
+        private static void DrawWaterRune(Texture2D texture, Color primary, Color secondary)
+        {
+            var glow = Mix(primary, Color.white, 0.45f);
+            var deep = Shade(primary, 0.55f);
+
+            // Closed circular loop
+            Ellipse(texture, 16, 16, 12, 12, RuneOutline);
+            Ellipse(texture, 16, 16, 11, 11, primary);
+            Ellipse(texture, 16, 16, 7, 7, deep);
+            Ellipse(texture, 16, 16, 5, 5, primary);
+            Ellipse(texture, 17, 18, 3, 3, glow);
+            Set(texture, 14, 20, Color.white);
+            // Drop highlight upper right
+            Set(texture, 21, 21, glow);
+            Set(texture, 22, 20, glow);
+            // Inner core dot
+            Set(texture, 16, 16, secondary);
+        }
+
+        private static void DrawWindRune(Texture2D texture, Color primary, Color secondary)
+        {
+            var glow = Mix(primary, Color.white, 0.35f);
+            var deep = Shade(primary, 0.7f);
+
+            // Three open parallel horizontal lines
+            for (var i = 0; i < 3; i++)
+            {
+                var y = 9 + i * 7; // y=9, 16, 23
+                Fill(texture, 7, y, 18, 2, primary);
+                // Top and bottom outlines
+                Line(texture, 7, y - 1, 24, y - 1, RuneOutline);
+                Line(texture, 7, y + 2, 24, y + 2, RuneOutline);
+                // Tapered ends
+                Set(texture, 6, y, deep);
+                Set(texture, 6, y + 1, deep);
+                Set(texture, 25, y, deep);
+                Set(texture, 25, y + 1, deep);
+            }
+            // Middle line accent
+            Fill(texture, 13, 16, 6, 2, glow);
+            Set(texture, 16, 16, Color.white);
+            // Tip dots showing motion
+            Set(texture, 27, 9, secondary);
+            Set(texture, 27, 23, secondary);
+        }
+
+        private static void DrawEarthRune(Texture2D texture, Color primary, Color secondary)
+        {
+            var glow = Mix(primary, Color.white, 0.3f);
+            var deep = Shade(primary, 0.6f);
+
+            // Trapezoid: wide bottom, narrow top
+            for (var y = 6; y <= 26; y++)
+            {
+                var progress = (y - 6) / 20f;
+                var halfW = Mathf.RoundToInt(Mathf.Lerp(11f, 5f, progress));
+                Line(texture, 16 - halfW, y, 16 + halfW, y, primary);
+            }
+            // Outline edges
+            Line(texture, 5, 5, 27, 5, RuneOutline);    // bottom
+            Line(texture, 11, 27, 21, 27, RuneOutline); // top
+            Line(texture, 5, 5, 11, 27, RuneOutline);   // left
+            Line(texture, 27, 5, 21, 27, RuneOutline);  // right
+            // Bottom heavy band
+            Line(texture, 6, 6, 26, 6, deep);
+            Line(texture, 6, 7, 26, 7, deep);
+            // Top highlight
+            Fill(texture, 13, 24, 6, 2, glow);
+            // Center stone groove
+            Line(texture, 12, 14, 20, 14, deep);
+            Set(texture, 16, 14, secondary);
+        }
+
+        private static void DrawLifeRune(Texture2D texture, Color primary, Color secondary)
+        {
+            var glow = Mix(primary, Color.white, 0.4f);
+            var deep = Shade(primary, 0.6f);
+
+            // Vertical stem (lower half)
+            Fill(texture, 15, 4, 3, 14, primary);
+            Line(texture, 14, 4, 14, 17, RuneOutline);
+            Line(texture, 18, 4, 18, 17, RuneOutline);
+            // Branches splitting upward from y=17
+            for (var step = 0; step <= 10; step++)
+            {
+                var t = step / 10f;
+                var leftX = Mathf.RoundToInt(Mathf.Lerp(16f, 7f, t));
+                var rightX = Mathf.RoundToInt(Mathf.Lerp(16f, 25f, t));
+                var y = 17 + step;
+                Set(texture, leftX, y, primary);
+                Set(texture, leftX - 1, y, primary);
+                Set(texture, rightX, y, primary);
+                Set(texture, rightX + 1, y, primary);
+                // Outline strokes
+                Set(texture, leftX - 2, y, RuneOutline);
+                Set(texture, rightX + 2, y, RuneOutline);
+            }
+            // Stem highlight
+            Fill(texture, 16, 6, 1, 11, glow);
+            // Bud tips
+            Diamond(texture, 7, 27, 2, 2, glow);
+            Diamond(texture, 25, 27, 2, 2, glow);
+            Set(texture, 7, 27, Color.white);
+            Set(texture, 25, 27, Color.white);
+            // Root shadow at stem base
+            Line(texture, 13, 5, 19, 5, deep);
+            Set(texture, 16, 17, secondary);
+        }
+
         private static void Clear(Texture2D texture)
         {
             var clear = new Color(0f, 0f, 0f, 0f);
@@ -402,6 +553,11 @@ namespace MagicExamHall
         Rug,
         Bookshelf,
         Candle,
-        RuneCircle
+        RuneCircle,
+        FireRune,
+        WaterRune,
+        WindRune,
+        EarthRune,
+        LifeRune
     }
 }

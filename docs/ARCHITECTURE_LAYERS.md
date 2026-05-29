@@ -326,7 +326,7 @@ Platform UI가 결정해야 하는 것:
 - 색상/애니메이션/사운드
 - 입력 장치별 조작감
 
-입력 계층은 `docs/INPUT_LAYER_HANDOFF.md`를 기준으로 분리한다. 입력 담당자는 raw device event를 `StrokeSession`까지 만들고, 게임 담당자는 완성된 session이나 recognition result 이후만 처리한다.
+입력 계층은 `docs/INPUT_LAYER_HANDOFF.md`를 기준으로 분리한다. 입력 계층은 raw device event를 `StrokeSession`까지 만들고, 게임 계층은 완성된 session이나 recognition result 이후만 처리한다. 이 경계를 지키면 입력 개선과 게임 진행 구현을 병렬로 개발할 수 있다.
 
 ## 5. AI/fine-tuning 연결 경계
 
@@ -430,13 +430,13 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
 
 - Web의 `PointSample` / `Stroke` / `StrokeSession`과 Unity 입력 DTO 대응표를 작성한다.
 - `WorldDrawingController`가 가진 입력, buffer, visual, game handoff 책임을 분리 대상으로 표시한다.
-- 입력 담당자가 구현할 interface와 게임 담당자가 받을 event를 정한다.
+- 입력 계층이 구현할 interface와 게임 계층이 받을 event를 정한다.
 - 첫 Unity 구현 PR 순서를 작게 나눈다.
 
 현재 1차 반영 상태:
 
 - `docs/INPUT_LAYER_HANDOFF.md`가 추가됐다.
-- sw1029가 맡을 수 있는 device input부터 stroke session까지의 경계를 문서화했다.
+- device input부터 stroke session까지 입력 계층이 독립적으로 개발할 수 있는 경계를 문서화했다.
 - Unity 쪽 목표 파일 구조, DTO, source interface, session buffer, presentation 분리 기준을 포함한다.
 - 이번 PR은 C# 구현을 바꾸지 않고 다음 리팩터 PR의 기준선을 만든다.
 

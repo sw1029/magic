@@ -15,7 +15,7 @@ GitHub issue #15 / #41 기준의 Web-Unity 인식 계약 초안입니다. 목적
 - Unity attempt log와 Web/HCI 분석 개념 대응
 - 새 symbol 또는 인식 기능 추가 시 갱신해야 할 파일
 
-이 문서는 게임 기획 전체 문서가 아니다. 게임의 층 구조, NPC, 카메라, 사운드, 엔딩은 `docs/GAME_DESIGN.md`를 따른다. Unity 입력 담당자 handoff는 `docs/INPUT_LAYER_HANDOFF.md`를 따른다.
+이 문서는 게임 기획 전체 문서가 아니다. 게임의 층 구조, NPC, 카메라, 사운드, 엔딩은 `docs/GAME_DESIGN.md`를 따른다. Unity 입력 계층 handoff는 `docs/INPUT_LAYER_HANDOFF.md`를 따른다.
 
 ## 2. 구현 기준 파일
 

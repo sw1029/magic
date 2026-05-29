@@ -1,6 +1,6 @@
 # Input Layer Handoff
 
-이 문서는 sw1029가 담당할 수 있는 user input 계층을 게임/인식 계층에서 분리하기 위한 handoff 문서입니다. 목표는 "입력 받는 코드"를 별도 소유자가 안전하게 바꿀 수 있게 만들고, Unity 게임 로직은 완성된 stroke session만 받아 처리하게 만드는 것입니다.
+이 문서는 user input 계층을 게임/인식 계층에서 분리하기 위한 handoff 문서입니다. 목표는 입력 계층과 게임 계층을 병렬로 개발할 수 있게 만들고, Unity 게임 로직은 완성된 stroke session만 받아 처리하게 만드는 것입니다.
 
 ## 1. 한 줄 결론
 
@@ -16,7 +16,7 @@ Device input
   -> HUD / logging / world feedback
 ```
 
-sw1029가 맡을 경계는 `Device input`부터 `Stroke input session`을 만들어 넘기는 지점까지다. 게임 쪽은 그 이후의 recognition result, seal 생성, floor goal, world effect를 맡는다.
+입력 계층의 경계는 `Device input`부터 `Stroke input session`을 만들어 넘기는 지점까지다. 게임 계층은 그 이후의 recognition result, seal 생성, floor goal, world effect를 맡는다.
 
 ## 2. 왜 지금 분리해야 하는가
 
@@ -39,17 +39,17 @@ sw1029가 맡을 경계는 `Device input`부터 `Stroke input session`을 만들
 | `WorldDrawingController.cs` | 마우스 입력 감지, screen to world 변환, point 간격 필터, buffer timeout, LineRenderer 표시, `SpellBuffered` 이벤트 |
 | `ExamGameController.cs` | `WorldDrawingController` 생성/구독, base/overlay 판정 호출, seal 생성, floor goal 처리, HUD/logging, 플레이어 이동 입력 |
 
-이 상태에서는 입력 담당자가 마우스 대신 터치, 스타일러스, synthetic replay, 튜토리얼 입력 보정, 로깅 동의 흐름을 붙이려면 게임 컨트롤러까지 알아야 한다. 이 PR의 문서 목표는 그 결합을 끊는 설계 기준을 먼저 고정하는 것이다.
+이 상태에서는 입력 계층을 바꾸는 사람이 마우스 대신 터치, 스타일러스, synthetic replay, 튜토리얼 입력 보정, 로깅 동의 흐름을 붙이려면 게임 컨트롤러까지 알아야 한다. 이 PR의 문서 목표는 그 결합을 끊고 각 계층이 병렬로 개발될 수 있는 기준을 먼저 고정하는 것이다.
 
-## 3. 소유권 경계
+## 3. 병렬 개발 경계
 
-| 계층 | 담당 책임 | 건드려도 되는 것 | 건드리면 안 되는 것 |
+| 계층 | 책임 | 독립적으로 바꿀 수 있는 것 | 경계 밖으로 넘기지 않을 것 |
 | --- | --- | --- | --- |
-| Input owner | raw pointer/key/touch/stylus 입력을 stroke session으로 변환 | 입력 샘플링, min distance, buffer timeout, multi stroke grouping, synthetic replay, raw stroke export 정책 초안 | floor goal 완료, spell effect, overlay stack 의미 |
-| Recognition owner | stroke session을 base/overlay recognition result로 변환 | recognizer, quality, threshold, dynamic policy, fixture | raw device event 처리, world object spawn |
-| Game owner | recognition result를 게임 상태 변화로 변환 | seal 생성, overlay 적용, world effect, floor progression, challenge rule | pointer sampling 방식, raw stroke 저장 형식 |
-| Presentation owner | 화면 피드백을 표시 | LineRenderer, ghost guide, HUD, failure feedback animation | recognition status 의미 변경 |
-| Research/data owner | 입력과 결과를 분석 가능한 로그로 변환 | opt-in trace export, survey schema, dataset conversion | 기본 플레이 로그에 raw stroke 무단 저장 |
+| Input layer | raw pointer/key/touch/stylus 입력을 stroke session으로 변환 | 입력 샘플링, min distance, buffer timeout, multi stroke grouping, synthetic replay, raw stroke export 정책 초안 | floor goal 완료, spell effect, overlay stack 의미 |
+| Recognition layer | stroke session을 base/overlay recognition result로 변환 | recognizer, quality, threshold, dynamic policy, fixture | raw device event 처리, world object spawn |
+| Game layer | recognition result를 게임 상태 변화로 변환 | seal 생성, overlay 적용, world effect, floor progression, challenge rule | pointer sampling 방식, raw stroke 저장 형식 |
+| Presentation layer | 화면 피드백을 표시 | LineRenderer, ghost guide, HUD, failure feedback animation | recognition status 의미 변경 |
+| Research/data layer | 입력과 결과를 분석 가능한 로그로 변환 | opt-in trace export, survey schema, dataset conversion | 기본 플레이 로그에 raw stroke 무단 저장 |
 
 ## 4. 현재 Unity 결합 지점
 
@@ -178,7 +178,7 @@ namespace MagicExamHall.Input
 
 ## 7. Input source interface 초안
 
-입력 담당자는 이 interface 뒤쪽만 구현하면 된다.
+입력 계층 구현은 이 interface 뒤쪽에서 독립적으로 진행한다.
 
 ```csharp
 namespace MagicExamHall.Input
@@ -249,7 +249,7 @@ WorldStrokeVisuals
   -> session 완료 후 fade 또는 clear
 ```
 
-이렇게 해야 입력 담당자가 pointer sampling을 바꿔도 선 표시 로직과 게임 처리 로직이 같이 흔들리지 않는다.
+이렇게 해야 pointer sampling을 바꿔도 선 표시 로직과 게임 처리 로직이 같이 흔들리지 않는다.
 
 ## 10. Game handoff event
 
@@ -287,9 +287,9 @@ private void OnStrokeSessionCompleted(StrokeInputSession session)
 | `StrokeSession.endedAt` | `EndedAtSeconds` | optional log field |
 | `ShapeTrace` | export/import DTO | survey/replay bridge |
 
-## 12. sw1029 작업 시작점
+## 12. 병렬 개발 시작점
 
-sw1029가 바로 잡을 수 있는 첫 작업은 아래 순서가 좋다.
+입력 계층 구현은 게임 규칙 변경 없이 아래 순서로 시작할 수 있다.
 
 1. `Scripts/Input/StrokeInputTypes.cs`를 만든다.
 2. `WorldDrawingController`의 `StrokeSample` 리스트를 `StrokeInputSession`으로 변환하는 adapter를 만든다.

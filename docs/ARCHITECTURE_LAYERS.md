@@ -135,6 +135,7 @@ stroke를 해석해 recognition result를 만든다.
 - quality calculation
 - overlay anchor/scale/dependency 검사
 - dynamic recognition policy
+- user profile / personalization 보정
 - optional ML/shadow adapter
 
 현재 Web 후보:
@@ -326,7 +327,7 @@ Platform UI가 결정해야 하는 것:
 - 색상/애니메이션/사운드
 - 입력 장치별 조작감
 
-입력 계층은 `docs/INPUT_LAYER_HANDOFF.md`를 기준으로 분리한다. 입력 계층은 raw device event를 `StrokeSession`까지 만들고, 게임 계층은 완성된 session이나 recognition result 이후만 처리한다. 이 경계를 지키면 입력 개선과 게임 진행 구현을 병렬로 개발할 수 있다.
+player input 경계는 `docs/INPUT_LAYER_HANDOFF.md`를 기준으로 분리한다. 좁은 입력 캡처 계층은 raw device event를 `StrokeSession`까지 만들고, recognition 계층은 session을 family/operator/status/confidence가 담긴 `RecognitionResult`로 바꾼다. 사용자의 선 습관을 반영하는 personalization/model policy도 이 recognition 경계에 붙는다. 게임 계층은 완성된 recognition result 이후만 처리한다.
 
 ## 5. AI/fine-tuning 연결 경계
 
@@ -399,7 +400,9 @@ artifacts/
 
 unity/MagicExamHall/Assets/MagicExamHall/Scripts/
   Contracts/
+  Input/
   Recognition/
+  Personalization/
   Game/
   Presentation/
   Runtime/
@@ -424,20 +427,22 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
 - base family, overlay operator, status, stroke, quality, result, attempt log 대응표를 포함한다.
 - Unity model/shadow adapter와 adjusted quality는 후속 미구현 항목으로 남겼다.
 
-### Step 2. Unity input layer handoff를 고정한다
+### Step 2. Unity player input and recognition handoff를 고정한다
 
 완료 조건:
 
 - Web의 `PointSample` / `Stroke` / `StrokeSession`과 Unity 입력 DTO 대응표를 작성한다.
 - `WorldDrawingController`가 가진 입력, buffer, visual, game handoff 책임을 분리 대상으로 표시한다.
-- 입력 계층이 구현할 interface와 게임 계층이 받을 event를 정한다.
+- 입력 캡처 계층이 구현할 interface와 recognition 계층이 받을 event를 정한다.
+- 선/형태 판정, quality, confidence, personalization은 recognition 계층으로 분리한다.
+- 게임 계층이 받을 recognition result 경계를 정한다.
 - 첫 Unity 구현 PR 순서를 작게 나눈다.
 
 현재 1차 반영 상태:
 
 - `docs/INPUT_LAYER_HANDOFF.md`가 추가됐다.
-- device input부터 stroke session까지 입력 계층이 독립적으로 개발할 수 있는 경계를 문서화했다.
-- Unity 쪽 목표 파일 구조, DTO, source interface, session buffer, presentation 분리 기준을 포함한다.
+- device input부터 stroke session까지의 입력 캡처 경계와, stroke session 이후 recognition/personalization 경계를 문서화했다.
+- Unity 쪽 목표 파일 구조, DTO, source interface, session buffer, recognition service, presentation 분리 기준을 포함한다.
 - 이번 PR은 C# 구현을 바꾸지 않고 다음 리팩터 PR의 기준선을 만든다.
 
 ### Step 3. Unity Recognition service 경계 생성
@@ -446,7 +451,7 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
 
 - `IBaseGestureRecognizer`
 - `IOverlayGestureRecognizer`
-- `HeuristicGestureRecognizer`
+- `HeuristicBaseGestureRecognizer`
 - `HeuristicOverlayRecognizer`
 - `ExamGameController`는 static recognizer 직접 호출을 줄인다
 
@@ -487,11 +492,12 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
 
 새 기능을 만들 때 먼저 아래 질문을 한다.
 
-1. 이것은 raw device event를 stroke session으로 만드는가? 그러면 Input layer.
+1. 이것은 raw device event를 stroke session으로 만드는가? 그러면 Input capture layer.
 2. 이것은 stroke session의 의미를 해석하는가? 그러면 Recognition Runtime.
-3. 이것은 세계 상태를 바꾸는가? 그러면 Game Runtime.
-4. 이것은 화면에 보여주는가? 그러면 Platform App 또는 Presentation.
-5. 이것은 데이터를 모으거나 모델을 학습하는가? 그러면 Research/Dataset/ML.
-6. 이것은 Web과 Unity가 같은 뜻으로 써야 하는가? 그러면 Shared Contract부터 갱신.
+3. 이것은 사용자 입력 습관, threshold, model/shadow 보조 판독을 다루는가? 그러면 Recognition Runtime 안의 Personalization/model policy.
+4. 이것은 세계 상태를 바꾸는가? 그러면 Game Runtime.
+5. 이것은 화면에 보여주는가? 그러면 Platform App 또는 Presentation.
+6. 이것은 데이터를 모으거나 모델을 학습하는가? 그러면 Research/Dataset/ML.
+7. 이것은 Web과 Unity가 같은 뜻으로 써야 하는가? 그러면 Shared Contract부터 갱신.
 
 이 기준으로 기능 위치를 정한 뒤 구현한다.

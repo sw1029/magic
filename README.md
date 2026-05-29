@@ -245,7 +245,7 @@ unity/     Unity Magic Exam Hall 플레이어블
 
 1. `docs/GAME_DESIGN.md`
 2. `docs/ARCHITECTURE_LAYERS.md`
-3. `docs/INPUT_LAYER_HANDOFF.md`
+3. `docs/INPUT_LAYER_HANDOFF.md` (player input and recognition handoff)
 4. `docs/RECOGNITION_CONTRACT.md`
 5. `docs/PROJECT_ROADMAP.md`
 6. `docs/PROJECT_OVERVIEW.md`

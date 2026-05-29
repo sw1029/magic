@@ -377,7 +377,7 @@ Unity playable game
 
 | ID | 작업 | 우선순위 | 상태 |
 | --- | --- | --- | --- |
-| A1 | README의 docs 읽기 순서와 실제 파일 구조 동기화 | P0 | 미구현 |
+| A1 | README의 docs 읽기 순서와 실제 파일 구조 동기화 | P0 | 구현됨 |
 | A2 | 작업 큐를 실제 task 문서와 연결하거나 단순 status 문서로 전환 | P0 | 미구현 |
 | A3 | Web main 기능과 Unity 브랜치 기능의 merge/rebase 전략 결정 | P0 | 미구현 |
 | A4 | 최종 게임명 결정: `Magic Exam Hall` 유지 또는 별도 게임명 | P1 | 미구현 |
@@ -394,7 +394,7 @@ Unity playable game
 | B5 | C#과 TypeScript recognizer의 regression fixture 공유 방식 결정 | P1 | 미구현 |
 | B6 | Web recognition model adapter 경계 생성 | P1 | 미구현 |
 | B7 | RECOGNITION_CONTRACT.md 초안 작성 | P0 | 구현됨 |
-| B8 | INPUT_LAYER_HANDOFF.md로 Unity/Web 입력 계층 경계 문서화 | P0 | 구현됨 |
+| B8 | INPUT_LAYER_HANDOFF.md로 player input과 recognition 경계 문서화 | P0 | 구현됨 |
 
 ### Epic C. Unity gameplay
 

@@ -15,7 +15,7 @@ GitHub issue #15 / #41 기준의 Web-Unity 인식 계약 초안입니다. 목적
 - Unity attempt log와 Web/HCI 분석 개념 대응
 - 새 symbol 또는 인식 기능 추가 시 갱신해야 할 파일
 
-이 문서는 게임 기획 전체 문서가 아니다. 게임의 층 구조, NPC, 카메라, 사운드, 엔딩은 `docs/GAME_DESIGN.md`를 따른다. Unity 입력 계층 handoff는 `docs/INPUT_LAYER_HANDOFF.md`를 따른다.
+이 문서는 게임 기획 전체 문서가 아니다. 게임의 층 구조, NPC, 카메라, 사운드, 엔딩은 `docs/GAME_DESIGN.md`를 따른다. Unity player input과 recognition handoff는 `docs/INPUT_LAYER_HANDOFF.md`를 따른다.
 
 ## 2. 구현 기준 파일
 
@@ -297,7 +297,7 @@ Unity `AttemptLog` 현재 필드:
 분석 규칙:
 
 1. `status`는 인식 결과다.
-2. `success`는 게임 목표 처리 결과다.
+2. `success`는 장기 계약에서는 게임 목표 처리 결과다. 현재 Unity base/overlay 로그는 recognition 적용 가능 여부에 더 가깝기 때문에, floor goal 완료 여부가 필요하면 별도 필드를 추가한다.
 3. `assisted`는 상태가 아니라 맥락이다.
 4. raw stroke는 기본 로그에 저장하지 않는다. 필요하면 별도 동의와 별도 export 경로를 둔다.
 

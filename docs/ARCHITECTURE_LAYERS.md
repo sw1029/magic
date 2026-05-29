@@ -16,6 +16,8 @@ L1 Shared Contract
 L0 Product Design
 ```
 
+`Input Capture`는 별도 최상위 제품 계층이라기보다 Platform Apps와 Recognition Runtime 사이의 handoff boundary다. Unity/Web의 device API를 읽는 구현은 platform-facing code에 가깝지만, 그 산출물은 Shared Contract의 `StrokeSession` 모양으로 고정한다.
+
 의존성 방향은 항상 아래에서 위로만 간다.
 
 ```text
@@ -129,6 +131,7 @@ stroke를 해석해 recognition result를 만든다.
 
 포함 대상:
 
+- input capture가 넘긴 `StrokeSession` 수신
 - geometry normalize
 - feature extraction
 - heuristic candidate scoring
@@ -156,10 +159,11 @@ stroke를 해석해 recognition result를 만든다.
 
 중요 규칙:
 
-1. Recognition Runtime은 world goal을 완료시키지 않는다.
-2. Recognition Runtime은 HUD 문구, 카메라, 사운드, 픽셀 스프라이트를 모른다.
-3. ML은 최종 게임 효과를 직접 결정하지 않고 후보 score, confidence, shadow summary만 제공한다.
-4. AI/fine-tuning 담당자는 이 계층의 adapter만 구현하면 된다.
+1. Recognition Runtime은 raw mouse/touch/stylus event를 직접 읽지 않는다. input capture가 만든 `StrokeSession`만 받는다.
+2. Recognition Runtime은 world goal을 완료시키지 않는다.
+3. Recognition Runtime은 HUD 문구, 카메라, 사운드, 픽셀 스프라이트를 모른다.
+4. ML은 최종 게임 효과를 직접 결정하지 않고 후보 score, confidence, shadow summary만 제공한다.
+5. AI/fine-tuning 담당자는 이 계층의 adapter만 구현하면 된다.
 
 권장 adapter 모양:
 
@@ -216,7 +220,7 @@ Unity App 포함:
 - MonoBehaviour controller
 - camera
 - player movement
-- drawing input
+- device input capture
 - HUD
 - generated pixel sprites
 - sound/visual effect
@@ -293,7 +297,9 @@ Web App 포함:
 가장 중요한 경계는 아래와 같다.
 
 ```text
-Raw stroke
+Device input
+  -> Input Capture
+  -> StrokeSession
   -> Recognition Runtime
   -> RecognitionResult
   -> Game Runtime
@@ -492,7 +498,7 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
 
 새 기능을 만들 때 먼저 아래 질문을 한다.
 
-1. 이것은 raw device event를 stroke session으로 만드는가? 그러면 Input capture layer.
+1. 이것은 raw device event를 stroke session으로 만드는가? 그러면 Platform Apps 안의 Input Capture boundary.
 2. 이것은 stroke session의 의미를 해석하는가? 그러면 Recognition Runtime.
 3. 이것은 사용자 입력 습관, threshold, model/shadow 보조 판독을 다루는가? 그러면 Recognition Runtime 안의 Personalization/model policy.
 4. 이것은 세계 상태를 바꾸는가? 그러면 Game Runtime.

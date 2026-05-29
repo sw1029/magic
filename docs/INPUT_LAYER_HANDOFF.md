@@ -138,7 +138,6 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
     IStrokeInputSource.cs
     StrokeSessionBuffer.cs
     WorldPointerInputSource.cs
-    WorldStrokeVisuals.cs
     SyntheticStrokeInputSource.cs
   Recognition/
     IBaseGestureRecognizer.cs
@@ -148,6 +147,8 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
   Personalization/
     IUserInputProfileService.cs
     IRecognitionModelPolicy.cs
+  Presentation/
+    WorldStrokeVisuals.cs
   Game/
     SpellCastingService.cs
     SpellCastingContext.cs
@@ -300,6 +301,15 @@ public interface IStrokeRecognitionService
 }
 ```
 
+`RecognitionContext`에는 overlay 판정에 필요한 게임 상태를 read-only snapshot으로만 넣는다.
+
+| context 값 | 용도 | 금지 |
+| --- | --- | --- |
+| current seal id/base family | overlay 기준 seal 선택 | seal 생성/삭제 직접 수행 |
+| overlay stack | `martial_axis` 같은 dependency 검사 | overlay stack 직접 수정 |
+| reference frame / world center / scale | anchor, scale, proximity 판정 | floor goal 완료 처리 |
+| active phase hint | base/overlay/final 후보 선택 | HUD/logging 직접 실행 |
+
 `ExamGameController`는 장기적으로 raw stroke나 recognizer 구현이 아니라 recognition result만 받는다.
 
 ```csharp
@@ -334,7 +344,7 @@ private void OnRecognitionCompleted(StrokeRecognitionResult result)
 3. `StrokeSessionBuffer`를 `WorldDrawingController`에서 분리한다.
 4. `WorldPointerInputSource`가 현재 우클릭 입력을 그대로 재현하게 한다.
 5. `WorldStrokeVisuals`가 기존 LineRenderer 표현을 그대로 재현하게 한다.
-6. `ExamGameController`는 `StrokeInputSessionCompleted`만 받게 바꾼다.
+6. recognition coordinator나 service가 `StrokeSessionCompleted`를 받아 `StrokeRecognitionResult`를 만들게 한다.
 7. `SyntheticStrokeInputSource` 또는 test helper로 mouse 없이 session을 넣는 테스트를 추가한다.
 
 팀원이 선/형태 판정과 개인화까지 맡는 경우에는 이어서 아래를 진행한다.
@@ -342,7 +352,7 @@ private void OnRecognitionCompleted(StrokeRecognitionResult result)
 8. `IBaseGestureRecognizer`와 `IOverlayGestureRecognizer`를 만든다.
 9. 현재 static `GestureRecognizer` / `OverlayRecognizer` 호출을 heuristic 구현체 뒤로 감싼다.
 10. user profile, adjusted quality, model/shadow summary는 recognition result의 보조 필드로만 노출한다.
-11. `ExamGameController`는 family/operator/status/confidence를 받은 뒤 게임 효과만 결정하게 만든다.
+11. `ExamGameController` 또는 `SpellCastingService`는 family/operator/status/confidence를 받은 뒤 게임 효과만 결정하게 만든다.
 
 첫 구현에서 유지해야 하는 플레이 감각:
 

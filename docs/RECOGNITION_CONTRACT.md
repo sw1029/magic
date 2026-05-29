@@ -289,7 +289,7 @@ Unity `AttemptLog` 현재 필드:
 | `attemptIndex` | 누적 시도 수 |
 | `elapsedMs` | 경과 시간 |
 | `feedbackViewed` | 피드백 확인 여부 |
-| `success` | 게임 처리상 성공 |
+| `success` | 현재 Unity에서는 recognition 적용 가능 여부, 장기 계약에서는 게임 목표 처리 결과 |
 | `hintShown` | 힌트 표시 여부 |
 | `assistLevel` | assist 단계 |
 | `assisted` | assist 사용 성공/시도 |

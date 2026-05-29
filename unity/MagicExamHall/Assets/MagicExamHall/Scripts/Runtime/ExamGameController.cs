@@ -61,6 +61,7 @@ namespace MagicExamHall
         public string FloorProgressForTests => floorProgress == null ? "" : floorProgress.text;
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
         public int ActivePulseCountForTests => pulses.Count;
+        public int VisibleGoalLabelCountForTests => activeGoals.Count(goal => goal.label != null);
         public string OutputDirectory => logger?.OutputDirectory ?? "";
         public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
@@ -228,7 +229,7 @@ namespace MagicExamHall
             activeHazards.Clear();
             activeHazards.AddRange(floorController.Current.hazards.Select(hazard => hazard.Clone()));
             BuildFloorArt(floorController.Current);
-            magicNote.Show(IsFinalFloor ? $"{floorController.Current.entryNote}\n{BuildNextFinalGoalHint()}" : floorController.Current.entryNote);
+            magicNote.Show(BuildFloorEntryNote(floorController.Current));
         }
 
         private void BuildFloorArt(FloorDefinition floor)
@@ -253,7 +254,7 @@ namespace MagicExamHall
                 {
                     body.transform.localScale *= 1.45f;
                 }
-                if (floor.number == 5)
+                if (ShouldShowGoalLabels(floor))
                 {
                     goal.label = CreateGoalLabel(goal, floorRoot.transform);
                 }
@@ -429,7 +430,30 @@ namespace MagicExamHall
                 }
             }
 
+            var offTargetNote = BuildBaseOffTargetGoalNote(family, center);
+            if (!string.IsNullOrEmpty(offTargetNote))
+            {
+                return new GoalEffect(offTargetNote, "base_off_target");
+            }
+
             return new GoalEffect($"{SpellLabels.Korean(family)} seal이 바닥에 잠깐 고정되었습니다.", "seal_only");
+        }
+
+        private string BuildBaseOffTargetGoalNote(SpellFamily family, Vector2 center)
+        {
+            var target = activeGoals
+                .Where(goal => !goal.completed && goal.requiredBase == family)
+                .OrderBy(goal => Vector2.Distance(center, goal.position))
+                .FirstOrDefault();
+            if (target == null)
+            {
+                return "";
+            }
+
+            var distance = Vector2.Distance(center, target.position);
+            return
+                $"{SpellLabels.Korean(family)} 문양은 인식됐지만 {target.title} 표식 근처가 아닙니다.\n" +
+                $"{target.title} 아래 라벨과 빛나는 표식 가까이에서 다시 그리세요. 현재 거리 {distance:0.0}, 목표 반경 {target.radius:0.0}.";
         }
 
         private GoalEffect ApplyOverlayToGoals(CompiledSeal seal, OverlayOperator op, Vector2 center)
@@ -787,11 +811,43 @@ namespace MagicExamHall
             }
             else
             {
-                hudCopy.text = $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요.";
+                hudCopy.text = floor.number == 1
+                    ? $"{floor.objective}\n{BuildFirstFloorGoalSummary()}\n표식 아래 라벨을 보고 목표 근처에 우클릭 hold로 그리세요."
+                    : $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요.";
                 floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   seal {seals.Count}";
             }
             notePanel.gameObject.SetActive(magicNote.Visible);
             noteText.text = magicNote.Text;
+        }
+
+        private string BuildFloorEntryNote(FloorDefinition floor)
+        {
+            if (floor.number == 1)
+            {
+                return $"{floor.entryNote}\n{BuildFirstFloorGoalHint()}";
+            }
+
+            return IsFinalFloor ? $"{floor.entryNote}\n{BuildNextFinalGoalHint()}" : floor.entryNote;
+        }
+
+        private string BuildFirstFloorGoalHint()
+        {
+            return
+                "1층 목표: 표식 아래에 적힌 문양을 그 표식 근처에 그리세요.\n" +
+                "물은 닫힌 원, 바람은 위/가운데/아래 3개의 평행선입니다.";
+        }
+
+        private string BuildFirstFloorGoalSummary()
+        {
+            var remaining = activeGoals.Where(goal => !goal.completed).ToList();
+            if (remaining.Count == 0)
+            {
+                return "남은 표식: 모두 완료";
+            }
+
+            var shown = remaining.Take(3).Select(goal => $"{goal.title}({goal.RequirementLabel})");
+            var suffix = remaining.Count > 3 ? $" 외 {remaining.Count - 3}" : "";
+            return "남은 표식: " + string.Join(" / ", shown) + suffix;
         }
 
         private string BuildGoalDiscoveryNote(WorldStateGoal goal)
@@ -1014,6 +1070,11 @@ namespace MagicExamHall
             text.color = Color.Lerp(goal.color, Color.white, 0.28f);
             text.raycastTarget = false;
             return text;
+        }
+
+        private static bool ShouldShowGoalLabels(FloorDefinition floor)
+        {
+            return floor.number == 1 || floor.number == 5;
         }
 
         private Image CreateImage(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)

@@ -28,6 +28,8 @@ namespace MagicExamHall.Tests
             Assert.That(controller.ActiveGoalCount, Is.EqualTo(5));
             Assert.That(Object.FindFirstObjectByType<Canvas>(), Is.Not.Null);
             Assert.That(Object.FindFirstObjectByType<EventSystem>(), Is.Not.Null);
+            Assert.That(Camera.main, Is.Not.Null);
+            Assert.That(Camera.main.clearFlags, Is.EqualTo(CameraClearFlags.SolidColor));
             var drawing = Object.FindFirstObjectByType<WorldDrawingController>();
             Assert.That(drawing, Is.Not.Null);
             Assert.That(drawing.bufferSeconds, Is.EqualTo(WorldDrawingController.DefaultBufferSeconds).Within(0.001f));

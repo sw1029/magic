@@ -459,14 +459,17 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
 - `IOverlayGestureRecognizer`
 - `HeuristicBaseGestureRecognizer`
 - `HeuristicOverlayRecognizer`
-- `ExamGameController`는 static recognizer 직접 호출을 줄인다
+- recognition service/coordinator가 static recognizer 호출을 감싼다
+- `ExamGameController`는 raw stroke나 recognizer 내부 구현 대신 recognition result를 받는다
 
 ### Step 4. Unity assembly 계층 분리
 
 완료 조건:
 
 - `MagicExamHall.Contracts`
+- `MagicExamHall.Input`
 - `MagicExamHall.Recognition`
+- `MagicExamHall.Personalization`
 - `MagicExamHall.Game`
 - `MagicExamHall.Presentation`
 - `MagicExamHall.Runtime`

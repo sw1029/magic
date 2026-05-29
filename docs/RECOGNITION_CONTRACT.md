@@ -218,6 +218,10 @@ StrokeSample {
 - Unity는 `anchorZone`을 string으로 저장한다.
 - Unity에는 overlay model adapter/shadow가 없다.
 
+### Unity service boundary note
+
+`StrokeRecognitionResult`는 다음 Unity 리팩터에서 `BaseRecognitionResult`와 `OverlayRecognitionResult`를 한 handoff event로 감싸기 위한 제안 타입이다. 이 PR에서 새 canonical schema로 확정하는 것은 아니며, 확정 전까지는 위 base/overlay result contract를 기준으로 한다.
+
 ## 10. Final Seal Contract
 
 Final seal은 아래 순서로 구성된다.

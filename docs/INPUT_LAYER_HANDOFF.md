@@ -101,8 +101,8 @@ WorldDrawingController
 | screen/world 좌표 변환 | `WorldPointerInputSource` 또는 `IInputCoordinateMapper` |
 | stroke 샘플 최소 간격 | `StrokeInputSampler` 또는 source 내부 policy |
 | 여러 stroke를 한 session으로 묶기 | `StrokeSessionBuffer` |
-| 그리는 선 표시 | `WorldStrokeVisuals` |
-| 게임으로 session 완료 알림 | `SpellCastingInputPort` 또는 `StrokeSessionCompleted` event |
+| 그리는 선 표시 | `Presentation/WorldStrokeVisuals` |
+| recognition으로 session 완료 알림 | `ISpellInputPort` 또는 `StrokeSessionCompleted` event |
 
 ### `ExamGameController.cs`
 
@@ -343,7 +343,7 @@ private void OnRecognitionCompleted(StrokeRecognitionResult result)
 2. `WorldDrawingController`의 `StrokeSample` 리스트를 `StrokeInputSession`으로 변환하는 adapter를 만든다.
 3. `StrokeSessionBuffer`를 `WorldDrawingController`에서 분리한다.
 4. `WorldPointerInputSource`가 현재 우클릭 입력을 그대로 재현하게 한다.
-5. `WorldStrokeVisuals`가 기존 LineRenderer 표현을 그대로 재현하게 한다.
+5. `Presentation/WorldStrokeVisuals`가 기존 LineRenderer 표현을 그대로 재현하게 한다.
 6. recognition coordinator나 service가 `StrokeSessionCompleted`를 받아 `StrokeRecognitionResult`를 만들게 한다.
 7. `SyntheticStrokeInputSource` 또는 test helper로 mouse 없이 session을 넣는 테스트를 추가한다.
 

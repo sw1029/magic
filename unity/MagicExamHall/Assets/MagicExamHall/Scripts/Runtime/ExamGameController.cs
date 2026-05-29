@@ -10,6 +10,8 @@ namespace MagicExamHall
 {
     public sealed class ExamGameController : MonoBehaviour
     {
+        public const float GameplayCameraOrthographicSize = 5.55f;
+
         [Header("Scene References")]
         public Camera mainCamera = null!;
         public Transform player = null!;
@@ -199,7 +201,7 @@ namespace MagicExamHall
         private static void ConfigureMainCamera(Camera camera)
         {
             camera.orthographic = true;
-            camera.orthographicSize = 6.2f;
+            camera.orthographicSize = GameplayCameraOrthographicSize;
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.035f, 0.043f, 0.055f);
         }
@@ -242,7 +244,7 @@ namespace MagicExamHall
         {
             var floorRoot = new GameObject($"Floor {floor.number} - {floor.title}");
             floorObjects.Add(floorRoot);
-            CreateWorldSprite("Exam Hall Backdrop", Vector2.zero, Vector3.one, new Color(0.045f, 0.052f, 0.067f), new Color(0.035f, 0.04f, 0.052f), PixelSpriteKind.FloorTile, -9, true, new Vector2(24.5f, 14f), floorRoot.transform);
+            CreateWorldSprite("Exam Hall Backdrop", Vector2.zero, Vector3.one, new Color(0.045f, 0.052f, 0.067f), new Color(0.035f, 0.04f, 0.052f), PixelSpriteKind.FloorTile, -9, true, new Vector2(20.5f, 11.6f), floorRoot.transform);
             CreateWorldSprite("Stone Tile Floor", Vector2.zero, Vector3.one, new Color(0.15f, 0.17f, 0.22f), new Color(0.09f, 0.11f, 0.15f), PixelSpriteKind.FloorTile, -7, true, new Vector2(16.4f, 10f), floorRoot.transform);
             CreateWorldSprite("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, new Color(0.22f, 0.20f, 0.27f), floor.accentColor, PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 1.15f), floorRoot.transform);
             CreateWorldSprite("South Carved Wall", new Vector2(0f, -4.95f), Vector3.one, new Color(0.18f, 0.17f, 0.22f), new Color(0.50f, 0.40f, 0.20f), PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 0.8f), floorRoot.transform);

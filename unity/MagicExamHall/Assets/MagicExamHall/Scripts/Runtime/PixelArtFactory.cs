@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MagicExamHall
@@ -6,9 +7,29 @@ namespace MagicExamHall
     {
         private const int Size = 32;
         private const float PixelsPerUnit = 16f;
+        private const string ExternalSpriteRoot = "Sprites/";
 
+        private static readonly Dictionary<PixelSpriteKind, Sprite> ExternalCache = new();
+        private static readonly HashSet<PixelSpriteKind> ExternalMissCache = new();
+
+        /// <summary>
+        /// Creates or loads a sprite for the given kind. If a PNG exists at
+        /// <c>Assets/MagicExamHall/Resources/Sprites/&lt;Kind&gt;.png</c>, it is
+        /// loaded as-is. Otherwise the legacy procedural drawer is used.
+        ///
+        /// External art is rendered with its own colors as authored, so the
+        /// <paramref name="primary"/> and <paramref name="secondary"/> values
+        /// only apply to the procedural fallback. Per-floor tinting can still
+        /// be applied via <c>SpriteRenderer.color</c> on the call site.
+        /// </summary>
         public static Sprite CreateSprite(string name, Color primary, Color secondary, PixelSpriteKind kind)
         {
+            var external = LoadExternalSprite(kind);
+            if (external != null)
+            {
+                return external;
+            }
+
             var texture = new Texture2D(Size, Size, TextureFormat.RGBA32, false)
             {
                 name = $"{name} Texture",
@@ -68,6 +89,46 @@ namespace MagicExamHall
 
             texture.Apply();
             return Sprite.Create(texture, new Rect(0, 0, Size, Size), new Vector2(0.5f, 0.5f), PixelsPerUnit);
+        }
+
+        /// <summary>
+        /// Looks up a sprite under <c>Resources/Sprites/&lt;Kind&gt;</c>.
+        /// Results are cached so a missing PNG only hits disk once per session.
+        ///
+        /// Call <see cref="ResetExternalSpriteCache"/> from editor reload hooks
+        /// or tests when the art needs to be re-discovered.
+        /// </summary>
+        private static Sprite LoadExternalSprite(PixelSpriteKind kind)
+        {
+            if (ExternalCache.TryGetValue(kind, out var cached))
+            {
+                return cached;
+            }
+
+            if (ExternalMissCache.Contains(kind))
+            {
+                return null;
+            }
+
+            var sprite = Resources.Load<Sprite>(ExternalSpriteRoot + kind);
+            if (sprite == null)
+            {
+                ExternalMissCache.Add(kind);
+                return null;
+            }
+
+            ExternalCache[kind] = sprite;
+            return sprite;
+        }
+
+        /// <summary>
+        /// Drops the external sprite caches. Useful for editor reload hooks
+        /// or PlayMode tests that want a clean lookup.
+        /// </summary>
+        public static void ResetExternalSpriteCache()
+        {
+            ExternalCache.Clear();
+            ExternalMissCache.Clear();
         }
 
         private static void DrawPlayer(Texture2D texture, Color skin, Color robe)

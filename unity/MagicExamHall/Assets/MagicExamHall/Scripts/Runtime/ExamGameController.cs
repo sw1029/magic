@@ -12,6 +12,9 @@ namespace MagicExamHall
     {
         public const float GameplayCameraOrthographicSize = 5.55f;
         public const int FinalFloorPassingGoalCount = 5;
+        public const float StandardFloorAdvanceDelaySeconds = 1.4f;
+        public const float FinalFloorPassReportDelaySeconds = 4.8f;
+        public const float FinalFloorCompleteReportDelaySeconds = 1.9f;
 
         [Header("Scene References")]
         public Camera mainCamera = null!;
@@ -67,6 +70,7 @@ namespace MagicExamHall
         public int ActivePulseCountForTests => pulses.Count;
         public int VisibleGoalLabelCountForTests => activeGoals.Count(goal => goal.label != null);
         public string OutputDirectory => logger?.OutputDirectory ?? "";
+        public float PendingAdvanceSecondsForTests => pendingAdvanceAt < 0f ? -1f : pendingAdvanceAt - Time.time;
         public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
         private bool IsFinalFloor => floorController.CurrentFloorIndex >= floorController.FloorCount - 1;
@@ -678,7 +682,7 @@ namespace MagicExamHall
                 }
 
                 magicNote.Show(BuildFloorCompletionNote());
-                pendingAdvanceAt = Time.time + 1.4f;
+                pendingAdvanceAt = Time.time + StandardFloorAdvanceDelaySeconds;
                 return;
             }
 
@@ -693,7 +697,7 @@ namespace MagicExamHall
             {
                 finalTrueEnding = true;
                 magicNote.Show(BuildFloorCompletionNote());
-                pendingAdvanceAt = Time.time + 1.9f;
+                pendingAdvanceAt = Time.time + FinalFloorCompleteReportDelaySeconds;
                 return;
             }
 
@@ -703,7 +707,7 @@ namespace MagicExamHall
             }
 
             magicNote.Show(BuildFloorCompletionNote());
-            pendingAdvanceAt = Time.time + 1.9f;
+            pendingAdvanceAt = Time.time + FinalFloorPassReportDelaySeconds;
         }
 
         private string BuildFloorCompletionNote()

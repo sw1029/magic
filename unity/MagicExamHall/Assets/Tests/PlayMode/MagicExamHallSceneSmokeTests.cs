@@ -382,6 +382,7 @@ namespace MagicExamHall.Tests
             Assert.That(controller.HasEndingReport, Is.False);
             Assert.That(controller.LastMagicNoteText, Does.Contain("입학 시험 통과"));
             Assert.That(controller.FloorProgressForTests, Does.Contain("목표 5/6"));
+            Assert.That(controller.PendingAdvanceSecondsForTests, Is.GreaterThan(ExamGameController.FinalFloorCompleteReportDelaySeconds));
 
             controller.AdvanceFloorForTests();
             yield return null;

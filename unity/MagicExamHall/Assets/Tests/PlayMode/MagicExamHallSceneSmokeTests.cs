@@ -323,7 +323,7 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(5));
             Assert.That(controller.HasEndingReport, Is.False);
-            Assert.That(controller.LastMagicNoteText, Does.Contain("성좌심 완성"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("성좌심 완전 복구"));
             Assert.That(controller.ActivePulseCountForTests, Is.GreaterThan(controller.ActiveGoalCount));
         }
 
@@ -362,6 +362,71 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator FinalFloorCanPassAtFiveOfSixGoals()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(4);
+            yield return null;
+
+            controller.CompleteCurrentGoalsForTests(ExamGameController.FinalFloorPassingGoalCount);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(5));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(5));
+            Assert.That(controller.HasEndingReport, Is.False);
+            Assert.That(controller.LastMagicNoteText, Does.Contain("입학 시험 통과"));
+            Assert.That(controller.FloorProgressForTests, Does.Contain("목표 5/6"));
+            Assert.That(controller.PendingAdvanceSecondsForTests, Is.GreaterThan(ExamGameController.FinalFloorCompleteReportDelaySeconds));
+
+            controller.AdvanceFloorForTests();
+            yield return null;
+
+            Assert.That(controller.HasEndingReport, Is.True);
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("통과 엔딩 (5/6)"));
+        }
+
+        [UnityTest]
+        public IEnumerator FinalFloorFiveGoalPassCanUpgradeToTrueEndingBeforeReport()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(4);
+            yield return null;
+
+            controller.CompleteCurrentGoalsForTests(ExamGameController.FinalFloorPassingGoalCount);
+            yield return null;
+            Assert.That(controller.LastMagicNoteText, Does.Contain("입학 시험 통과"));
+            Assert.That(controller.HasEndingReport, Is.False);
+            Assert.That(controller.PendingAdvanceSecondsForTests, Is.GreaterThan(ExamGameController.FinalFloorCompleteReportDelaySeconds));
+
+            controller.CompleteCurrentGoalsForTests(1);
+            yield return null;
+
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(6));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("성좌심 완전 복구"));
+            Assert.That(controller.HasEndingReport, Is.False);
+            Assert.That(controller.PendingAdvanceSecondsForTests, Is.GreaterThan(0f));
+            Assert.That(controller.PendingAdvanceSecondsForTests, Is.LessThan(ExamGameController.FinalFloorPassReportDelaySeconds));
+
+            controller.AdvanceFloorForTests();
+            yield return null;
+
+            Assert.That(controller.HasEndingReport, Is.True);
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("진엔딩 (6/6 완전 복구)"));
+        }
+
+        [UnityTest]
         public IEnumerator FloorTransitionsHazardResetAndEndingReportWork()
         {
             SceneManager.LoadScene("MagicExamHall");
@@ -389,10 +454,13 @@ namespace MagicExamHall.Tests
             }
 
             Assert.That(controller.HasEndingReport, Is.True);
-            Assert.That(controller.EndingReportTextForTests, Does.Contain("입학 시험 완료"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("입학 시험"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("도달 상태"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("진엔딩 (6/6 완전 복구)"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("가장 많이 사용한 base"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("가장 많이 사용한 overlay"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("평균 문양 안정도"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("자기 평가"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("MagicExamHallLogs"));
         }
     }

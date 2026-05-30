@@ -11,6 +11,10 @@ namespace MagicExamHall
     public sealed class ExamGameController : MonoBehaviour
     {
         public const float GameplayCameraOrthographicSize = 5.55f;
+        public const int FinalFloorPassingGoalCount = 5;
+        public const float StandardFloorAdvanceDelaySeconds = 1.4f;
+        public const float FinalFloorPassReportDelaySeconds = 4.8f;
+        public const float FinalFloorCompleteReportDelaySeconds = 1.9f;
 
         [Header("Scene References")]
         public Camera mainCamera = null!;
@@ -47,6 +51,7 @@ namespace MagicExamHall
         private Vector2 velocity;
         private Vector2 safePosition;
         private bool finalCompletionCelebrated;
+        private bool finalTrueEnding;
 
         public int CurrentFloorNumber => floorController?.CurrentFloorNumber ?? 1;
         public int FloorCount => floorController?.FloorCount ?? 5;
@@ -67,6 +72,7 @@ namespace MagicExamHall
         public int ActivePulseCountForTests => pulses.Count;
         public int VisibleGoalLabelCountForTests => activeGoals.Count(goal => goal.label != null);
         public string OutputDirectory => logger?.OutputDirectory ?? "";
+        public float PendingAdvanceSecondsForTests => pendingAdvanceAt < 0f ? -1f : pendingAdvanceAt - Time.time;
         public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
         private bool IsFinalFloor => floorController.CurrentFloorIndex >= floorController.FloorCount - 1;
@@ -120,6 +126,15 @@ namespace MagicExamHall
         public void CompleteCurrentFloorForTests()
         {
             foreach (var goal in activeGoals)
+            {
+                ActivateGoal(goal, "test_completion");
+            }
+            EvaluateFloorCompletion();
+        }
+
+        public void CompleteCurrentGoalsForTests(int count)
+        {
+            foreach (var goal in activeGoals.Where(goal => !goal.completed).Take(count))
             {
                 ActivateGoal(goal, "test_completion");
             }
@@ -230,6 +245,7 @@ namespace MagicExamHall
         {
             pendingAdvanceAt = -1f;
             finalCompletionCelebrated = false;
+            finalTrueEnding = false;
             reportPanel.gameObject.SetActive(false);
             ClearFloorObjects();
             floorController.Load(index);
@@ -639,13 +655,45 @@ namespace MagicExamHall
 
         private void EvaluateFloorCompletion()
         {
-            if (!activeGoals.All(goal => goal.completed) || pendingAdvanceAt > 0f || HasEndingReport)
+            if (HasEndingReport)
+            {
+                return;
+            }
+
+            if (!IsFinalFloor)
+            {
+                if (!activeGoals.All(goal => goal.completed) || pendingAdvanceAt > 0f)
+                {
+                    return;
+                }
+
+                magicNote.Show(BuildFloorCompletionNote());
+                pendingAdvanceAt = Time.time + StandardFloorAdvanceDelaySeconds;
+                return;
+            }
+
+            var completed = activeGoals.Count(goal => goal.completed);
+            if (completed < FinalFloorPassingGoalCount)
+            {
+                return;
+            }
+
+            var fullyCompleted = completed >= activeGoals.Count;
+            if (fullyCompleted && !finalTrueEnding)
+            {
+                finalTrueEnding = true;
+                magicNote.Show(BuildFloorCompletionNote());
+                pendingAdvanceAt = Time.time + FinalFloorCompleteReportDelaySeconds;
+                return;
+            }
+
+            if (pendingAdvanceAt > 0f)
             {
                 return;
             }
 
             magicNote.Show(BuildFloorCompletionNote());
-            pendingAdvanceAt = Time.time + (IsFinalFloor ? 1.9f : 1.4f);
+            pendingAdvanceAt = Time.time + FinalFloorPassReportDelaySeconds;
         }
 
         private string BuildFloorCompletionNote()
@@ -655,16 +703,27 @@ namespace MagicExamHall
                 return floorController.Current.completeNote;
             }
 
-            CelebrateFinalCompletion();
+            CelebrateFinalCompletion(finalTrueEnding);
+            if (finalTrueEnding)
+            {
+                return
+                    "성좌심 완전 복구.\n" +
+                    "여섯 요구치가 하나의 마법진으로 닫혔고, 탑이 당신의 문양 언어를 완전히 기억합니다.";
+            }
+
             return
-                "성좌심 완성.\n" +
-                "여섯 요구치가 하나의 마법진으로 닫혔고, 탑이 당신의 문양 언어를 인정합니다.";
+                "입학 시험 통과.\n" +
+                "다섯 요구치가 마법진을 다시 일으켰습니다. 남은 조각까지 채우면 성좌심이 완전히 닫힙니다.";
         }
 
-        private void CelebrateFinalCompletion()
+        private void CelebrateFinalCompletion(bool trueEnding)
         {
             if (finalCompletionCelebrated)
             {
+                if (trueEnding)
+                {
+                    pulses.Add(new ParticlePulse(Vector2.zero, new Color(1f, 1f, 0.82f), scaleMultiplier: 2.55f, durationSeconds: 1.95f, sortingOrder: 36));
+                }
                 return;
             }
 
@@ -678,6 +737,11 @@ namespace MagicExamHall
                     goal.body.transform.localScale *= 1.08f;
                 }
                 pulses.Add(new ParticlePulse(goal.position, Color.Lerp(goal.color, Color.white, 0.25f), scaleMultiplier: 1.28f, durationSeconds: 1.2f, sortingOrder: 32));
+            }
+
+            if (trueEnding)
+            {
+                pulses.Add(new ParticlePulse(Vector2.zero, new Color(1f, 1f, 0.82f), scaleMultiplier: 2.55f, durationSeconds: 1.95f, sortingOrder: 36));
             }
         }
 
@@ -789,9 +853,12 @@ namespace MagicExamHall
             var floor = floorController.Current;
             if (finalCompletionCelebrated && IsFinalFloor && pendingAdvanceAt > 0f)
             {
-                hudTitle.text = "성좌심 완성";
-                hudCopy.text = "여섯 요구치가 하나의 마법진으로 닫혔습니다.\n곧 입학 시험 보고서가 열립니다.";
-                floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {activeGoals.Count}/{activeGoals.Count}   final seal";
+                var completedFinal = activeGoals.Count(goal => goal.completed);
+                hudTitle.text = finalTrueEnding ? "성좌심 완전 복구" : "입학 시험 통과";
+                hudCopy.text = finalTrueEnding
+                    ? "여섯 요구치가 하나의 마법진으로 닫혔습니다.\n곧 완전 복구 보고서가 열립니다."
+                    : "다섯 요구치로 입학 마법진이 다시 섰습니다.\n곧 통과 보고서가 열립니다.";
+                floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completedFinal}/{activeGoals.Count}   final seal";
                 notePanel.gameObject.SetActive(magicNote.Visible);
                 noteText.text = magicNote.Text;
                 return;
@@ -889,8 +956,9 @@ namespace MagicExamHall
         {
             reportPanel.gameObject.SetActive(true);
             notePanel.gameObject.SetActive(false);
-            hudTitle.text = "입학 시험 완료";
-            hudCopy.text = "입학 마법진이 다시 밝아졌습니다.";
+            var completedFinalGoals = IsFinalFloor ? activeGoals.Count(goal => goal.completed) : activeGoals.Count;
+            hudTitle.text = finalTrueEnding ? "입학 시험 완전 통과" : "입학 시험 통과";
+            hudCopy.text = finalTrueEnding ? "입학 마법진이 완전히 밝아졌습니다." : "입학 마법진이 다시 밝아졌습니다.";
             logger.LogSurvey(new SurveyLog
             {
                 sessionId = sessionId,
@@ -903,7 +971,7 @@ namespace MagicExamHall
                 completedTrials = endingReport.DiscoveryCount,
                 totalAttempts = trialCounter
             });
-            reportText.text = endingReport.BuildText(trialCounter, OutputDirectory);
+            reportText.text = endingReport.BuildText(trialCounter, OutputDirectory, finalTrueEnding, completedFinalGoals, activeGoals.Count);
         }
 
         private SealView CreateSealView(CompiledSeal seal)
@@ -1315,13 +1383,16 @@ namespace MagicExamHall
             discoveries.Add($"{id}:{effect}");
         }
 
-        public string BuildText(int totalAttempts, string outputDirectory)
+        public string BuildText(int totalAttempts, string outputDirectory, bool trueEnding, int completedFinalGoals, int totalFinalGoals)
         {
             var favoriteBase = baseUse.Count == 0 ? "없음" : SpellLabels.Korean(baseUse.OrderByDescending(item => item.Value).First().Key);
             var favoriteOverlay = overlayUse.Count == 0 ? "없음" : SpellLabels.Korean(overlayUse.OrderByDescending(item => item.Value).First().Key);
             var averageQuality = qualityScores.Count == 0 ? 0f : qualityScores.Average() * 100f;
+            var endingName = trueEnding ? "진엔딩 (6/6 완전 복구)" : $"통과 엔딩 ({completedFinalGoals}/{totalFinalGoals})";
+            var header = trueEnding ? "입학 시험 완전 통과 - 성좌심 완전 복구 보고서" : "입학 시험 통과 - 성좌심 복구 보고서";
             return
-                "입학 시험 완료 - 성좌심 복구 보고서\n\n" +
+                $"{header}\n" +
+                $"도달 상태: {endingName}\n\n" +
                 "당신은 정답표를 따라간 것이 아니라, 탑이 알아들을 수 있는 문법을 끝까지 조립했습니다.\n\n" +
                 "플레이 기록\n" +
                 $"전체 시도: {totalAttempts}회\n" +
@@ -1330,6 +1401,11 @@ namespace MagicExamHall
                 $"발견한 세계 반응: {discoveries.Count}개\n" +
                 $"평균 문양 안정도: {averageQuality:0}%\n\n" +
                 BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
+                "자기 평가\n" +
+                "1. 어떤 문양이 가장 내 손에 잘 맞았나요?\n" +
+                "2. 실패했을 때 다음에 고칠 점이 보였나요?\n" +
+                "3. base와 overlay 조합을 스스로 예측할 수 있었나요?\n" +
+                "4. 직접 마법을 시전한다는 느낌이 있었나요?\n\n" +
                 $"로그 저장 위치:\n{outputDirectory}";
         }
 

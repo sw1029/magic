@@ -37,6 +37,7 @@ namespace MagicExamHall.Tests
             Assert.That(drawing.minPointDistance, Is.EqualTo(WorldDrawingController.DefaultMinPointDistance).Within(0.001f));
             Assert.That(controller.OutputDirectory, Does.Contain("MagicExamHallLogs"));
             Assert.That(controller.IsResultPanelVisible, Is.False);
+            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(0));
         }
 
         [UnityTest]
@@ -96,6 +97,7 @@ namespace MagicExamHall.Tests
             Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Fire));
             Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
             Assert.That(controller.LastSealLifetimeSecondsForTests, Is.EqualTo(SpellRuntime.DefaultSealDurationSeconds).Within(0.001f));
+            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(1));
             Assert.That(controller.IsDrawingPanelVisible, Is.False);
             Assert.That(controller.IsResultPanelVisible, Is.True);
             Assert.That(controller.LastResultPanelTextForTests, Does.Contain("base 성공"));
@@ -121,6 +123,7 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.VoidCut), Is.True);
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.MartialAxis), Is.True);
+            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(1));
         }
 
         [UnityTest]

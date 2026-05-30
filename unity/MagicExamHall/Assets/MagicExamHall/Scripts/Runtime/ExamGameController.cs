@@ -74,6 +74,7 @@ namespace MagicExamHall
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
         public int ActivePulseCountForTests => pulses.Count;
         public int VisibleGoalLabelCountForTests => activeGoals.Count(goal => goal.label != null);
+        public int VisibleOverlayGuideCountForTests => seals.Count(seal => seal.HasAttachGuide);
         public string OutputDirectory => logger?.OutputDirectory ?? "";
         public float PendingAdvanceSecondsForTests => pendingAdvanceAt < 0f ? -1f : pendingAdvanceAt - Time.time;
         public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
@@ -1016,6 +1017,7 @@ namespace MagicExamHall
         private SealView CreateSealView(CompiledSeal seal)
         {
             var root = CreateWorldSprite($"Seal {seal.sealId}", seal.worldCenter, Vector3.one * Mathf.Max(seal.worldScale * 1.08f, 0.9f), FamilyColor(seal.baseFamily), Color.white, PixelSpriteKind.RuneCircle, 18);
+            var guide = CreateOverlayAttachGuide(seal, root.transform);
             var labelObject = new GameObject("Rune Label");
             labelObject.transform.SetParent(root.transform, false);
             labelObject.transform.localPosition = new Vector3(0f, 0.78f, 0f);
@@ -1040,7 +1042,23 @@ namespace MagicExamHall
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
             text.text = seal.Label;
-            return new SealView(root, seal, text);
+            return new SealView(root, seal, text, guide, SpellCastingService.AttachRadiusFor(seal));
+        }
+
+        private GameObject CreateOverlayAttachGuide(CompiledSeal seal, Transform parent)
+        {
+            var guide = new GameObject("Overlay Attach Guide");
+            guide.transform.SetParent(parent, false);
+            guide.transform.localPosition = Vector3.zero;
+            guide.transform.localScale = Vector3.one * SpellCastingService.AttachRadiusFor(seal);
+            var renderer = guide.AddComponent<SpriteRenderer>();
+            var color = Color.Lerp(FamilyColor(seal.baseFamily), Color.white, 0.18f);
+            color.a = 0.34f;
+            renderer.sprite = PixelArtFactory.CreateSprite($"Attach Guide {seal.sealId}", color, Color.white, PixelSpriteKind.Pulse);
+            renderer.sharedMaterial = PixelMaterialProvider.SpriteMaterial;
+            renderer.color = color;
+            renderer.sortingOrder = 17;
+            return guide;
         }
 
         private void LogBaseAttempt(BaseRecognitionResult result, CompiledSeal seal, string worldEffect, HintState hintState = null)
@@ -1377,13 +1395,18 @@ namespace MagicExamHall
             public readonly GameObject root;
             public readonly CompiledSeal seal;
             private readonly Text label;
+            private readonly GameObject attachGuide;
+            private readonly float attachRadius;
             private readonly List<GameObject> overlayMarks = new();
+            public bool HasAttachGuide => attachGuide != null && attachGuide.activeInHierarchy;
 
-            public SealView(GameObject root, CompiledSeal seal, Text label)
+            public SealView(GameObject root, CompiledSeal seal, Text label, GameObject attachGuide, float attachRadius)
             {
                 this.root = root;
                 this.seal = seal;
                 this.label = label;
+                this.attachGuide = attachGuide;
+                this.attachRadius = attachRadius;
             }
 
             public void RefreshLabel(Font font)
@@ -1418,6 +1441,16 @@ namespace MagicExamHall
                 if (renderer != null)
                 {
                     renderer.color = new Color(1f, 1f, 1f, Mathf.Clamp01(normalizedLifetime + 0.16f));
+                }
+                if (attachGuide != null)
+                {
+                    var rootScale = Mathf.Max(root.transform.localScale.x, 0.01f);
+                    attachGuide.transform.localScale = Vector3.one * (attachRadius / rootScale) * (1f + Mathf.Sin(time * 2.1f) * 0.018f);
+                    var guideRenderer = attachGuide.GetComponent<SpriteRenderer>();
+                    if (guideRenderer != null)
+                    {
+                        guideRenderer.color = new Color(1f, 1f, 1f, Mathf.Clamp01(normalizedLifetime * 0.42f));
+                    }
                 }
             }
         }

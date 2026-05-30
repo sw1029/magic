@@ -2,6 +2,8 @@
 
 `Magic Exam Hall`이 외부 자산을 사용할 때 이 파일에 출처를 남깁니다. 자산을 추가하기 전에 반드시 `docs/SPRITE_GUIDE.md`의 라이선스 규칙을 확인합니다.
 
+원본 LICENSE, README, attribution 파일은 `docs/asset-licenses/` 아래에 보관합니다. Unity `Resources/` 아래에는 런타임에 불러올 실제 PNG만 둡니다.
+
 ## 비주얼
 
 | 자산 | 작가 | 출처 | 라이선스 | 사용 위치 |

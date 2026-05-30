@@ -100,7 +100,7 @@ family별 base 룬은 시각 정합성 PR에서 enum이 확장된 뒤에 사용 
 
 ## 작업 흐름
 
-1. 후보 팩 다운로드 후 라이선스 파일 보관 (`Assets/MagicExamHall/Resources/Sprites/_LICENSES/`)
+1. 후보 팩 다운로드 후 라이선스 파일 보관 (`docs/asset-licenses/`)
 2. PNG를 위 표의 이름 규칙대로 저장
 3. Unity Editor에서 import 설정 점검 (PPU 16, Point filter, Clamp)
 4. Play로 실행해 자동 교체 확인

@@ -13,4 +13,4 @@
 
 ## 라이선스 보관
 
-받은 자산의 LICENSE 또는 README 파일은 `_LICENSES/` 하위 폴더에 함께 보관합니다.
+받은 자산의 LICENSE 또는 README 파일은 `docs/asset-licenses/` 아래에 보관합니다. 이 `Resources/Sprites` 폴더에는 런타임에 불러올 PNG만 둡니다.

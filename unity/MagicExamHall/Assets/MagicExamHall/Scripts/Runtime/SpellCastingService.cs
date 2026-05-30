@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -64,15 +65,44 @@ namespace MagicExamHall
 
         public static float AttachRadiusFor(CompiledSeal seal)
         {
+            if (seal == null)
+            {
+                throw new ArgumentNullException(nameof(seal));
+            }
+
             return Mathf.Max(MinimumOverlayAttachRadius, seal.worldScale * OverlayAttachScaleMultiplier);
         }
 
+        /// <summary>
+        /// Finds the active seal that an external input adapter should attach an overlay result to.
+        /// </summary>
+        public static CompiledSeal FindAttachableSeal(IReadOnlyList<CompiledSeal> seals, Vector2 center, float now)
+        {
+            if (seals == null)
+            {
+                throw new ArgumentNullException(nameof(seals));
+            }
+
+            return seals
+                .Where(seal => now <= seal.expiresAt)
+                .OrderBy(seal => Vector2.Distance(center, seal.worldCenter))
+                .FirstOrDefault(seal => Vector2.Distance(center, seal.worldCenter) <= AttachRadiusFor(seal));
+        }
+
+        /// <summary>
+        /// Converts a base recognition result from another input layer into the same game outcome used by world drawing.
+        /// </summary>
         public SpellCastOutcome ProcessBaseResult(
             BaseRecognitionResult baseResult,
             Vector2 center,
             int strokeCount,
             float now)
         {
+            if (baseResult == null)
+            {
+                throw new ArgumentNullException(nameof(baseResult));
+            }
+
             baseResult.center = center;
             baseResult.bufferStrokeCount = strokeCount;
 
@@ -97,12 +127,25 @@ namespace MagicExamHall
             };
         }
 
+        /// <summary>
+        /// Applies an overlay recognition result from another input layer to an existing seal and reports duplicate/full-stack states.
+        /// </summary>
         public SpellCastOutcome ProcessOverlayResult(
             OverlayRecognitionResult result,
             CompiledSeal seal,
             Vector2 center,
             int strokeCount)
         {
+            if (result == null)
+            {
+                throw new ArgumentNullException(nameof(result));
+            }
+
+            if (seal == null)
+            {
+                throw new ArgumentNullException(nameof(seal));
+            }
+
             if (!result.success)
             {
                 return new SpellCastOutcome
@@ -172,14 +215,6 @@ namespace MagicExamHall
         {
             var result = OverlayRecognizer.Recognize(strokes, seal);
             return ProcessOverlayResult(result, seal, center, strokeCount);
-        }
-
-        private static CompiledSeal FindAttachableSeal(IReadOnlyList<CompiledSeal> seals, Vector2 center, float now)
-        {
-            return seals
-                .Where(seal => now <= seal.expiresAt)
-                .OrderBy(seal => Vector2.Distance(center, seal.worldCenter))
-                .FirstOrDefault(seal => Vector2.Distance(center, seal.worldCenter) <= AttachRadiusFor(seal));
         }
 
         private static DetachedOverlayCandidate FindDetachedOverlayCandidate(

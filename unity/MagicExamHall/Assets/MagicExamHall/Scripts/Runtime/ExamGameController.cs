@@ -303,7 +303,7 @@ namespace MagicExamHall
                 SpellCastOutcomeKind.OverlayStackFull => ApplyOverlayStackFull(outcome),
                 SpellCastOutcomeKind.OverlaySucceeded => ApplyOverlaySuccess(outcome),
                 SpellCastOutcomeKind.DetachedOverlay => ApplyDetachedOverlay(outcome),
-                _ => new ProcessedSpell()
+                _ => throw new ArgumentOutOfRangeException(nameof(outcome.kind), outcome.kind, "Unhandled spell cast outcome.")
             };
         }
 

@@ -461,6 +461,36 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void SpellCastingServiceExposesAttachLookupForInputAdapters()
+        {
+            var seal = CreateWorldSeal();
+            var seals = new List<CompiledSeal> { seal };
+            var attachRadius = SpellCastingService.AttachRadiusFor(seal);
+
+            var near = SpellCastingService.FindAttachableSeal(seals, seal.worldCenter + Vector2.right * (attachRadius * 0.95f), 0.2f);
+            var far = SpellCastingService.FindAttachableSeal(seals, seal.worldCenter + Vector2.right * (attachRadius + 0.2f), 0.2f);
+            var expired = SpellCastingService.FindAttachableSeal(seals, seal.worldCenter, seal.expiresAt + 0.1f);
+
+            Assert.That(near, Is.SameAs(seal));
+            Assert.That(far, Is.Null);
+            Assert.That(expired, Is.Null);
+        }
+
+        [Test]
+        public void SpellCastingServiceRejectsNullHandoffInputs()
+        {
+            var service = new SpellCastingService();
+            var seal = CreateWorldSeal();
+            var overlayResult = new OverlayRecognitionResult();
+
+            Assert.Throws<System.ArgumentNullException>(() => SpellCastingService.AttachRadiusFor(null));
+            Assert.Throws<System.ArgumentNullException>(() => SpellCastingService.FindAttachableSeal(null, Vector2.zero, 0f));
+            Assert.Throws<System.ArgumentNullException>(() => service.ProcessBaseResult(null, Vector2.zero, 0, 0f));
+            Assert.Throws<System.ArgumentNullException>(() => service.ProcessOverlayResult(null, seal, Vector2.zero, 0));
+            Assert.Throws<System.ArgumentNullException>(() => service.ProcessOverlayResult(overlayResult, null, Vector2.zero, 0));
+        }
+
+        [Test]
         public void SpellCastingServiceSeparatesDuplicateAndFullOverlayStacks()
         {
             var service = new SpellCastingService();

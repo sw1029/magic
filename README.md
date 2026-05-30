@@ -244,10 +244,13 @@ unity/     Unity Magic Exam Hall 플레이어블
 문서 기준을 먼저 보고 싶다면 아래 순서가 가장 빠릅니다.
 
 1. `docs/GAME_DESIGN.md`
-2. `docs/PROJECT_ROADMAP.md`
-3. `docs/PROJECT_OVERVIEW.md`
-4. `docs/20_queue/work-queue.md`
-5. `docs/30_tasks/README.md`
+2. `docs/ARCHITECTURE_LAYERS.md`
+3. `docs/INPUT_LAYER_HANDOFF.md` (player input and recognition handoff)
+4. `docs/RECOGNITION_CONTRACT.md`
+5. `docs/PROJECT_ROADMAP.md`
+6. `docs/PROJECT_OVERVIEW.md`
+7. `docs/20_queue/work-queue.md`
+8. `docs/30_tasks/README.md`
 
 ## 트러블슈팅
 

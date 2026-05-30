@@ -270,6 +270,8 @@ Unity playable game
   polished feedback and logging
 ```
 
+팀 단위 병렬 개발을 위한 입력/인식, 게임 런타임, 튜토리얼/콘텐츠 경계는 `docs/TEAM_DEVELOPMENT_PLAN.md`를 기준으로 한다.
+
 ### 핵심 통합 방향
 
 1. Web recognizer를 설계 기준으로 유지한다.

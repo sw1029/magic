@@ -247,10 +247,11 @@ unity/     Unity Magic Exam Hall 플레이어블
 2. `docs/ARCHITECTURE_LAYERS.md`
 3. `docs/INPUT_LAYER_HANDOFF.md` (player input and recognition handoff)
 4. `docs/RECOGNITION_CONTRACT.md`
-5. `docs/PROJECT_ROADMAP.md`
-6. `docs/PROJECT_OVERVIEW.md`
-7. `docs/20_queue/work-queue.md`
-8. `docs/30_tasks/README.md`
+5. `docs/TEAM_DEVELOPMENT_PLAN.md`
+6. `docs/PROJECT_ROADMAP.md`
+7. `docs/PROJECT_OVERVIEW.md`
+8. `docs/20_queue/work-queue.md`
+9. `docs/30_tasks/README.md`
 
 ## 트러블슈팅
 

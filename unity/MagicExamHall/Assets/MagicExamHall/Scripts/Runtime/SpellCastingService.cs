@@ -67,13 +67,12 @@ namespace MagicExamHall
             return Mathf.Max(MinimumOverlayAttachRadius, seal.worldScale * OverlayAttachScaleMultiplier);
         }
 
-        private static SpellCastOutcome ProcessBase(
-            List<List<StrokeSample>> strokes,
+        public SpellCastOutcome ProcessBaseResult(
+            BaseRecognitionResult baseResult,
             Vector2 center,
             int strokeCount,
             float now)
         {
-            var baseResult = SpellRuntime.RecognizeBase(strokes);
             baseResult.center = center;
             baseResult.bufferStrokeCount = strokeCount;
 
@@ -98,13 +97,12 @@ namespace MagicExamHall
             };
         }
 
-        private static SpellCastOutcome ProcessOverlay(
-            List<List<StrokeSample>> strokes,
+        public SpellCastOutcome ProcessOverlayResult(
+            OverlayRecognitionResult result,
+            CompiledSeal seal,
             Vector2 center,
-            int strokeCount,
-            CompiledSeal seal)
+            int strokeCount)
         {
-            var result = OverlayRecognizer.Recognize(strokes, seal);
             if (!result.success)
             {
                 return new SpellCastOutcome
@@ -154,6 +152,26 @@ namespace MagicExamHall
                 center = center,
                 strokeCount = strokeCount
             };
+        }
+
+        private SpellCastOutcome ProcessBase(
+            List<List<StrokeSample>> strokes,
+            Vector2 center,
+            int strokeCount,
+            float now)
+        {
+            var baseResult = SpellRuntime.RecognizeBase(strokes);
+            return ProcessBaseResult(baseResult, center, strokeCount, now);
+        }
+
+        private SpellCastOutcome ProcessOverlay(
+            List<List<StrokeSample>> strokes,
+            Vector2 center,
+            int strokeCount,
+            CompiledSeal seal)
+        {
+            var result = OverlayRecognizer.Recognize(strokes, seal);
+            return ProcessOverlayResult(result, seal, center, strokeCount);
         }
 
         private static CompiledSeal FindAttachableSeal(IReadOnlyList<CompiledSeal> seals, Vector2 center, float now)

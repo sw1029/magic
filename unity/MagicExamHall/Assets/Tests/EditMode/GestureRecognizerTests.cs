@@ -432,6 +432,35 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void SpellCastingServiceCanConsumeRecognitionResultsFromAnotherLayer()
+        {
+            var service = new SpellCastingService();
+            var baseStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Earth, 1.6f, 0.03f), Vector2.zero, 0.8f);
+            var baseResult = SpellRuntime.RecognizeBase(baseStrokes);
+
+            var baseOutcome = service.ProcessBaseResult(baseResult, Vector2.zero, baseStrokes.Count, 0f);
+
+            Assert.That(baseOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded));
+            Assert.That(baseOutcome.createdSeal.baseFamily, Is.EqualTo(SpellFamily.Earth));
+
+            var overlayResult = new OverlayRecognitionResult
+            {
+                status = RecognitionStatus.Recognized,
+                recognizedOperator = OverlayOperator.IceBar,
+                score = 0.95f,
+                shapeConfidence = 0.95f
+            };
+            var overlayOutcome = service.ProcessOverlayResult(
+                overlayResult,
+                baseOutcome.createdSeal,
+                baseOutcome.createdSeal.worldCenter,
+                1);
+
+            Assert.That(overlayOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.OverlaySucceeded));
+            Assert.That(baseOutcome.createdSeal.overlayStack, Does.Contain(OverlayOperator.IceBar));
+        }
+
+        [Test]
         public void SpellCastingServiceSeparatesDuplicateAndFullOverlayStacks()
         {
             var service = new SpellCastingService();

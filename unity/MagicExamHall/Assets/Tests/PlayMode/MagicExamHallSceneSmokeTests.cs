@@ -28,11 +28,54 @@ namespace MagicExamHall.Tests
             Assert.That(controller.ActiveGoalCount, Is.EqualTo(5));
             Assert.That(Object.FindFirstObjectByType<Canvas>(), Is.Not.Null);
             Assert.That(Object.FindFirstObjectByType<EventSystem>(), Is.Not.Null);
+            Assert.That(Camera.main, Is.Not.Null);
+            Assert.That(Camera.main.clearFlags, Is.EqualTo(CameraClearFlags.SolidColor));
+            Assert.That(Camera.main.orthographicSize, Is.EqualTo(ExamGameController.GameplayCameraOrthographicSize).Within(0.001f));
             var drawing = Object.FindFirstObjectByType<WorldDrawingController>();
             Assert.That(drawing, Is.Not.Null);
             Assert.That(drawing.bufferSeconds, Is.EqualTo(WorldDrawingController.DefaultBufferSeconds).Within(0.001f));
             Assert.That(drawing.minPointDistance, Is.EqualTo(WorldDrawingController.DefaultMinPointDistance).Within(0.001f));
             Assert.That(controller.OutputDirectory, Does.Contain("MagicExamHallLogs"));
+        }
+
+        [UnityTest]
+        public IEnumerator FirstFloorShowsGoalLabelsAndDrawingLocationGuidance()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1));
+            Assert.That(controller.VisibleGoalLabelCountForTests, Is.EqualTo(controller.ActiveGoalCount));
+            Assert.That(controller.HudCopyForTests, Does.Contain("표식 아래 라벨"));
+            Assert.That(controller.HudCopyForTests, Does.Contain("남은 표식"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("표식 근처"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("물은 닫힌 원"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("바람"));
+        }
+
+        [UnityTest]
+        public IEnumerator RecognizedBaseAwayFromGoalExplainsTargetLocation()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            var result = controller.CastSyntheticBaseForTests(SpellFamily.Wind, Vector2.zero);
+            yield return null;
+
+            Assert.That(result.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("바람 문양은 인식"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("바람개비 표식 근처"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("현재 거리"));
         }
 
         [UnityTest]

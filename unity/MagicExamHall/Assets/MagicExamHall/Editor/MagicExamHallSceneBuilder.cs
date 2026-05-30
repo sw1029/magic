@@ -14,6 +14,7 @@ namespace MagicExamHall.Editor
         private const string PrefabFolder = "Assets/MagicExamHall/Prefabs";
         private const string ResourcesFolder = "Assets/MagicExamHall/Resources";
         private const string MaterialFolder = "Assets/MagicExamHall/Resources/MagicExamHallMaterials";
+        private const float GameplayCameraOrthographicSize = 5.55f;
 
         [MenuItem("Magic Exam Hall/Rebuild Demo Scene")]
         public static void BuildAll()
@@ -103,13 +104,16 @@ namespace MagicExamHall.Editor
             cameraObject.transform.position = new Vector3(0f, 0f, -10f);
             var camera = cameraObject.AddComponent<Camera>();
             camera.orthographic = true;
-            camera.orthographicSize = 6.2f;
-            camera.backgroundColor = new Color(0.06f, 0.08f, 0.11f);
+            camera.orthographicSize = GameplayCameraOrthographicSize;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = new Color(0.035f, 0.043f, 0.055f);
             return camera;
         }
 
         private static void CreateFloor()
         {
+            CreatePixelObject("Exam Hall Backdrop", Vector2.zero, Vector3.one, PixelSpriteKind.FloorTile,
+                new Color(0.045f, 0.052f, 0.067f), new Color(0.035f, 0.04f, 0.052f), -9, true, new Vector2(20.5f, 11.6f));
             CreatePixelObject("Stone Tile Floor", Vector2.zero, Vector3.one, PixelSpriteKind.FloorTile,
                 new Color(0.16f, 0.18f, 0.23f), new Color(0.10f, 0.12f, 0.16f), -7, true, new Vector2(16.4f, 10f));
             CreatePixelObject("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, PixelSpriteKind.WallTrim,

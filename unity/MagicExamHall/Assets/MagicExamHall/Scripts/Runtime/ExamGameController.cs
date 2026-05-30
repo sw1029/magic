@@ -1427,6 +1427,11 @@ namespace MagicExamHall
                 $"발견한 세계 반응: {discoveries.Count}개\n" +
                 $"평균 문양 안정도: {averageQuality:0}%\n\n" +
                 BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
+                "자기 평가\n" +
+                "1. 어떤 문양이 가장 내 손에 잘 맞았나요?\n" +
+                "2. 실패했을 때 다음에 고칠 점이 보였나요?\n" +
+                "3. base와 overlay 조합을 스스로 예측할 수 있었나요?\n" +
+                "4. 직접 마법을 시전한다는 느낌이 있었나요?\n\n" +
                 $"로그 저장 위치:\n{outputDirectory}";
         }
 

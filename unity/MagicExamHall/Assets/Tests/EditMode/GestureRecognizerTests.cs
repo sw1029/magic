@@ -404,6 +404,74 @@ namespace MagicExamHall.Tests
             Assert.That(preview.assisted, Is.False);
         }
 
+        [Test]
+        public void SpellCastingServiceRoutesBaseThenOverlay()
+        {
+            var service = new SpellCastingService();
+            var baseStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Fire, 1.6f, 0.03f), Vector2.zero, 0.8f);
+
+            var baseOutcome = service.Process(baseStrokes, Vector2.zero, baseStrokes.Count, new List<CompiledSeal>(), 0f);
+
+            Assert.That(baseOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded));
+            Assert.That(baseOutcome.createdSeal.baseFamily, Is.EqualTo(SpellFamily.Fire));
+
+            var overlayStrokes = OverlayRecognizer.CreateCanonicalSamples(
+                OverlayOperator.VoidCut,
+                baseOutcome.createdSeal.worldCenter,
+                baseOutcome.createdSeal.worldScale * 0.24f);
+            var overlayOutcome = service.Process(
+                overlayStrokes,
+                baseOutcome.createdSeal.worldCenter,
+                overlayStrokes.Count,
+                new List<CompiledSeal> { baseOutcome.createdSeal },
+                0.2f);
+
+            Assert.That(overlayOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.OverlaySucceeded));
+            Assert.That(overlayOutcome.targetSeal, Is.SameAs(baseOutcome.createdSeal));
+            Assert.That(baseOutcome.createdSeal.overlayStack, Does.Contain(OverlayOperator.VoidCut));
+        }
+
+        [Test]
+        public void SpellCastingServiceSeparatesDuplicateAndFullOverlayStacks()
+        {
+            var service = new SpellCastingService();
+            var seal = CreateWorldSeal(OverlayOperator.VoidCut);
+            var duplicateStrokes = OverlayRecognizer.CreateCanonicalSamples(OverlayOperator.VoidCut, seal.worldCenter, seal.worldScale * 0.24f);
+
+            var duplicate = service.Process(duplicateStrokes, seal.worldCenter, duplicateStrokes.Count, new List<CompiledSeal> { seal }, 0.2f);
+
+            Assert.That(duplicate.kind, Is.EqualTo(SpellCastOutcomeKind.OverlayDuplicate));
+            Assert.That(seal.overlayStack.Count(op => op == OverlayOperator.VoidCut), Is.EqualTo(1));
+
+            var fullSeal = CreateWorldSeal(OverlayOperator.VoidCut, OverlayOperator.IceBar, OverlayOperator.SoulDot);
+            var extraStrokes = OverlayRecognizer.CreateCanonicalSamples(OverlayOperator.SteelBrace, fullSeal.worldCenter, fullSeal.worldScale * 0.24f);
+
+            var full = service.Process(extraStrokes, fullSeal.worldCenter, extraStrokes.Count, new List<CompiledSeal> { fullSeal }, 0.2f);
+
+            Assert.That(full.kind, Is.EqualTo(SpellCastOutcomeKind.OverlayStackFull));
+            Assert.That(fullSeal.overlayStack.Count, Is.EqualTo(SpellCastingService.MaxOverlayStack));
+            Assert.That(fullSeal.overlayStack, Has.None.EqualTo(OverlayOperator.SteelBrace));
+        }
+
+        [Test]
+        public void FloorGoalSystemDistinguishesCompletedAndOffTargetBaseCasts()
+        {
+            var goals = new List<WorldStateGoal>
+            {
+                WorldStateGoal.Base("puddle", "물웅덩이", SpellFamily.Water, new Vector2(3f, 0f), Color.blue, "물길이 맑아집니다.")
+            };
+            var system = new FloorGoalSystem();
+
+            var offTarget = system.ResolveBase(goals, SpellFamily.Water, Vector2.zero);
+            var completed = system.ResolveBase(goals, SpellFamily.Water, new Vector2(3f, 0f));
+
+            Assert.That(offTarget.kind, Is.EqualTo(GoalResolutionKind.BaseOffTarget));
+            Assert.That(offTarget.targetGoal, Is.SameAs(goals[0]));
+            Assert.That(offTarget.distance, Is.GreaterThan(offTarget.radius));
+            Assert.That(completed.kind, Is.EqualTo(GoalResolutionKind.Completed));
+            Assert.That(completed.goal, Is.SameAs(goals[0]));
+        }
+
         private static List<StrokeSample> MakeLine(float x1, float y1, float x2, float y2, float start)
         {
             return Enumerable.Range(0, 12)

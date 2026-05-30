@@ -1,0 +1,209 @@
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+
+namespace MagicExamHall
+{
+    public enum SpellCastOutcomeKind
+    {
+        BaseFailed,
+        BaseSucceeded,
+        OverlayFailed,
+        OverlaySucceeded,
+        OverlayDuplicate,
+        OverlayStackFull,
+        DetachedOverlay
+    }
+
+    public sealed class SpellCastOutcome
+    {
+        public SpellCastOutcomeKind kind;
+        public BaseRecognitionResult baseResult = null!;
+        public OverlayRecognitionResult overlayResult = null!;
+        public CompiledSeal targetSeal = null!;
+        public CompiledSeal createdSeal = null!;
+        public OverlayOperator? overlayOperator;
+        public Vector2 center;
+        public int strokeCount;
+    }
+
+    public sealed class SpellCastingService
+    {
+        public const int MaxOverlayStack = 3;
+        public const float MinimumOverlayAttachRadius = 1.35f;
+        public const float OverlayAttachScaleMultiplier = 0.95f;
+
+        public SpellCastOutcome Process(
+            List<List<StrokeSample>> strokes,
+            Vector2 center,
+            int strokeCount,
+            IReadOnlyList<CompiledSeal> seals,
+            float now)
+        {
+            var targetSeal = FindAttachableSeal(seals, center, now);
+            if (targetSeal != null)
+            {
+                return ProcessOverlay(strokes, center, strokeCount, targetSeal);
+            }
+
+            var detachedOverlay = FindDetachedOverlayCandidate(strokes, center, seals, now);
+            if (detachedOverlay != null)
+            {
+                return new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.DetachedOverlay,
+                    overlayResult = detachedOverlay.result,
+                    targetSeal = detachedOverlay.seal,
+                    center = center,
+                    strokeCount = strokeCount
+                };
+            }
+
+            return ProcessBase(strokes, center, strokeCount, now);
+        }
+
+        public static float AttachRadiusFor(CompiledSeal seal)
+        {
+            return Mathf.Max(MinimumOverlayAttachRadius, seal.worldScale * OverlayAttachScaleMultiplier);
+        }
+
+        private static SpellCastOutcome ProcessBase(
+            List<List<StrokeSample>> strokes,
+            Vector2 center,
+            int strokeCount,
+            float now)
+        {
+            var baseResult = SpellRuntime.RecognizeBase(strokes);
+            baseResult.center = center;
+            baseResult.bufferStrokeCount = strokeCount;
+
+            if (baseResult.spell.status != RecognitionStatus.Recognized || !baseResult.spell.recognizedFamily.HasValue)
+            {
+                return new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.BaseFailed,
+                    baseResult = baseResult,
+                    center = center,
+                    strokeCount = strokeCount
+                };
+            }
+
+            return new SpellCastOutcome
+            {
+                kind = SpellCastOutcomeKind.BaseSucceeded,
+                baseResult = baseResult,
+                createdSeal = SpellRuntime.CreateSeal(baseResult, now),
+                center = center,
+                strokeCount = strokeCount
+            };
+        }
+
+        private static SpellCastOutcome ProcessOverlay(
+            List<List<StrokeSample>> strokes,
+            Vector2 center,
+            int strokeCount,
+            CompiledSeal seal)
+        {
+            var result = OverlayRecognizer.Recognize(strokes, seal);
+            if (!result.success)
+            {
+                return new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.OverlayFailed,
+                    overlayResult = result,
+                    targetSeal = seal,
+                    center = center,
+                    strokeCount = strokeCount
+                };
+            }
+
+            var op = result.recognizedOperator!.Value;
+            if (seal.overlayStack.Contains(op))
+            {
+                return new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.OverlayDuplicate,
+                    overlayResult = result,
+                    targetSeal = seal,
+                    overlayOperator = op,
+                    center = center,
+                    strokeCount = strokeCount
+                };
+            }
+
+            if (seal.overlayStack.Count >= MaxOverlayStack)
+            {
+                return new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.OverlayStackFull,
+                    overlayResult = result,
+                    targetSeal = seal,
+                    overlayOperator = op,
+                    center = center,
+                    strokeCount = strokeCount
+                };
+            }
+
+            seal.overlayStack.Add(op);
+            return new SpellCastOutcome
+            {
+                kind = SpellCastOutcomeKind.OverlaySucceeded,
+                overlayResult = result,
+                targetSeal = seal,
+                overlayOperator = op,
+                center = center,
+                strokeCount = strokeCount
+            };
+        }
+
+        private static CompiledSeal FindAttachableSeal(IReadOnlyList<CompiledSeal> seals, Vector2 center, float now)
+        {
+            return seals
+                .Where(seal => now <= seal.expiresAt)
+                .OrderBy(seal => Vector2.Distance(center, seal.worldCenter))
+                .FirstOrDefault(seal => Vector2.Distance(center, seal.worldCenter) <= AttachRadiusFor(seal));
+        }
+
+        private static DetachedOverlayCandidate FindDetachedOverlayCandidate(
+            List<List<StrokeSample>> strokes,
+            Vector2 center,
+            IReadOnlyList<CompiledSeal> seals,
+            float now)
+        {
+            var nearestSeal = seals
+                .Where(seal => now <= seal.expiresAt)
+                .OrderBy(seal => Vector2.Distance(center, seal.worldCenter))
+                .FirstOrDefault();
+            if (nearestSeal == null)
+            {
+                return null;
+            }
+
+            var basePreview = SpellRuntime.RecognizeBase(strokes);
+            if (basePreview.spell.status == RecognitionStatus.Recognized && basePreview.spell.recognizedFamily.HasValue)
+            {
+                return null;
+            }
+
+            var result = OverlayRecognizer.Recognize(strokes, nearestSeal);
+            if (result.success || result.recognizedOperator.HasValue || result.score >= 0.48f || result.shapeConfidence >= 0.55f)
+            {
+                return new DetachedOverlayCandidate(nearestSeal, result);
+            }
+
+            return null;
+        }
+
+        private sealed class DetachedOverlayCandidate
+        {
+            public readonly CompiledSeal seal;
+            public readonly OverlayRecognitionResult result;
+
+            public DetachedOverlayCandidate(CompiledSeal seal, OverlayRecognitionResult result)
+            {
+                this.seal = seal;
+                this.result = result;
+            }
+        }
+    }
+}

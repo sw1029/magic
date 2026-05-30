@@ -29,6 +29,8 @@ namespace MagicExamHall
         private FloorController floorController = null!;
         private MagicNote magicNote = null!;
         private EndingReport endingReport = null!;
+        private SpellCastingService spellCasting = null!;
+        private FloorGoalSystem floorGoals = null!;
         private RectTransform hudPanel = null!;
         private RectTransform notePanel = null!;
         private RectTransform reportPanel = null!;
@@ -77,6 +79,8 @@ namespace MagicExamHall
             floorController = new FloorController();
             magicNote = new MagicNote();
             endingReport = new EndingReport();
+            spellCasting = new SpellCastingService();
+            floorGoals = new FloorGoalSystem();
             ResolveSceneReferences();
             BuildUi();
             ConfigureWorldDrawing();
@@ -102,7 +106,7 @@ namespace MagicExamHall
 
         public BaseRecognitionResult CastRawBaseForTests(List<List<StrokeSample>> strokes, Vector2 worldCenter)
         {
-            return ProcessBase(strokes, worldCenter, strokes.Count).baseResult;
+            return ProcessSpellGroup(strokes, worldCenter, strokes.Count).baseResult;
         }
 
         public OverlayRecognitionResult CastSyntheticOverlayForTests(OverlayOperator op, Vector2 worldCenter, float sealScaleRatio = 0.24f)
@@ -284,41 +288,45 @@ namespace MagicExamHall
         private ProcessedSpell ProcessSpellGroup(List<List<StrokeSample>> strokes, Vector2 center, int strokeCount)
         {
             trialCounter++;
-            var nearestSeal = FindAttachableSeal(center);
-            if (nearestSeal != null)
-            {
-                return ProcessOverlay(strokes, center, strokeCount, nearestSeal);
-            }
-
-            var detachedOverlay = FindDetachedOverlayCandidate(strokes, center);
-            if (detachedOverlay != null)
-            {
-                return ProcessDetachedOverlay(center, strokeCount, detachedOverlay);
-            }
-
-            return ProcessBase(strokes, center, strokeCount);
+            var outcome = spellCasting.Process(strokes, center, strokeCount, seals.Select(view => view.seal).ToList(), Time.time);
+            return ApplySpellOutcome(outcome);
         }
 
-        private ProcessedSpell ProcessBase(List<List<StrokeSample>> strokes, Vector2 center, int strokeCount)
+        private ProcessedSpell ApplySpellOutcome(SpellCastOutcome outcome)
         {
-            var baseResult = SpellRuntime.RecognizeBase(strokes);
-            baseResult.center = center;
-            baseResult.bufferStrokeCount = strokeCount;
+            return outcome.kind switch
+            {
+                SpellCastOutcomeKind.BaseFailed => ApplyBaseFailure(outcome),
+                SpellCastOutcomeKind.BaseSucceeded => ApplyBaseSuccess(outcome),
+                SpellCastOutcomeKind.OverlayFailed => ApplyOverlayFailure(outcome),
+                SpellCastOutcomeKind.OverlayDuplicate => ApplyOverlayDuplicate(outcome),
+                SpellCastOutcomeKind.OverlayStackFull => ApplyOverlayStackFull(outcome),
+                SpellCastOutcomeKind.OverlaySucceeded => ApplyOverlaySuccess(outcome),
+                SpellCastOutcomeKind.DetachedOverlay => ApplyDetachedOverlay(outcome),
+                _ => new ProcessedSpell()
+            };
+        }
+
+        private ProcessedSpell ApplyBaseFailure(SpellCastOutcome outcome)
+        {
+            var baseResult = outcome.baseResult;
             var feedbackFamily = baseResult.spell.recognizedFamily ?? baseResult.spell.targetFamily;
             var priorFailures = GetBaseFailureCount(feedbackFamily);
-            if (baseResult.spell.status != RecognitionStatus.Recognized || !baseResult.spell.recognizedFamily.HasValue)
-            {
-                var hintState = HintAssistance.ForAttempt(feedbackFamily, priorFailures, false, baseResult.spell);
-                baseFailureCounts[feedbackFamily] = priorFailures + 1;
-                CurrentAssistLevel = hintState.AssistLevelNumber;
-                LastHintText = hintState.body;
-                magicNote.Show(BuildBaseFailureNote(baseResult.spell, hintState));
-                pulses.Add(new ParticlePulse(center, new Color(0.75f, 0.75f, 0.82f), weak: true));
-                LogBaseAttempt(baseResult, null, "failed", hintState);
-                return new ProcessedSpell { baseResult = baseResult };
-            }
+            var hintState = HintAssistance.ForAttempt(feedbackFamily, priorFailures, false, baseResult.spell);
+            baseFailureCounts[feedbackFamily] = priorFailures + 1;
+            CurrentAssistLevel = hintState.AssistLevelNumber;
+            LastHintText = hintState.body;
+            magicNote.Show(BuildBaseFailureNote(baseResult.spell, hintState));
+            pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
+            LogBaseAttempt(baseResult, null, "failed", hintState);
+            return new ProcessedSpell { baseResult = baseResult };
+        }
 
-            var seal = SpellRuntime.CreateSeal(baseResult, Time.time);
+        private ProcessedSpell ApplyBaseSuccess(SpellCastOutcome outcome)
+        {
+            var baseResult = outcome.baseResult;
+            var seal = outcome.createdSeal;
+            var priorFailures = GetBaseFailureCount(seal.baseFamily);
             var successHintState = HintAssistance.ForAttempt(seal.baseFamily, priorFailures, true, baseResult.spell);
             baseFailureCounts[seal.baseFamily] = 0;
             CurrentAssistLevel = successHintState.AssistLevelNumber;
@@ -326,71 +334,85 @@ namespace MagicExamHall
             var view = CreateSealView(seal);
             seals.Add(view);
             endingReport.RecordBase(seal.baseFamily, seal.quality, success: true);
-            var effect = ApplyBaseToGoals(seal.baseFamily, center);
+            var effect = ApplyBaseToGoals(seal.baseFamily, outcome.center);
             magicNote.Show(BuildBaseSuccessNote(seal, effect, successHintState));
-            pulses.Add(new ParticlePulse(center, FamilyColor(seal.baseFamily)));
+            pulses.Add(new ParticlePulse(outcome.center, FamilyColor(seal.baseFamily)));
             LogBaseAttempt(baseResult, seal, effect.worldEffect, successHintState);
             EvaluateFloorCompletion();
             return new ProcessedSpell { baseResult = baseResult };
         }
 
-        private ProcessedSpell ProcessOverlay(List<List<StrokeSample>> strokes, Vector2 center, int strokeCount, SealView sealView)
+        private ProcessedSpell ApplyOverlayFailure(SpellCastOutcome outcome)
         {
-            var result = OverlayRecognizer.Recognize(strokes, sealView.seal);
-            if (!result.success)
-            {
-                CurrentAssistLevel = 1;
-                LastHintText = OverlayActionHint(result, sealView.seal);
-                magicNote.Show(BuildOverlayFailureNote(result, sealView.seal));
-                pulses.Add(new ParticlePulse(center, new Color(0.75f, 0.75f, 0.82f), weak: true));
-                LogOverlayAttempt(result, sealView.seal, center, strokeCount, "failed");
-                return new ProcessedSpell { overlayResult = result };
-            }
-
-            var op = result.recognizedOperator!.Value;
-            if (sealView.seal.overlayStack.Contains(op))
-            {
-                CurrentAssistLevel = 1;
-                LastHintText = "같은 장식 대신 아직 비어 있는 다른 장식을 seal 위에 그려 보세요.";
-                magicNote.Show($"{SpellLabels.Korean(op)} 장식은 이미 이 seal에 붙어 있습니다.");
-            }
-            else if (sealView.seal.overlayStack.Count >= 3)
-            {
-                CurrentAssistLevel = 1;
-                LastHintText = "새 base seal을 만든 뒤 남은 장식을 붙여 보세요.";
-                magicNote.Show("하나의 seal에는 overlay를 3개까지만 안정적으로 붙일 수 있습니다.");
-            }
-            else
-            {
-                sealView.seal.overlayStack.Add(op);
-                sealView.RefreshLabel(uiFont);
-                sealView.AddOverlayMark(op);
-                endingReport.RecordOverlay(op);
-                var effect = ApplyOverlayToGoals(sealView.seal, op, center);
-                CurrentAssistLevel = 0;
-                LastHintText = "";
-                magicNote.Show(BuildOverlaySuccessNote(sealView.seal, op, effect));
-                LogOverlayAttempt(result, sealView.seal, center, strokeCount, effect.worldEffect);
-                EvaluateFloorCompletion();
-            }
-
-            pulses.Add(new ParticlePulse(center, OverlayColor(op)));
+            var result = outcome.overlayResult;
+            var seal = outcome.targetSeal;
+            CurrentAssistLevel = 1;
+            LastHintText = OverlayActionHint(result, seal);
+            magicNote.Show(BuildOverlayFailureNote(result, seal));
+            pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
+            LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "failed");
             return new ProcessedSpell { overlayResult = result };
         }
 
-        private ProcessedSpell ProcessDetachedOverlay(
-            Vector2 center,
-            int strokeCount,
-            DetachedOverlayCandidate candidate)
+        private ProcessedSpell ApplyOverlayDuplicate(SpellCastOutcome outcome)
         {
-            var result = candidate.result;
-            result.status = RecognitionStatus.Invalid;
-            result.feedbackReason = BuildDetachedOverlayReason(result, candidate.sealView.seal, center);
+            var result = outcome.overlayResult;
+            var seal = outcome.targetSeal;
+            var op = outcome.overlayOperator!.Value;
             CurrentAssistLevel = 1;
-            LastHintText = DetachedOverlayActionHint(candidate.sealView.seal);
-            magicNote.Show(BuildDetachedOverlayFailureNote(result, candidate.sealView.seal));
-            pulses.Add(new ParticlePulse(center, new Color(0.75f, 0.75f, 0.82f), weak: true));
-            LogOverlayAttempt(result, candidate.sealView.seal, center, strokeCount, "detached_overlay");
+            LastHintText = "같은 장식 대신 아직 비어 있는 다른 장식을 seal 위에 그려 보세요.";
+            magicNote.Show($"{SpellLabels.Korean(op)} 장식은 이미 이 seal에 붙어 있습니다.");
+            pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
+            LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "duplicate_overlay");
+            return new ProcessedSpell { overlayResult = result };
+        }
+
+        private ProcessedSpell ApplyOverlayStackFull(SpellCastOutcome outcome)
+        {
+            var result = outcome.overlayResult;
+            var seal = outcome.targetSeal;
+            var op = outcome.overlayOperator!.Value;
+            CurrentAssistLevel = 1;
+            LastHintText = "새 base seal을 만든 뒤 남은 장식을 붙여 보세요.";
+            magicNote.Show($"하나의 seal에는 overlay를 {SpellCastingService.MaxOverlayStack}개까지만 안정적으로 붙일 수 있습니다.");
+            pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
+            LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "overlay_stack_full");
+            return new ProcessedSpell { overlayResult = result };
+        }
+
+        private ProcessedSpell ApplyOverlaySuccess(SpellCastOutcome outcome)
+        {
+            var result = outcome.overlayResult;
+            var seal = outcome.targetSeal;
+            var op = outcome.overlayOperator!.Value;
+            var sealView = FindSealView(seal);
+            if (sealView != null)
+            {
+                sealView.RefreshLabel(uiFont);
+                sealView.AddOverlayMark(op);
+            }
+            endingReport.RecordOverlay(op);
+            var effect = ApplyOverlayToGoals(seal, op, outcome.center);
+            CurrentAssistLevel = 0;
+            LastHintText = "";
+            magicNote.Show(BuildOverlaySuccessNote(seal, op, effect));
+            LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, effect.worldEffect);
+            pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
+            EvaluateFloorCompletion();
+            return new ProcessedSpell { overlayResult = result };
+        }
+
+        private ProcessedSpell ApplyDetachedOverlay(SpellCastOutcome outcome)
+        {
+            var result = outcome.overlayResult;
+            var seal = outcome.targetSeal;
+            result.status = RecognitionStatus.Invalid;
+            result.feedbackReason = BuildDetachedOverlayReason(result, seal, outcome.center);
+            CurrentAssistLevel = 1;
+            LastHintText = DetachedOverlayActionHint(seal);
+            magicNote.Show(BuildDetachedOverlayFailureNote(result, seal));
+            pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
+            LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "detached_overlay");
             return new ProcessedSpell { overlayResult = result };
         }
 
@@ -399,81 +421,45 @@ namespace MagicExamHall
             return seals
                 .Where(seal => Time.time <= seal.seal.expiresAt)
                 .OrderBy(seal => Vector2.Distance(center, seal.seal.worldCenter))
-                .FirstOrDefault(seal => Vector2.Distance(center, seal.seal.worldCenter) <= Mathf.Max(1.35f, seal.seal.worldScale * 0.95f));
+                .FirstOrDefault(seal => Vector2.Distance(center, seal.seal.worldCenter) <= SpellCastingService.AttachRadiusFor(seal.seal));
         }
 
-        private DetachedOverlayCandidate FindDetachedOverlayCandidate(List<List<StrokeSample>> strokes, Vector2 center)
+        private SealView FindSealView(CompiledSeal seal)
         {
-            var nearestSeal = seals
-                .Where(seal => Time.time <= seal.seal.expiresAt)
-                .OrderBy(seal => Vector2.Distance(center, seal.seal.worldCenter))
-                .FirstOrDefault();
-            if (nearestSeal == null)
-            {
-                return null;
-            }
-
-            var basePreview = SpellRuntime.RecognizeBase(strokes);
-            if (basePreview.spell.status == RecognitionStatus.Recognized && basePreview.spell.recognizedFamily.HasValue)
-            {
-                return null;
-            }
-
-            var result = OverlayRecognizer.Recognize(strokes, nearestSeal.seal);
-            if (result.success || result.recognizedOperator.HasValue || result.score >= 0.48f || result.shapeConfidence >= 0.55f)
-            {
-                return new DetachedOverlayCandidate(nearestSeal, result);
-            }
-
-            return null;
+            return seals.FirstOrDefault(view => ReferenceEquals(view.seal, seal) || view.seal.sealId == seal.sealId);
         }
 
         private GoalEffect ApplyBaseToGoals(SpellFamily family, Vector2 center)
         {
-            foreach (var goal in activeGoals.Where(goal => !goal.completed))
+            var resolution = floorGoals.ResolveBase(activeGoals, family, center);
+            if (resolution.kind == GoalResolutionKind.Completed)
             {
-                if (goal.MatchesBase(family, center))
-                {
-                    ActivateGoal(goal, SpellLabels.English(family));
-                    return new GoalEffect(BuildGoalDiscoveryNote(goal), goal.id);
-                }
+                ActivateGoal(resolution.goal, resolution.worldEffect);
+                return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id);
             }
 
-            var offTargetNote = BuildBaseOffTargetGoalNote(family, center);
-            if (!string.IsNullOrEmpty(offTargetNote))
+            if (resolution.kind == GoalResolutionKind.BaseOffTarget)
             {
-                return new GoalEffect(offTargetNote, "base_off_target");
+                return new GoalEffect(BuildBaseOffTargetGoalNote(family, resolution.targetGoal, resolution.distance, resolution.radius), resolution.worldEffect);
             }
 
             return new GoalEffect($"{SpellLabels.Korean(family)} seal이 바닥에 잠깐 고정되었습니다.", "seal_only");
         }
 
-        private string BuildBaseOffTargetGoalNote(SpellFamily family, Vector2 center)
+        private string BuildBaseOffTargetGoalNote(SpellFamily family, WorldStateGoal target, float distance, float radius)
         {
-            var target = activeGoals
-                .Where(goal => !goal.completed && goal.requiredBase == family)
-                .OrderBy(goal => Vector2.Distance(center, goal.position))
-                .FirstOrDefault();
-            if (target == null)
-            {
-                return "";
-            }
-
-            var distance = Vector2.Distance(center, target.position);
             return
                 $"{SpellLabels.Korean(family)} 문양은 인식됐지만 {target.title} 표식 근처가 아닙니다.\n" +
-                $"{target.title} 아래 라벨과 빛나는 표식 가까이에서 다시 그리세요. 현재 거리 {distance:0.0}, 목표 반경 {target.radius:0.0}.";
+                $"{target.title} 아래 라벨과 빛나는 표식 가까이에서 다시 그리세요. 현재 거리 {distance:0.0}, 목표 반경 {radius:0.0}.";
         }
 
         private GoalEffect ApplyOverlayToGoals(CompiledSeal seal, OverlayOperator op, Vector2 center)
         {
-            foreach (var goal in activeGoals.Where(goal => !goal.completed))
+            var resolution = floorGoals.ResolveOverlay(activeGoals, seal, op, center);
+            if (resolution.kind == GoalResolutionKind.Completed)
             {
-                if (goal.MatchesOverlay(seal, op, center))
-                {
-                    ActivateGoal(goal, SpellLabels.English(op));
-                    return new GoalEffect(BuildGoalDiscoveryNote(goal), goal.id);
-                }
+                ActivateGoal(resolution.goal, resolution.worldEffect);
+                return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id);
             }
 
             return new GoalEffect($"{seal.Label}: overlay stack이 빛났습니다.", "overlay_stack");
@@ -1208,18 +1194,6 @@ namespace MagicExamHall
         {
             public BaseRecognitionResult baseResult = null;
             public OverlayRecognitionResult overlayResult = null;
-        }
-
-        private sealed class DetachedOverlayCandidate
-        {
-            public readonly SealView sealView;
-            public readonly OverlayRecognitionResult result;
-
-            public DetachedOverlayCandidate(SealView sealView, OverlayRecognitionResult result)
-            {
-                this.sealView = sealView;
-                this.result = result;
-            }
         }
 
         private sealed class ParticlePulse

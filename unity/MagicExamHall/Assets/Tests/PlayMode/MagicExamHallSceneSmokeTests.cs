@@ -36,6 +36,7 @@ namespace MagicExamHall.Tests
             Assert.That(drawing.bufferSeconds, Is.EqualTo(WorldDrawingController.DefaultBufferSeconds).Within(0.001f));
             Assert.That(drawing.minPointDistance, Is.EqualTo(WorldDrawingController.DefaultMinPointDistance).Within(0.001f));
             Assert.That(controller.OutputDirectory, Does.Contain("MagicExamHallLogs"));
+            Assert.That(controller.IsResultPanelVisible, Is.False);
         }
 
         [UnityTest]
@@ -79,7 +80,7 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
-        public IEnumerator SyntheticBaseCastCreatesWorldSealWithoutPanel()
+        public IEnumerator SyntheticBaseCastCreatesWorldSealAndResultSummary()
         {
             SceneManager.LoadScene("MagicExamHall");
             yield return null;
@@ -96,7 +97,11 @@ namespace MagicExamHall.Tests
             Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
             Assert.That(controller.LastSealLifetimeSecondsForTests, Is.EqualTo(SpellRuntime.DefaultSealDurationSeconds).Within(0.001f));
             Assert.That(controller.IsDrawingPanelVisible, Is.False);
-            Assert.That(controller.IsResultPanelVisible, Is.False);
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("base 성공"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("불꽃"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("품질"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("이유"));
         }
 
         [UnityTest]
@@ -217,6 +222,10 @@ namespace MagicExamHall.Tests
             Assert.That(result.scaleHint, Is.EqualTo(OverlayScaleHint.TooLarge));
             Assert.That(controller.LastMagicNoteText, Does.Contain("너무 커"));
             Assert.That(controller.LastHintText, Does.Contain("너무 큽니다"));
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("overlay 실패"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("크기"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("너무 큽니다"));
         }
 
         [UnityTest]
@@ -233,6 +242,9 @@ namespace MagicExamHall.Tests
             yield return null;
             Assert.That(controller.CurrentAssistLevel, Is.EqualTo(1));
             Assert.That(controller.LastMagicNoteText, Does.Contain("짧은 힌트"));
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("base 실패"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("무효"));
 
             controller.CastRawBaseForTests(new List<List<StrokeSample>>(), Vector2.zero);
             yield return null;

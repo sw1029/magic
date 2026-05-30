@@ -37,11 +37,13 @@ namespace MagicExamHall
         private FloorGoalSystem floorGoals = null!;
         private RectTransform hudPanel = null!;
         private RectTransform notePanel = null!;
+        private RectTransform resultPanel = null!;
         private RectTransform reportPanel = null!;
         private Text hudTitle = null!;
         private Text hudCopy = null!;
         private Text floorProgress = null!;
         private Text noteText = null!;
+        private Text resultText = null!;
         private Text reportText = null!;
         private Font uiFont = null!;
         private string sessionId = "";
@@ -62,10 +64,11 @@ namespace MagicExamHall
         public Vector2 SafePositionForTests => safePosition;
         public bool HasEndingReport => reportPanel != null && reportPanel.gameObject.activeSelf;
         public bool IsDrawingPanelVisible => false;
-        public bool IsResultPanelVisible => false;
+        public bool IsResultPanelVisible => resultPanel != null && resultPanel.gameObject.activeSelf;
         public int CurrentAssistLevel { get; private set; }
         public string LastHintText { get; private set; } = "";
         public string LastMagicNoteText => magicNote?.Text ?? "";
+        public string LastResultPanelTextForTests => resultText == null ? "" : resultText.text;
         public string HudCopyForTests => hudCopy == null ? "" : hudCopy.text;
         public string FloorProgressForTests => floorProgress == null ? "" : floorProgress.text;
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
@@ -236,6 +239,10 @@ namespace MagicExamHall
             notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(560, 112), Anchor.BottomLeft, new Color(0.04f, 0.055f, 0.075f, 0.84f));
             noteText = CreateText("Note Text", notePanel, "", 14, FontStyle.Normal, new Vector2(14, -12), new Vector2(530, 88), Anchor.TopLeft);
 
+            resultPanel = CreatePanel("Spell Result", canvas.transform, new Vector2(-20, -20), new Vector2(430, 178), Anchor.TopRight, new Color(0.04f, 0.055f, 0.075f, 0.88f));
+            resultText = CreateText("Result Text", resultPanel, "", 13, FontStyle.Normal, new Vector2(14, -12), new Vector2(402, 152), Anchor.TopLeft);
+            resultPanel.gameObject.SetActive(false);
+
             reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(760, 520), Anchor.Center, new Color(0.035f, 0.045f, 0.065f, 0.96f));
             reportText = CreateText("Report Text", reportPanel, "", 17, FontStyle.Normal, new Vector2(28, -28), new Vector2(704, 464), Anchor.TopLeft);
             reportPanel.gameObject.SetActive(false);
@@ -247,6 +254,7 @@ namespace MagicExamHall
             finalCompletionCelebrated = false;
             finalTrueEnding = false;
             reportPanel.gameObject.SetActive(false);
+            resultPanel.gameObject.SetActive(false);
             ClearFloorObjects();
             floorController.Load(index);
             safePosition = new Vector2(0f, -4.05f);
@@ -330,6 +338,7 @@ namespace MagicExamHall
             CurrentAssistLevel = hintState.AssistLevelNumber;
             LastHintText = hintState.body;
             magicNote.Show(BuildBaseFailureNote(baseResult.spell, hintState));
+            ShowBaseResultSummary(baseResult, "base 실패", resultSummary: hintState.body);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogBaseAttempt(baseResult, null, "failed", hintState);
             return new ProcessedSpell { baseResult = baseResult };
@@ -349,6 +358,7 @@ namespace MagicExamHall
             endingReport.RecordBase(seal.baseFamily, seal.quality, success: true);
             var effect = ApplyBaseToGoals(seal.baseFamily, outcome.center);
             magicNote.Show(BuildBaseSuccessNote(seal, effect, successHintState));
+            ShowBaseResultSummary(baseResult, "base 성공", resultSummary: effect.note);
             pulses.Add(new ParticlePulse(outcome.center, FamilyColor(seal.baseFamily)));
             LogBaseAttempt(baseResult, seal, effect.worldEffect, successHintState);
             EvaluateFloorCompletion();
@@ -362,6 +372,7 @@ namespace MagicExamHall
             CurrentAssistLevel = 1;
             LastHintText = OverlayActionHint(result, seal);
             magicNote.Show(BuildOverlayFailureNote(result, seal));
+            ShowOverlayResultSummary(result, seal, "overlay 실패", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "failed");
             return new ProcessedSpell { overlayResult = result };
@@ -375,6 +386,7 @@ namespace MagicExamHall
             CurrentAssistLevel = 1;
             LastHintText = "같은 장식 대신 아직 비어 있는 다른 장식을 seal 위에 그려 보세요.";
             magicNote.Show($"{SpellLabels.Korean(op)} 장식은 이미 이 seal에 붙어 있습니다.");
+            ShowOverlayResultSummary(result, seal, "overlay 중복", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "duplicate_overlay");
             return new ProcessedSpell { overlayResult = result };
@@ -388,6 +400,7 @@ namespace MagicExamHall
             CurrentAssistLevel = 1;
             LastHintText = "새 base seal을 만든 뒤 남은 장식을 붙여 보세요.";
             magicNote.Show($"하나의 seal에는 overlay를 {SpellCastingService.MaxOverlayStack}개까지만 안정적으로 붙일 수 있습니다.");
+            ShowOverlayResultSummary(result, seal, "overlay 초과", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "overlay_stack_full");
             return new ProcessedSpell { overlayResult = result };
@@ -409,6 +422,7 @@ namespace MagicExamHall
             CurrentAssistLevel = 0;
             LastHintText = "";
             magicNote.Show(BuildOverlaySuccessNote(seal, op, effect));
+            ShowOverlayResultSummary(result, seal, "overlay 성공", effect.note);
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, effect.worldEffect);
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
             EvaluateFloorCompletion();
@@ -424,9 +438,36 @@ namespace MagicExamHall
             CurrentAssistLevel = 1;
             LastHintText = DetachedOverlayActionHint(seal);
             magicNote.Show(BuildDetachedOverlayFailureNote(result, seal));
+            ShowOverlayResultSummary(result, seal, "overlay 거리 오류", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "detached_overlay");
             return new ProcessedSpell { overlayResult = result };
+        }
+
+        private void ShowBaseResultSummary(BaseRecognitionResult result, string title, string resultSummary)
+        {
+            var family = result.spell.recognizedFamily.HasValue
+                ? SpellLabels.Korean(result.spell.recognizedFamily.Value)
+                : SpellLabels.Korean(result.spell.targetFamily);
+            resultText.text =
+                $"{title}: {family}\n" +
+                $"판정 {StatusLabel(result.spell.status)}  신뢰 {Percent(result.spell.confidence)}  획 {result.bufferStrokeCount}\n" +
+                $"{QualityLine(result.spell.quality)}\n" +
+                $"이유: {ShortLine(result.spell.feedbackReason, 52)}\n" +
+                $"다음: {ShortLine(resultSummary, 56)}";
+            resultPanel.gameObject.SetActive(true);
+        }
+
+        private void ShowOverlayResultSummary(OverlayRecognitionResult result, CompiledSeal seal, string title, string resultSummary)
+        {
+            var op = result.recognizedOperator.HasValue ? SpellLabels.Korean(result.recognizedOperator.Value) : "미확정";
+            resultText.text =
+                $"{title}: {op}\n" +
+                $"대상 seal: {ShortLine(seal.Label, 30)}\n" +
+                $"판정 {StatusLabel(result.status)}  점수 {Percent(result.score)}  모양 {Percent(result.shapeConfidence)}\n" +
+                $"크기 {result.scaleRatio:0.00}x  위치 {AnchorLabel(result.anchorZone)}\n" +
+                $"다음: {ShortLine(resultSummary, 56)}";
+            resultPanel.gameObject.SetActive(true);
         }
 
         private SealView FindAttachableSeal(Vector2 center)
@@ -953,6 +994,7 @@ namespace MagicExamHall
         {
             reportPanel.gameObject.SetActive(true);
             notePanel.gameObject.SetActive(false);
+            resultPanel.gameObject.SetActive(false);
             var completedFinalGoals = IsFinalFloor ? activeGoals.Count(goal => goal.completed) : activeGoals.Count;
             hudTitle.text = finalTrueEnding ? "입학 시험 완전 통과" : "입학 시험 통과";
             hudCopy.text = finalTrueEnding ? "입학 마법진이 완전히 밝아졌습니다." : "입학 마법진이 다시 밝아졌습니다.";
@@ -1186,6 +1228,10 @@ namespace MagicExamHall
                     rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
                     rect.pivot = new Vector2(0f, 1f);
                     break;
+                case Anchor.TopRight:
+                    rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+                    rect.pivot = new Vector2(1f, 1f);
+                    break;
                 case Anchor.BottomLeft:
                     rect.anchorMin = rect.anchorMax = new Vector2(0f, 0f);
                     rect.pivot = new Vector2(0f, 0f);
@@ -1224,6 +1270,53 @@ namespace MagicExamHall
             };
         }
 
+        private static string StatusLabel(RecognitionStatus status)
+        {
+            return status switch
+            {
+                RecognitionStatus.Recognized => "인식",
+                RecognitionStatus.Incomplete => "불완전",
+                RecognitionStatus.Ambiguous => "모호",
+                RecognitionStatus.Invalid => "무효",
+                _ => status.ToString()
+            };
+        }
+
+        private static string QualityLine(QualityVector quality)
+        {
+            return $"품질 닫힘 {Percent(quality.closure)} / 선 {Percent(quality.smoothness)} / 속도 {Percent(quality.tempo)} / 안정 {Percent(quality.stability)}";
+        }
+
+        private static string Percent(float value)
+        {
+            return $"{Mathf.RoundToInt(Mathf.Clamp01(value) * 100f)}%";
+        }
+
+        private static string AnchorLabel(string anchorZone)
+        {
+            return anchorZone switch
+            {
+                "upper_right" => "오른쪽 위",
+                "right" => "오른쪽",
+                "lower_right" => "오른쪽 아래",
+                "upper" => "위쪽",
+                "left" => "왼쪽",
+                "" => "미확정",
+                _ => anchorZone
+            };
+        }
+
+        private static string ShortLine(string text, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return "기록 없음";
+            }
+
+            var line = text.Replace("\r", " ").Replace("\n", " ").Trim();
+            return line.Length <= maxLength ? line : line[..Mathf.Max(1, maxLength - 1)] + "…";
+        }
+
         private static List<List<StrokeSample>> Offset(List<List<StrokeSample>> strokes, Vector2 center, float canonicalCenter)
         {
             return strokes
@@ -1235,6 +1328,7 @@ namespace MagicExamHall
         {
             Center,
             TopLeft,
+            TopRight,
             BottomLeft
         }
 

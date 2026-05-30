@@ -283,10 +283,7 @@ namespace MagicExamHall
                 {
                     body.transform.localScale *= 1.45f;
                 }
-                if (ShouldShowGoalLabels(floor))
-                {
-                    goal.label = CreateGoalLabel(goal, floorRoot.transform);
-                }
+                goal.label = CreateGoalLabel(goal, floorRoot.transform);
             }
 
             foreach (var hazard in activeHazards)
@@ -1123,21 +1120,16 @@ namespace MagicExamHall
             worldCanvas.overrideSorting = true;
             worldCanvas.sortingOrder = 42;
             var rect = canvasObject.GetComponent<RectTransform>() ?? canvasObject.AddComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(3.4f, 0.72f);
-            canvasObject.transform.localScale = Vector3.one * 0.018f;
+            rect.sizeDelta = new Vector2(4.2f, 0.92f);
+            canvasObject.transform.localScale = Vector3.one * 0.026f;
 
-            var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, rect.sizeDelta, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, 0.82f));
+            var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, rect.sizeDelta, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, 0.86f));
             background.raycastTarget = false;
-            var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 22, FontStyle.Bold, Vector2.zero, rect.sizeDelta, Anchor.Center);
+            var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 28, FontStyle.Bold, Vector2.zero, rect.sizeDelta, Anchor.Center);
             text.alignment = TextAnchor.MiddleCenter;
-            text.color = Color.Lerp(goal.color, Color.white, 0.28f);
+            text.color = Color.Lerp(goal.color, Color.white, 0.45f);
             text.raycastTarget = false;
             return text;
-        }
-
-        private static bool ShouldShowGoalLabels(FloorDefinition floor)
-        {
-            return floor.number == 1 || floor.number == 5;
         }
 
         private Image CreateImage(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
@@ -1211,7 +1203,7 @@ namespace MagicExamHall
             {
                 SpellFamily.Fire => new Color(1f, 0.31f, 0.18f),
                 SpellFamily.Water => new Color(0.24f, 0.48f, 0.86f),
-                SpellFamily.Wind => new Color(0.44f, 0.72f, 0.74f),
+                SpellFamily.Wind => new Color(0.74f, 0.86f, 0.92f),
                 SpellFamily.Earth => new Color(0.74f, 0.55f, 0.32f),
                 SpellFamily.Life => new Color(0.35f, 0.86f, 0.42f),
                 _ => Color.white
@@ -1478,7 +1470,7 @@ namespace MagicExamHall
                     {
                         WorldStateGoal.Base("ember", "불씨", SpellFamily.Fire, new Vector2(-5.5f, 2.6f), new Color(1f, 0.31f, 0.18f), "불씨가 살아나며 오래된 룬을 데웁니다."),
                         WorldStateGoal.Base("puddle", "물웅덩이", SpellFamily.Water, new Vector2(0f, 3.0f), new Color(0.24f, 0.48f, 0.86f), "물길이 맑아지며 바닥 홈을 채웁니다."),
-                        WorldStateGoal.Base("vane", "바람개비", SpellFamily.Wind, new Vector2(5.5f, 2.6f), new Color(0.44f, 0.72f, 0.74f), "바람개비가 돌며 승강 룬에 숨을 넣습니다."),
+                        WorldStateGoal.Base("vane", "바람개비", SpellFamily.Wind, new Vector2(5.5f, 2.6f), new Color(0.74f, 0.86f, 0.92f), "바람개비가 돌며 승강 룬에 숨을 넣습니다."),
                         WorldStateGoal.Base("pillar", "돌기둥", SpellFamily.Earth, new Vector2(-3.2f, -2.45f), new Color(0.74f, 0.55f, 0.32f), "돌기둥이 제자리를 잡아 시험장을 고정합니다."),
                         WorldStateGoal.Base("vine", "마른 덩굴", SpellFamily.Life, new Vector2(3.2f, -2.45f), new Color(0.35f, 0.86f, 0.42f), "마른 덩굴에 초록 빛이 돌아옵니다.")
                     }
@@ -1514,7 +1506,7 @@ namespace MagicExamHall
                     goals =
                     {
                         WorldStateGoal.Combo("brace_bridge", "보강 지지대", SpellFamily.Earth, OverlayOperator.SteelBrace, new Vector2(-4.6f, 1.8f), new Color(0.74f, 0.55f, 0.32f), "땅과 보강이 공중 다리의 첫 흐름을 받쳐 줍니다.").WithReaction(WorldReactionKind.BridgeFlow),
-                        WorldStateGoal.Combo("axis_bridge", "축 정렬 발판", SpellFamily.Wind, OverlayOperator.MartialAxis, new Vector2(4.6f, 1.8f), new Color(0.44f, 0.72f, 0.74f), "바람과 축이 공중 다리의 방향을 맞추며 경로를 엽니다.").WithReaction(WorldReactionKind.BridgeFlow),
+                        WorldStateGoal.Combo("axis_bridge", "축 정렬 발판", SpellFamily.Wind, OverlayOperator.MartialAxis, new Vector2(4.6f, 1.8f), new Color(0.74f, 0.86f, 0.92f), "바람과 축이 공중 다리의 방향을 맞추며 경로를 엽니다.").WithReaction(WorldReactionKind.BridgeFlow),
                         WorldStateGoal.Combo("vine_bridge", "덩굴 고리", SpellFamily.Life, OverlayOperator.SoulDot, new Vector2(-3.2f, -2.3f), new Color(0.35f, 0.86f, 0.42f), "생명과 집중이 다리 아래를 묶는 흐름 고리를 만듭니다.").WithReaction(WorldReactionKind.BridgeFlow),
                         WorldStateGoal.Combo("ice_bridge", "얼음 다리", SpellFamily.Water, OverlayOperator.IceBar, new Vector2(3.2f, -2.3f), new Color(0.48f, 0.84f, 1f), "물과 얼음이 빛나는 발판을 굳혀 공중 다리를 완성합니다.").WithReaction(WorldReactionKind.BridgeFlow)
                     }
@@ -1558,7 +1550,7 @@ namespace MagicExamHall
                         WorldStateGoal.Combo("connection", "연결", SpellFamily.Life, OverlayOperator.SoulDot, new Vector2(1.6f, 3.0f), new Color(0.35f, 0.86f, 0.42f), "연결의 조각이 새싹처럼 이어집니다."),
                         WorldStateGoal.Overlay("cut", "절단", OverlayOperator.VoidCut, new Vector2(4.8f, 2.6f), new Color(0.58f, 0.42f, 0.92f), "절단의 조각이 오염을 분리합니다."),
                         WorldStateGoal.Overlay("focus", "집중", OverlayOperator.SoulDot, new Vector2(-2.2f, -2.5f), new Color(0.95f, 0.62f, 1f), "집중의 조각이 심장을 밝힙니다."),
-                        WorldStateGoal.Base("flow", "흐름", SpellFamily.Wind, new Vector2(2.2f, -2.5f), new Color(0.44f, 0.72f, 0.74f), "흐름의 조각이 원을 다시 돌립니다.")
+                        WorldStateGoal.Base("flow", "흐름", SpellFamily.Wind, new Vector2(2.2f, -2.5f), new Color(0.74f, 0.86f, 0.92f), "흐름의 조각이 원을 다시 돌립니다.")
                     }
                 }
             };
@@ -1600,10 +1592,23 @@ namespace MagicExamHall
 
         public static WorldStateGoal Base(string id, string title, SpellFamily family, Vector2 position, Color color, string note)
         {
-            return new WorldStateGoal(id, title, position, color, PixelSpriteKind.Target, note)
+            return new WorldStateGoal(id, title, position, color, KindForFamily(family), note)
             {
                 requiredBase = family,
-                visualScale = 0.9f
+                visualScale = 1.0f
+            };
+        }
+
+        private static PixelSpriteKind KindForFamily(SpellFamily family)
+        {
+            return family switch
+            {
+                SpellFamily.Fire => PixelSpriteKind.FireRune,
+                SpellFamily.Water => PixelSpriteKind.WaterRune,
+                SpellFamily.Wind => PixelSpriteKind.WindRune,
+                SpellFamily.Earth => PixelSpriteKind.EarthRune,
+                SpellFamily.Life => PixelSpriteKind.LifeRune,
+                _ => PixelSpriteKind.Target
             };
         }
 

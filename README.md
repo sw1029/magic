@@ -245,9 +245,10 @@ unity/     Unity Magic Exam Hall 플레이어블
 
 1. `docs/GAME_DESIGN.md`
 2. `docs/PROJECT_ROADMAP.md`
-3. `docs/PROJECT_OVERVIEW.md`
-4. `docs/20_queue/work-queue.md`
-5. `docs/30_tasks/README.md`
+3. `docs/TEAM_DEVELOPMENT_PLAN.md`
+4. `docs/PROJECT_OVERVIEW.md`
+5. `docs/20_queue/work-queue.md`
+6. `docs/30_tasks/README.md`
 
 ## 트러블슈팅
 

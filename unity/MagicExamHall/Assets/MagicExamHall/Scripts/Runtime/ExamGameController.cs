@@ -464,6 +464,7 @@ namespace MagicExamHall
             baseFailureCounts[feedbackFamily] = priorFailures + 1;
             CurrentAssistLevel = hintState.AssistLevelNumber;
             LastHintText = hintState.body;
+            endingReport.RecordAssist(hintState);
             magicNote.Show(BuildBaseFailureNote(baseResult.spell, hintState));
             ShowBaseResultSummary(baseResult, "base 실패", resultSummary: hintState.body);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
@@ -482,7 +483,7 @@ namespace MagicExamHall
             LastHintText = successHintState.assisted ? successHintState.body : "";
             var view = CreateSealView(seal);
             seals.Add(view);
-            endingReport.RecordBase(seal.baseFamily, seal.quality, success: true);
+            endingReport.RecordBase(seal.baseFamily, seal.quality, success: true, successHintState);
             var effect = ApplyBaseToGoals(seal.baseFamily, outcome.center);
             magicNote.Show(BuildBaseSuccessNote(seal, effect, successHintState));
             ShowBaseResultSummary(baseResult, "base 성공", resultSummary: effect.note);
@@ -498,6 +499,7 @@ namespace MagicExamHall
             var seal = outcome.targetSeal;
             CurrentAssistLevel = 1;
             LastHintText = OverlayActionHint(result, seal);
+            endingReport.RecordHintShown(1);
             magicNote.Show(BuildOverlayFailureNote(result, seal));
             ShowOverlayResultSummary(result, seal, "overlay 실패", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
@@ -512,6 +514,7 @@ namespace MagicExamHall
             var op = outcome.overlayOperator!.Value;
             CurrentAssistLevel = 1;
             LastHintText = "같은 장식 대신 아직 비어 있는 다른 장식을 seal 위에 그려 보세요.";
+            endingReport.RecordHintShown(1);
             magicNote.Show($"{SpellLabels.Korean(op)} 장식은 이미 이 seal에 붙어 있습니다.");
             ShowOverlayResultSummary(result, seal, "overlay 중복", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
@@ -526,6 +529,7 @@ namespace MagicExamHall
             var op = outcome.overlayOperator!.Value;
             CurrentAssistLevel = 1;
             LastHintText = "새 base seal을 만든 뒤 남은 장식을 붙여 보세요.";
+            endingReport.RecordHintShown(1);
             magicNote.Show($"하나의 seal에는 overlay를 {SpellCastingService.MaxOverlayStack}개까지만 안정적으로 붙일 수 있습니다.");
             ShowOverlayResultSummary(result, seal, "overlay 초과", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
@@ -564,6 +568,7 @@ namespace MagicExamHall
             result.feedbackReason = BuildDetachedOverlayReason(result, seal, outcome.center);
             CurrentAssistLevel = 1;
             LastHintText = DetachedOverlayActionHint(seal);
+            endingReport.RecordHintShown(1);
             magicNote.Show(BuildDetachedOverlayFailureNote(result, seal));
             ShowOverlayResultSummary(result, seal, "overlay 거리 오류", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
@@ -1710,16 +1715,44 @@ namespace MagicExamHall
         private readonly Dictionary<OverlayOperator, int> overlayUse = new();
         private readonly HashSet<string> discoveries = new();
         private readonly List<float> qualityScores = new();
+        private readonly List<QualityVector> successfulQualities = new();
+        private int hintShownCount;
+        private int assistedSuccessCount;
+        private int maxAssistLevel;
 
         public int DiscoveryCount => discoveries.Count;
 
-        public void RecordBase(SpellFamily family, QualityVector quality, bool success)
+        public void RecordBase(SpellFamily family, QualityVector quality, bool success, HintState hintState = null)
         {
             baseUse[family] = baseUse.TryGetValue(family, out var count) ? count + 1 : 1;
             if (success)
             {
                 qualityScores.Add(quality.Average());
+                successfulQualities.Add(quality);
+                if (hintState?.assisted == true)
+                {
+                    assistedSuccessCount++;
+                }
             }
+        }
+
+        public void RecordAssist(HintState hintState)
+        {
+            if (hintState == null)
+            {
+                return;
+            }
+
+            if (hintState.hintShown)
+            {
+                RecordHintShown(hintState.AssistLevelNumber);
+            }
+        }
+
+        public void RecordHintShown(int assistLevel)
+        {
+            hintShownCount++;
+            maxAssistLevel = Math.Max(maxAssistLevel, assistLevel);
         }
 
         public void RecordOverlay(OverlayOperator op)
@@ -1748,7 +1781,10 @@ namespace MagicExamHall
                 $"가장 많이 사용한 base: {favoriteBase}\n" +
                 $"가장 많이 사용한 overlay: {favoriteOverlay}\n" +
                 $"발견한 세계 반응: {discoveries.Count}개\n" +
-                $"평균 문양 안정도: {averageQuality:0}%\n\n" +
+                $"평균 문양 안정도: {averageQuality:0}%\n" +
+                $"힌트 표시: {hintShownCount}회 / 최대 {AssistLevelLabel(maxAssistLevel)} / 힌트 후 성공 {assistedSuccessCount}회\n" +
+                $"{BuildProfileSummary()}\n" +
+                "보정 정책: profile은 성공/실패 판정을 뒤집지 않고 품질 설명과 다음 연습 방향에만 사용됩니다.\n\n" +
                 BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
                 "자기 평가\n" +
                 "1. 어떤 문양이 가장 내 손에 잘 맞았나요?\n" +
@@ -1776,6 +1812,57 @@ namespace MagicExamHall
             }
 
             return $"{favoriteBase} base와 {favoriteOverlay} 장식을 가장 자주 실험했습니다. 탑은 그 반복을 단순한 성공이 아니라 당신만의 문법으로 기록했습니다.";
+        }
+
+        private string BuildProfileSummary()
+        {
+            if (successfulQualities.Count == 0)
+            {
+                return "문양 습관: 아직 성공한 base 표본이 부족합니다.";
+            }
+
+            var metrics = BuildMetricScores();
+            var strongest = metrics.OrderByDescending(metric => metric.score).First();
+            var weakest = metrics.OrderBy(metric => metric.score).First();
+            return $"문양 습관: 강점 {strongest.name} {strongest.Percent}, 보완 {weakest.name} {weakest.Percent}.";
+        }
+
+        private List<ProfileMetric> BuildMetricScores()
+        {
+            return new List<ProfileMetric>
+            {
+                new("닫힘", successfulQualities.Average(quality => quality.closure)),
+                new("선", successfulQualities.Average(quality => quality.smoothness)),
+                new("속도", successfulQualities.Average(quality => quality.tempo)),
+                new("안정", successfulQualities.Average(quality => quality.stability)),
+                new("기울기 억제", successfulQualities.Average(quality => 1f - quality.rotationBias))
+            };
+        }
+
+        private static string AssistLevelLabel(int level)
+        {
+            return level switch
+            {
+                0 => "자율",
+                1 => "짧은 힌트",
+                2 => "체크리스트",
+                3 => "강한 보조선",
+                _ => $"레벨 {level}"
+            };
+        }
+
+        private readonly struct ProfileMetric
+        {
+            public readonly string name;
+            public readonly float score;
+
+            public ProfileMetric(string name, float score)
+            {
+                this.name = name;
+                this.score = Mathf.Clamp01(score);
+            }
+
+            public string Percent => $"{Mathf.RoundToInt(score * 100f)}%";
         }
     }
 

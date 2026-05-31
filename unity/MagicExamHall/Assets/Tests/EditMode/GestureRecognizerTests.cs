@@ -395,6 +395,31 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void EndingReportSeparatesShownHintsFromAssistedSuccess()
+        {
+            var report = new EndingReport();
+            var failedResult = GestureRecognizer.Recognize(new List<List<StrokeSample>>(), SpellFamily.Fire);
+            report.RecordAssist(HintAssistance.ForAttempt(SpellFamily.Fire, 0, false, failedResult));
+            report.RecordAssist(HintAssistance.ForAttempt(SpellFamily.Fire, 1, false, failedResult));
+
+            var successfulResult = GestureRecognizer.Recognize(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Fire), SpellFamily.Fire);
+            var assistedSuccess = HintAssistance.ForAttempt(SpellFamily.Fire, 1, true, successfulResult);
+            report.RecordBase(SpellFamily.Fire, successfulResult.quality, success: true, assistedSuccess);
+
+            var text = report.BuildText(
+                totalAttempts: 3,
+                outputDirectory: "MagicExamHallLogs/test",
+                trueEnding: true,
+                completedFinalGoals: 6,
+                totalFinalGoals: 6);
+
+            Assert.That(text, Does.Contain("힌트 표시: 2회"));
+            Assert.That(text, Does.Contain("최대 체크리스트"));
+            Assert.That(text, Does.Contain("힌트 후 성공 1회"));
+            Assert.That(text, Does.Contain("문양 습관"));
+        }
+
+        [Test]
         public void PreviewBeforeFailureDoesNotShowHint()
         {
             var preview = HintAssistance.PreviewFor(SpellFamily.Water, 0);

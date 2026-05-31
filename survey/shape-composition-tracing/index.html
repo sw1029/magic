@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./style.css" />
+    <title>Shape Composition Tracing Survey</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="kicker">Shape Composition Survey</p>
+          <h1>도형 조합 따라그리기</h1>
+        </div>
+        <div class="header-meta" aria-label="survey metadata">
+          <span id="session-chip" class="chip">session</span>
+          <span id="phase-chip" class="chip strong">composition 1 / 2</span>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="canvas-section" aria-label="single canvas workspace">
+          <div class="command-bar">
+            <div id="shape-tools" class="tool-strip" aria-label="shape toolbar"></div>
+            <div id="context-actions" class="action-strip" aria-label="context actions"></div>
+          </div>
+
+          <div class="canvas-frame">
+            <canvas id="work-canvas" width="1000" height="640" aria-label="shape composition and tracing canvas"></canvas>
+          </div>
+
+          <div class="status-line">
+            <span id="canvas-status">준비 중</span>
+            <span id="autosave-status">autosave ready</span>
+          </div>
+        </section>
+
+        <aside class="side-panel" aria-label="survey controls">
+          <section class="panel-block">
+            <label class="field">
+              <span>참여자 ID</span>
+              <input id="participant-id" type="text" autocomplete="off" maxlength="64" placeholder="optional" />
+            </label>
+          </section>
+
+          <section class="panel-block">
+            <p class="block-label">현재 단계</p>
+            <h2 id="phase-title">도형 조합 지정</h2>
+            <p id="phase-copy" class="muted-copy"></p>
+            <div class="progress-shell">
+              <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            <p id="progress-text" class="progress-text"></p>
+          </section>
+
+          <section id="inspector" class="panel-block"></section>
+
+          <section class="panel-block">
+            <p class="block-label">내보내기</p>
+            <div class="stacked-actions">
+              <button id="download-json" type="button">JSON 저장</button>
+              <button id="download-csv" type="button">CSV 요약 저장</button>
+              <button id="new-session" type="button" class="danger-button">새 세션</button>
+            </div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

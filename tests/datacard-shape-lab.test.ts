@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   appendDatacardShapeCapture,
+  createDatacardRecognizerRegistry,
   createEmptyDatacardShapeCaptureStore,
   listDatacardShapePresets,
   recognizeSessionWithDatacard,
+  recognizeSessionWithDatacardRegistry,
   validateDatacardShapePreset,
   type DatacardShapePreset
 } from "../src/recognizer/datacard-shape-lab";
@@ -97,6 +99,84 @@ describe("datacard shape lab", () => {
     expect(result.sessionUsed.strokes.length).toBe(fireStrokes.length);
   });
 
+  it("adds contrastive tinyML lanes without changing stable built-in recognition", () => {
+    const fire = getPreset("fire");
+    const session = makeSession(scaleStrokes(fire.definition.exampleTemplate, 190, 250, 230));
+    const result = recognizeSessionWithDatacard(session, fire, createEmptyDatacardShapeCaptureStore(1));
+
+    expect(result.contrast).toMatchObject({
+      version: "datacard-contrast-v1",
+      finalCandidateId: "fire",
+      finalStatus: "recognized"
+    });
+    expect(result.selectedCandidate.status).toBe("recognized");
+    expect(result.selectedCandidate.contrastRole).toBe(result.contrast?.role);
+    expect(result.selectedCandidate.shadowRisk).toEqual(expect.any(Number));
+  });
+
+  it("keeps a custom shape in shadow/hold before enough tutorial captures", () => {
+    const spiral = getPreset("custom:spiral");
+    const session = makeSession(scaleStrokes(spiral.definition.exampleTemplate, 180, 280, 260));
+    const result = recognizeSessionWithDatacard(session, spiral, createEmptyDatacardShapeCaptureStore(1));
+
+    expect(result.contrast?.meaning.correctionClass).toBe("hold_for_capture");
+    expect(result.contrast?.blockedBy).toContain("signature");
+    expect(result.selectedCandidate.status).toBe("ambiguous");
+  });
+
+  it("allows the meaning layer to become actual after sufficient low-risk tutorial captures", () => {
+    const spiral = getPreset("custom:spiral");
+    const session = makeSession(scaleStrokes(spiral.definition.exampleTemplate, 180, 280, 260));
+    let store = createEmptyDatacardShapeCaptureStore(1);
+
+    for (let index = 0; index < 3; index += 1) {
+      store = appendDatacardShapeCapture(store, spiral.id, session.strokes, index + 2);
+    }
+
+    const registry = createDatacardRecognizerRegistry([spiral], store, { builtInConfusionLimit: 1 });
+    const result = recognizeSessionWithDatacardRegistry(session, registry, { selectedPresetId: spiral.id });
+
+    expect(result.contrast?.meaning.eligibleForActual).toBe(true);
+    expect(result.contrast?.blockedBy).not.toContain("signature");
+    expect(result.selectedCandidate.status).toBe("recognized");
+  });
+
+  it("keeps repeated open-line custom shapes gated as high-risk even when the template matches", () => {
+    const repeatedLines: DatacardShapePreset = {
+      id: "custom:parallel_lines",
+      kind: "custom",
+      group: "custom",
+      label: "parallel lines",
+      shortLabel: "lines",
+      description: "Three repeated open line strokes.",
+      definition: {
+        pattern: "line{3}",
+        expression: "line{3}",
+        guide: "Draw three parallel open lines.",
+        keywords: ["line", "parallel"],
+        features: {
+          strokeCount: [3, 3],
+          closed: false,
+          corners: [0, 2],
+          endpointClusters: [6, 6],
+          fillRatio: [0, 0.12],
+          parallelism: [0.8, 1]
+        },
+        exampleTemplate: [
+          createLineStroke("line-a", -0.72, -0.32, 0.72, -0.32),
+          createLineStroke("line-b", -0.72, 0, 0.72, 0),
+          createLineStroke("line-c", -0.72, 0.32, 0.72, 0.32)
+        ]
+      }
+    };
+    const session = makeSession(scaleStrokes(repeatedLines.definition.exampleTemplate, 180, 260, 260));
+    const result = recognizeSessionWithDatacard(session, repeatedLines, createEmptyDatacardShapeCaptureStore(1));
+
+    expect(result.contrast?.blockedBy).toContain("repetition");
+    expect(result.contrast?.meaning.correctionClass).toBe("downgrade_risk");
+    expect(result.selectedCandidate.status).toBe("ambiguous");
+  });
+
   it("keeps custom capture storage as an in-memory immutable store", () => {
     const cross = getPreset("custom:cross");
     const store = createEmptyDatacardShapeCaptureStore(1);
@@ -151,4 +231,15 @@ function makeCircleStroke(id: string, cx: number, cy: number, radius: number): S
   }
 
   return { id, points };
+}
+
+function createLineStroke(id: string, x1: number, y1: number, x2: number, y2: number): Stroke {
+  return {
+    id,
+    points: [
+      { x: x1, y: y1, t: 0 },
+      { x: (x1 + x2) / 2, y: (y1 + y2) / 2, t: 16 },
+      { x: x2, y: y2, t: 32 }
+    ]
+  };
 }

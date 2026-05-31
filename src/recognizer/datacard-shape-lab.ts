@@ -38,6 +38,28 @@ export type DatacardRecognizerActivationStatus =
   | "shape_definition"
   | "active_recognizer"
   | "blocked";
+export type DatacardTinyMlContrastRole =
+  | "all_agree"
+  | "shadow_only"
+  | "meaning_only"
+  | "shadow_warns_rule_accept"
+  | "model_disagreement"
+  | "rule_block";
+export type DatacardTinyMlCorrectionClass =
+  | "none"
+  | "meaning_recover"
+  | "downgrade_risk"
+  | "hold_for_capture"
+  | "retry_noise";
+export type DatacardTinyMlSuggestedAction = "accept_shadow" | "hold" | "retry" | "needs_more_capture";
+export type DatacardTinyMlContrastBlocker =
+  | "topology"
+  | "relation"
+  | "closure"
+  | "repetition"
+  | "noise"
+  | "holdout"
+  | "signature";
 
 export interface DatacardShapeFeatureHints {
   strokeCount: readonly [number, number];
@@ -99,8 +121,45 @@ export interface DatacardRecognitionCandidate {
   captureCount: number;
   activationStatus?: DatacardRecognizerActivationStatus;
   promotionRisk?: number;
+  contrastScore?: number;
+  meaningScore?: number;
+  shadowRisk?: number;
+  contrastRole?: DatacardTinyMlContrastRole;
+  blockedByContrast?: readonly DatacardTinyMlContrastBlocker[];
+  explanationCodes?: readonly string[];
   status: RecognitionStatus;
   reason: string;
+}
+
+export interface DatacardTinyMlShadowTrack {
+  candidateId: DatacardShapeId;
+  confidence: number;
+  unsafeRisk: number;
+  flipRisk: number;
+  relationRisk: number;
+  suggestedAction: DatacardTinyMlSuggestedAction;
+  reasons: readonly string[];
+}
+
+export interface DatacardTinyMlMeaningTrack {
+  candidateId: DatacardShapeId;
+  confidence: number;
+  correctionClass: DatacardTinyMlCorrectionClass;
+  eligibleForActual: boolean;
+  actualScoreLift: number;
+  reasons: readonly string[];
+}
+
+export interface DatacardTinyMlContrastDecision {
+  version: "datacard-contrast-v1";
+  role: DatacardTinyMlContrastRole;
+  finalStatus: RecognitionStatus;
+  finalCandidateId: DatacardShapeId;
+  actualCandidateId: DatacardShapeId;
+  shadow: DatacardTinyMlShadowTrack;
+  meaning: DatacardTinyMlMeaningTrack;
+  blockedBy: readonly DatacardTinyMlContrastBlocker[];
+  explanationCodes: readonly string[];
 }
 
 export interface DatacardRecognitionResult {
@@ -112,6 +171,7 @@ export interface DatacardRecognitionResult {
   sealDetection?: SealDetection;
   features: DatacardShapeFeatureVector;
   registry?: DatacardRecognizerRegistry;
+  contrast?: DatacardTinyMlContrastDecision;
 }
 
 export interface DatacardShapeValidationIssue {
@@ -436,15 +496,28 @@ export function recognizeSessionWithDatacard(
   const selectedCandidate =
     candidates.find((candidate) => candidate.id === preset.id) ??
     scoreDatacardPreset(preset, prepared.baseResult, prepared.sessionUsed, features, captures);
+  const contrast = buildDatacardTinyMlContrastDecision({
+    selectedPresetId: preset.id,
+    selectedPreset: preset,
+    selectedCandidate,
+    candidates,
+    features,
+    session: prepared.sessionUsed
+  });
+  const adjustedCandidates = applyDatacardContrastDecision(candidates, contrast);
+  const adjustedSelectedCandidate =
+    adjustedCandidates.find((candidate) => candidate.id === contrast.finalCandidateId) ??
+    applyDatacardContrastToCandidate(selectedCandidate, contrast);
 
   return {
     selectedPresetId: preset.id,
-    selectedCandidate,
-    candidates,
+    selectedCandidate: adjustedSelectedCandidate,
+    candidates: adjustedCandidates,
     baseResult: prepared.baseResult,
     sessionUsed: prepared.sessionUsed,
     sealDetection: prepared.sealDetection,
-    features
+    features,
+    contrast
   };
 }
 
@@ -547,16 +620,29 @@ export function recognizeSessionWithDatacardRegistry(
     candidates.find((candidate) => candidate.id === selectedPresetId) ??
     candidates[0] ??
     scoreDatacardPreset(listDatacardShapePresets()[0], prepared.baseResult, prepared.sessionUsed, features, syntheticStore);
-
-  return {
+  const contrast = buildDatacardTinyMlContrastDecision({
     selectedPresetId,
     selectedCandidate,
     candidates,
+    features,
+    session: prepared.sessionUsed,
+    registry
+  });
+  const adjustedCandidates = applyDatacardContrastDecision(candidates, contrast);
+  const adjustedSelectedCandidate =
+    adjustedCandidates.find((candidate) => candidate.id === contrast.finalCandidateId) ??
+    applyDatacardContrastToCandidate(selectedCandidate, contrast);
+
+  return {
+    selectedPresetId,
+    selectedCandidate: adjustedSelectedCandidate,
+    candidates: adjustedCandidates,
     baseResult: prepared.baseResult,
     sessionUsed: prepared.sessionUsed,
     sealDetection: prepared.sealDetection,
     features,
-    registry
+    registry,
+    contrast
   };
 }
 
@@ -738,6 +824,541 @@ function scoreDatacardPreset(
     status,
     reason: buildDatacardReason(status, preset, score, captureCount)
   };
+}
+
+interface DatacardContrastPolicyInput {
+  selectedPresetId: DatacardShapeId;
+  selectedPreset?: DatacardShapePreset;
+  selectedCandidate: DatacardRecognitionCandidate;
+  candidates: readonly DatacardRecognitionCandidate[];
+  features: DatacardShapeFeatureVector;
+  session: StrokeSession;
+  registry?: DatacardRecognizerRegistry;
+}
+
+interface DatacardContrastCandidateAssessment {
+  candidate: DatacardRecognitionCandidate;
+  shadow: DatacardTinyMlShadowTrack;
+  meaning: DatacardTinyMlMeaningTrack;
+  blockedBy: readonly DatacardTinyMlContrastBlocker[];
+  explanationCodes: readonly string[];
+}
+
+function buildDatacardTinyMlContrastDecision(input: DatacardContrastPolicyInput): DatacardTinyMlContrastDecision {
+  const uniqueCandidates = new Map<DatacardShapeId, DatacardRecognitionCandidate>();
+
+  for (const candidate of input.candidates) {
+    uniqueCandidates.set(candidate.id, candidate);
+  }
+
+  uniqueCandidates.set(input.selectedCandidate.id, input.selectedCandidate);
+
+  const candidates = [...uniqueCandidates.values()];
+  const assessments = candidates.map((candidate) =>
+    assessDatacardContrastCandidate(candidate, candidates, input.features, input.session, input.registry, input.selectedPreset)
+  );
+  const selectedAssessment =
+    assessments.find((assessment) => assessment.candidate.id === input.selectedCandidate.id) ??
+    assessDatacardContrastCandidate(
+      input.selectedCandidate,
+      candidates,
+      input.features,
+      input.session,
+      input.registry,
+      input.selectedPreset
+    );
+  const shadowAssessment =
+    [...assessments].sort((left, right) => right.shadow.confidence - left.shadow.confidence)[0] ?? selectedAssessment;
+  const finalStatus = resolveDatacardContrastStatus(selectedAssessment, shadowAssessment);
+  const role = resolveDatacardContrastRole(selectedAssessment, shadowAssessment, finalStatus);
+  const explanationCodes = [
+    ...selectedAssessment.explanationCodes,
+    ...(shadowAssessment.candidate.id === selectedAssessment.candidate.id
+      ? []
+      : [`shadow_top:${shadowAssessment.candidate.id}`])
+  ];
+
+  return {
+    version: "datacard-contrast-v1",
+    role,
+    finalStatus,
+    finalCandidateId: selectedAssessment.candidate.id,
+    actualCandidateId: input.selectedPresetId,
+    shadow: shadowAssessment.shadow,
+    meaning: selectedAssessment.meaning,
+    blockedBy: selectedAssessment.blockedBy,
+    explanationCodes
+  };
+}
+
+function assessDatacardContrastCandidate(
+  candidate: DatacardRecognitionCandidate,
+  candidates: readonly DatacardRecognitionCandidate[],
+  features: DatacardShapeFeatureVector,
+  session: StrokeSession,
+  registry?: DatacardRecognizerRegistry,
+  selectedPreset?: DatacardShapePreset
+): DatacardContrastCandidateAssessment {
+  const preset = resolveDatacardPresetForCandidate(candidate.id, registry, selectedPreset);
+  const promotionRisk = resolveDatacardPromotionRisk(candidate, preset);
+  const relationRisk = preset ? estimateDatacardRelationRisk(candidate, preset, features) : 1 - candidate.hintScore;
+  const repeatedOpenRisk = preset ? estimateRepeatedOpenShapeRisk(preset, features) : 0;
+  const noiseRisk = estimateDatacardNoiseRisk(features, session);
+  const scoreMargin = calculateDatacardScoreMargin(candidate, candidates);
+  const blockedBy = collectDatacardContrastBlockers(
+    candidate,
+    preset,
+    features,
+    promotionRisk,
+    relationRisk,
+    repeatedOpenRisk,
+    noiseRisk
+  );
+  const shadow = scoreDatacardShadowTrack(
+    candidate,
+    relationRisk,
+    repeatedOpenRisk,
+    noiseRisk,
+    promotionRisk,
+    scoreMargin
+  );
+  const meaning = scoreDatacardMeaningTrack(candidate, shadow, blockedBy);
+
+  return {
+    candidate,
+    shadow,
+    meaning,
+    blockedBy,
+    explanationCodes: buildDatacardContrastExplanationCodes(
+      candidate,
+      promotionRisk,
+      relationRisk,
+      repeatedOpenRisk,
+      noiseRisk,
+      scoreMargin,
+      blockedBy
+    )
+  };
+}
+
+function scoreDatacardShadowTrack(
+  candidate: DatacardRecognitionCandidate,
+  relationRisk: number,
+  repeatedOpenRisk: number,
+  noiseRisk: number,
+  promotionRisk: number,
+  scoreMargin: number
+): DatacardTinyMlShadowTrack {
+  const captureMaturity = clamp(candidate.captureCount / 3, 0, 1);
+  const localSupport = candidate.localModelScore ?? candidate.baselineScore;
+  const supportScore = Math.max(candidate.score, candidate.baselineScore, localSupport);
+  const confidence = clamp(
+    supportScore * 0.42 +
+      candidate.templateScore * 0.15 +
+      candidate.hintScore * 0.14 +
+      (candidate.gestureScore ?? candidate.templateScore) * 0.08 +
+      localSupport * 0.13 +
+      captureMaturity * 0.08,
+    0,
+    1
+  );
+  const unsafeRisk = clamp(
+    promotionRisk * 0.2 +
+      (1 - candidate.hintScore) * 0.16 +
+      (1 - candidate.templateScore) * 0.12 +
+      relationRisk * 0.22 +
+      repeatedOpenRisk * 0.18 +
+      noiseRisk * 0.18 +
+      Math.max(0, -scoreMargin) * 0.72 -
+      captureMaturity * 0.08,
+    0,
+    1
+  );
+  const flipRisk = clamp(
+    Math.max(0, 0.1 - scoreMargin) / 0.25 * 0.46 +
+      unsafeRisk * 0.36 +
+      (candidate.kind === "custom" && candidate.activationStatus !== "active_recognizer" ? 0.12 : 0),
+    0,
+    1
+  );
+  const suggestedAction: DatacardTinyMlSuggestedAction =
+    noiseRisk >= 0.62
+      ? "retry"
+      : candidate.kind === "custom" && candidate.activationStatus !== "active_recognizer" && candidate.captureCount < 3
+        ? "needs_more_capture"
+        : unsafeRisk >= 0.26 || flipRisk >= 0.42
+          ? "hold"
+          : "accept_shadow";
+  const reasons = [
+    `confidence:${roundMetric(confidence)}`,
+    `unsafe:${roundMetric(unsafeRisk)}`,
+    `flip:${roundMetric(flipRisk)}`,
+    `margin:${roundMetric(scoreMargin)}`
+  ];
+
+  return {
+    candidateId: candidate.id,
+    confidence: roundMetric(confidence),
+    unsafeRisk: roundMetric(unsafeRisk),
+    flipRisk: roundMetric(flipRisk),
+    relationRisk: roundMetric(relationRisk),
+    suggestedAction,
+    reasons
+  };
+}
+
+function scoreDatacardMeaningTrack(
+  candidate: DatacardRecognitionCandidate,
+  shadow: DatacardTinyMlShadowTrack,
+  blockedBy: readonly DatacardTinyMlContrastBlocker[]
+): DatacardTinyMlMeaningTrack {
+  const captureMaturity = clamp(candidate.captureCount / 3, 0, 1);
+  const localSupport = candidate.localModelScore ?? candidate.baselineScore;
+  const activeForActual = candidate.kind === "built_in" || candidate.activationStatus === "active_recognizer";
+  const captureReady = candidate.kind === "custom" && candidate.captureCount >= 3 && resolveOptionalRisk(candidate.promotionRisk) <= 0.56;
+  const topologyBlocked = blockedBy.some((blocker) =>
+    blocker === "topology" ||
+    blocker === "relation" ||
+    blocker === "closure" ||
+    blocker === "repetition" ||
+    blocker === "noise"
+  );
+  const confidence = clamp(
+    candidate.score * 0.42 +
+      shadow.confidence * 0.32 +
+      localSupport * 0.12 +
+      candidate.hintScore * 0.08 +
+      captureMaturity * 0.06 -
+      shadow.unsafeRisk * 0.18,
+    0,
+    1
+  );
+  const eligibleForActual =
+    (activeForActual || captureReady) &&
+    !topologyBlocked &&
+    shadow.unsafeRisk <= 0.24 &&
+    shadow.flipRisk <= 0.52 &&
+    candidate.score >= 0.48;
+  let correctionClass: DatacardTinyMlCorrectionClass = "none";
+
+  if (blockedBy.includes("noise")) {
+    correctionClass = "retry_noise";
+  } else if (topologyBlocked || shadow.unsafeRisk >= 0.34) {
+    correctionClass = "downgrade_risk";
+  } else if (!activeForActual && candidate.kind === "custom") {
+    correctionClass = "hold_for_capture";
+  } else if (eligibleForActual && candidate.status !== "recognized" && confidence >= 0.64) {
+    correctionClass = "meaning_recover";
+  }
+
+  const actualScoreLift =
+    correctionClass === "meaning_recover"
+      ? clamp((confidence - candidate.score) * 0.44 + captureMaturity * 0.02, 0.01, 0.09)
+      : 0;
+
+  return {
+    candidateId: candidate.id,
+    confidence: roundMetric(confidence),
+    correctionClass,
+    eligibleForActual,
+    actualScoreLift: roundMetric(actualScoreLift),
+    reasons: [
+      `eligible:${eligibleForActual ? "yes" : "no"}`,
+      `class:${correctionClass}`,
+      `capture:${roundMetric(captureMaturity)}`
+    ]
+  };
+}
+
+function resolveDatacardContrastStatus(
+  selectedAssessment: DatacardContrastCandidateAssessment,
+  shadowAssessment: DatacardContrastCandidateAssessment
+): RecognitionStatus {
+  const { candidate, meaning } = selectedAssessment;
+  const shadowDisagrees =
+    shadowAssessment.candidate.id !== candidate.id &&
+    shadowAssessment.shadow.confidence - selectedAssessment.shadow.confidence >= 0.08;
+
+  if (meaning.correctionClass === "retry_noise") {
+    return "invalid";
+  }
+
+  if (
+    meaning.correctionClass === "downgrade_risk" &&
+    (candidate.status === "recognized" || selectedAssessment.shadow.unsafeRisk >= 0.34)
+  ) {
+    return "ambiguous";
+  }
+
+  if (meaning.correctionClass === "hold_for_capture" && candidate.status === "recognized") {
+    return "ambiguous";
+  }
+
+  if (shadowDisagrees && candidate.kind === "custom" && candidate.activationStatus !== "active_recognizer") {
+    return candidate.status === "invalid" ? "invalid" : "ambiguous";
+  }
+
+  if (meaning.correctionClass === "meaning_recover" && meaning.eligibleForActual && meaning.confidence >= 0.66) {
+    return "recognized";
+  }
+
+  return candidate.status;
+}
+
+function resolveDatacardContrastRole(
+  selectedAssessment: DatacardContrastCandidateAssessment,
+  shadowAssessment: DatacardContrastCandidateAssessment,
+  finalStatus: RecognitionStatus
+): DatacardTinyMlContrastRole {
+  if (selectedAssessment.blockedBy.length > 0 && selectedAssessment.meaning.correctionClass === "downgrade_risk") {
+    return "rule_block";
+  }
+
+  if (selectedAssessment.candidate.status === "recognized" && finalStatus !== "recognized") {
+    return "shadow_warns_rule_accept";
+  }
+
+  if (
+    shadowAssessment.candidate.id !== selectedAssessment.candidate.id &&
+    shadowAssessment.shadow.confidence - selectedAssessment.shadow.confidence >= 0.08
+  ) {
+    return "model_disagreement";
+  }
+
+  if (selectedAssessment.meaning.correctionClass === "meaning_recover") {
+    return "meaning_only";
+  }
+
+  if (selectedAssessment.meaning.correctionClass === "hold_for_capture") {
+    return "shadow_only";
+  }
+
+  return "all_agree";
+}
+
+function applyDatacardContrastDecision(
+  candidates: readonly DatacardRecognitionCandidate[],
+  decision: DatacardTinyMlContrastDecision
+): DatacardRecognitionCandidate[] {
+  return candidates.map((candidate) =>
+    candidate.id === decision.finalCandidateId || candidate.id === decision.shadow.candidateId
+      ? applyDatacardContrastToCandidate(candidate, decision)
+      : candidate
+  );
+}
+
+function applyDatacardContrastToCandidate(
+  candidate: DatacardRecognitionCandidate,
+  decision: DatacardTinyMlContrastDecision
+): DatacardRecognitionCandidate {
+  if (candidate.id !== decision.finalCandidateId && candidate.id !== decision.shadow.candidateId) {
+    return candidate;
+  }
+
+  const isFinalCandidate = candidate.id === decision.finalCandidateId;
+  const score = isFinalCandidate
+    ? roundMetric(clamp(candidate.score + decision.meaning.actualScoreLift, 0, 1))
+    : candidate.score;
+  const status = isFinalCandidate ? decision.finalStatus : candidate.status;
+
+  return {
+    ...candidate,
+    score,
+    status,
+    contrastScore: decision.shadow.confidence,
+    meaningScore: isFinalCandidate ? decision.meaning.confidence : undefined,
+    shadowRisk: decision.shadow.unsafeRisk,
+    contrastRole: decision.role,
+    blockedByContrast: decision.blockedBy,
+    explanationCodes: decision.explanationCodes,
+    reason:
+      isFinalCandidate && (status !== candidate.status || decision.meaning.actualScoreLift > 0)
+        ? `${candidate.reason} [${decision.meaning.correctionClass}]`
+        : candidate.reason
+  };
+}
+
+function resolveDatacardPresetForCandidate(
+  candidateId: DatacardShapeId,
+  registry?: DatacardRecognizerRegistry,
+  selectedPreset?: DatacardShapePreset
+): DatacardShapePreset | undefined {
+  if (selectedPreset?.id === candidateId) {
+    return selectedPreset;
+  }
+
+  return registry?.profiles.find((profile) => profile.preset.id === candidateId)?.preset ?? getDatacardShapePresetById(candidateId);
+}
+
+function resolveDatacardPromotionRisk(candidate: DatacardRecognitionCandidate, preset?: DatacardShapePreset): number {
+  if (candidate.promotionRisk !== undefined) {
+    return candidate.promotionRisk;
+  }
+
+  if (!preset || preset.kind === "built_in") {
+    return 0;
+  }
+
+  return roundMetric(
+    estimateDatacardConfusionRisk(preset) + (candidate.activationStatus === "active_recognizer" ? 0 : 0.18)
+  );
+}
+
+function resolveOptionalRisk(value: number | undefined): number {
+  return value ?? 0;
+}
+
+function calculateDatacardScoreMargin(
+  candidate: DatacardRecognitionCandidate,
+  candidates: readonly DatacardRecognitionCandidate[]
+): number {
+  const strongestOther = candidates
+    .filter((other) => other.id !== candidate.id)
+    .sort((left, right) => right.score - left.score)[0];
+
+  return roundMetric(candidate.score - (strongestOther?.score ?? 0));
+}
+
+function estimateDatacardRelationRisk(
+  candidate: DatacardRecognitionCandidate,
+  preset: DatacardShapePreset,
+  features: DatacardShapeFeatureVector
+): number {
+  const hints = preset.definition.features;
+  const scores = [
+    rangeScore(features.strokeCount, hints.strokeCount[0], hints.strokeCount[1]),
+    hints.closed ? features.closure : 1 - features.closure,
+    candidate.hintScore,
+    candidate.templateScore
+  ];
+
+  if (hints.corners) {
+    scores.push(rangeScore(features.corners, hints.corners[0], hints.corners[1]));
+  }
+
+  if (hints.endpointClusters) {
+    scores.push(rangeScore(features.endpointClusters, hints.endpointClusters[0], hints.endpointClusters[1]));
+  }
+
+  if (hints.parallelism) {
+    scores.push(rangeScore(features.parallelism, hints.parallelism[0], hints.parallelism[1]));
+  }
+
+  return roundMetric(clamp(1 - average(scores), 0, 1));
+}
+
+function estimateRepeatedOpenShapeRisk(preset: DatacardShapePreset, features: DatacardShapeFeatureVector): number {
+  if (preset.definition.features.closed) {
+    return 0;
+  }
+
+  const source = `${preset.definition.pattern} ${preset.definition.expression}`.toLowerCase();
+  const declaresRepeatedLine =
+    /line\s*\{\s*[3-9]/.test(source) ||
+    /line.*line.*line/.test(source) ||
+    (/wave/.test(source) && /line/.test(source) && preset.definition.features.strokeCount[1] >= 3);
+  const observedRepeatedLineLike =
+    features.strokeCount >= 3 &&
+    features.parallelism >= 0.58 &&
+    features.corners <= 3 &&
+    features.fillRatio <= 0.16;
+
+  if (!declaresRepeatedLine && !observedRepeatedLineLike) {
+    return 0;
+  }
+
+  return roundMetric(
+    clamp(
+      (declaresRepeatedLine ? 0.56 : 0) +
+        (observedRepeatedLineLike ? 0.36 : 0) +
+        (features.endpointClusters >= 4 ? 0.14 : 0) +
+        (features.strokeCount >= 4 ? 0.1 : 0) +
+        (features.closure <= 0.08 ? 0.06 : 0),
+      0,
+      1
+    )
+  );
+}
+
+function estimateDatacardNoiseRisk(features: DatacardShapeFeatureVector, session: StrokeSession): number {
+  const validStrokes = session.strokes.filter((stroke) => stroke.points.length >= 2);
+  const pointCount = validStrokes.reduce((sum, stroke) => sum + stroke.points.length, 0);
+  const totalLength = validStrokes.reduce((sum, stroke) => sum + pathLength(stroke.points), 0);
+  const sparseRisk = pointCount <= 2 ? 0.46 : pointCount <= 5 ? 0.24 : 0;
+  const shortPathRisk = totalLength <= 8 ? 0.32 : totalLength <= 24 ? 0.14 : 0;
+  const erraticRisk = features.corners >= 12 && features.circularity <= 0.16 ? 0.14 : 0;
+  const emptyRisk = validStrokes.length === 0 ? 1 : 0;
+
+  return roundMetric(clamp(emptyRisk + sparseRisk + shortPathRisk + erraticRisk, 0, 1));
+}
+
+function collectDatacardContrastBlockers(
+  candidate: DatacardRecognitionCandidate,
+  preset: DatacardShapePreset | undefined,
+  features: DatacardShapeFeatureVector,
+  promotionRisk: number,
+  relationRisk: number,
+  repeatedOpenRisk: number,
+  noiseRisk: number
+): DatacardTinyMlContrastBlocker[] {
+  const blockers = new Set<DatacardTinyMlContrastBlocker>();
+
+  if (noiseRisk >= 0.62) {
+    blockers.add("noise");
+  }
+
+  if (preset) {
+    if (preset.definition.features.closed && features.closure <= 0.38) {
+      blockers.add("closure");
+    }
+
+    if (!preset.definition.features.closed && features.closure >= 0.91) {
+      blockers.add("closure");
+    }
+  }
+
+  if (candidate.hintScore <= 0.4 && candidate.templateScore <= 0.36) {
+    blockers.add("topology");
+  }
+
+  if (relationRisk >= 0.68) {
+    blockers.add("relation");
+  }
+
+  if (repeatedOpenRisk >= 0.55) {
+    blockers.add("repetition");
+  }
+
+  if (promotionRisk >= 0.56) {
+    blockers.add("holdout");
+  }
+
+  if (candidate.kind === "custom" && candidate.activationStatus !== "active_recognizer" && candidate.captureCount < 3) {
+    blockers.add("signature");
+  }
+
+  return [...blockers];
+}
+
+function buildDatacardContrastExplanationCodes(
+  candidate: DatacardRecognitionCandidate,
+  promotionRisk: number,
+  relationRisk: number,
+  repeatedOpenRisk: number,
+  noiseRisk: number,
+  scoreMargin: number,
+  blockedBy: readonly DatacardTinyMlContrastBlocker[]
+): string[] {
+  return [
+    `candidate:${candidate.id}`,
+    `activation:${candidate.activationStatus ?? "unknown"}`,
+    `promotion:${roundMetric(promotionRisk)}`,
+    `relation:${roundMetric(relationRisk)}`,
+    `repeat_open:${roundMetric(repeatedOpenRisk)}`,
+    `noise:${roundMetric(noiseRisk)}`,
+    `margin:${roundMetric(scoreMargin)}`,
+    `blockers:${blockedBy.length === 0 ? "none" : blockedBy.join("+")}`
+  ];
 }
 
 function prepareDatacardRecognitionSession(

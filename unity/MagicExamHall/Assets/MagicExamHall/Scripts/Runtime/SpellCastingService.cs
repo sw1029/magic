@@ -41,10 +41,20 @@ namespace MagicExamHall
             IReadOnlyList<CompiledSeal> seals,
             float now)
         {
+            if (strokes == null)
+            {
+                throw new ArgumentNullException(nameof(strokes));
+            }
+
+            if (seals == null)
+            {
+                throw new ArgumentNullException(nameof(seals));
+            }
+
             var targetSeal = FindAttachableSeal(seals, center, now);
             if (targetSeal != null)
             {
-                return ProcessOverlay(strokes, center, strokeCount, targetSeal);
+                return ProcessNearSeal(strokes, center, strokeCount, targetSeal, now);
             }
 
             var detachedOverlay = FindDetachedOverlayCandidate(strokes, center, seals, now);
@@ -217,6 +227,28 @@ namespace MagicExamHall
             return ProcessOverlayResult(result, seal, center, strokeCount);
         }
 
+        private SpellCastOutcome ProcessNearSeal(
+            List<List<StrokeSample>> strokes,
+            Vector2 center,
+            int strokeCount,
+            CompiledSeal seal,
+            float now)
+        {
+            var overlayResult = OverlayRecognizer.Recognize(strokes, seal);
+            var baseResult = SpellRuntime.RecognizeBase(strokes);
+            if (baseResult.spell.status == RecognitionStatus.Recognized && baseResult.spell.recognizedFamily.HasValue)
+            {
+                if (ShouldPreferOverlayNearSeal(overlayResult))
+                {
+                    return ProcessOverlayResult(overlayResult, seal, center, strokeCount);
+                }
+
+                return ProcessBaseResult(baseResult, center, strokeCount, now);
+            }
+
+            return ProcessOverlayResult(overlayResult, seal, center, strokeCount);
+        }
+
         private static DetachedOverlayCandidate FindDetachedOverlayCandidate(
             List<List<StrokeSample>> strokes,
             Vector2 center,
@@ -239,12 +271,32 @@ namespace MagicExamHall
             }
 
             var result = OverlayRecognizer.Recognize(strokes, nearestSeal);
-            if (result.success || result.recognizedOperator.HasValue || result.score >= 0.48f || result.shapeConfidence >= 0.55f)
+            if (OverlayAttemptLooksIntentional(result))
             {
                 return new DetachedOverlayCandidate(nearestSeal, result);
             }
 
             return null;
+        }
+
+        private static bool OverlayAttemptLooksIntentional(OverlayRecognitionResult result)
+        {
+            return result.success || result.score >= 0.52f || result.shapeConfidence >= 0.60f;
+        }
+
+        private static bool ShouldPreferOverlayNearSeal(OverlayRecognitionResult result)
+        {
+            if (result.success)
+            {
+                return true;
+            }
+
+            if (result.recognizedOperator.HasValue && result.scaleHint != OverlayScaleHint.None && result.score >= 0.70f && result.shapeConfidence >= 0.70f)
+            {
+                return true;
+            }
+
+            return result.status == RecognitionStatus.Ambiguous && result.score >= 0.72f && result.shapeConfidence >= 0.74f;
         }
 
         private sealed class DetachedOverlayCandidate

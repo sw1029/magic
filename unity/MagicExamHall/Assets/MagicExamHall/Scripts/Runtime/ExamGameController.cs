@@ -69,6 +69,7 @@ namespace MagicExamHall
         public string HudCopyForTests => hudCopy == null ? "" : hudCopy.text;
         public string FloorProgressForTests => floorProgress == null ? "" : floorProgress.text;
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
+        public int TrialCountForTests => trialCounter;
         public int ActivePulseCountForTests => pulses.Count;
         public int VisibleGoalLabelCountForTests => activeGoals.Count(goal => goal.label != null);
         public string OutputDirectory => logger?.OutputDirectory ?? "";
@@ -161,6 +162,67 @@ namespace MagicExamHall
         public void MovePlayerForTests(Vector2 worldPosition)
         {
             player.position = worldPosition;
+        }
+
+        public IReadOnlyList<SpellSealSnapshot> GetActiveSealSnapshots()
+        {
+            return seals
+                .Where(view => Time.time <= view.seal.expiresAt)
+                .Select(view => SpellSealSnapshot.From(view.seal, Time.time))
+                .ToList();
+        }
+
+        public SpellSealSnapshot FindAttachableSealSnapshot(Vector2 worldCenter)
+        {
+            var seal = SpellCastingService.FindAttachableSeal(seals.Select(view => view.seal).ToList(), worldCenter, Time.time);
+            return seal == null ? null : SpellSealSnapshot.From(seal, Time.time);
+        }
+
+        public BaseRecognitionResult SubmitBaseRecognitionResult(BaseRecognitionResult result, Vector2 worldCenter, int strokeCount)
+        {
+            if (HasEndingReport)
+            {
+                return result;
+            }
+
+            return ApplySubmittedSpellOutcome(spellCasting.ProcessBaseResult(result, worldCenter, strokeCount, Time.time)).baseResult;
+        }
+
+        public OverlayRecognitionResult SubmitOverlayRecognitionResult(OverlayRecognitionResult result, string sealId, Vector2 worldCenter, int strokeCount)
+        {
+            if (HasEndingReport)
+            {
+                return result;
+            }
+
+            var seal = FindActiveSealById(sealId);
+            if (seal == null)
+            {
+                throw new ArgumentException($"Active seal was not found: {sealId}", nameof(sealId));
+            }
+
+            if (!OverlayCenterIsAttachable(seal, worldCenter))
+            {
+                throw new InvalidOperationException("Overlay result center is outside the active seal attach radius.");
+            }
+
+            return ApplySubmittedSpellOutcome(spellCasting.ProcessOverlayResult(result, seal, worldCenter, strokeCount)).overlayResult;
+        }
+
+        public OverlayRecognitionResult SubmitOverlayRecognitionResult(OverlayRecognitionResult result, Vector2 worldCenter, int strokeCount)
+        {
+            if (HasEndingReport)
+            {
+                return result;
+            }
+
+            var snapshot = FindAttachableSealSnapshot(worldCenter);
+            if (snapshot == null)
+            {
+                throw new InvalidOperationException("No active seal is close enough for an overlay result.");
+            }
+
+            return SubmitOverlayRecognitionResult(result, snapshot.sealId, worldCenter, strokeCount);
         }
 
         private void ResolveSceneReferences()
@@ -295,6 +357,11 @@ namespace MagicExamHall
 
         private void OnSpellBuffered(List<List<StrokeSample>> strokes, Vector2 center, int strokeCount)
         {
+            if (HasEndingReport)
+            {
+                return;
+            }
+
             ProcessSpellGroup(strokes, center, strokeCount);
         }
 
@@ -302,6 +369,12 @@ namespace MagicExamHall
         {
             trialCounter++;
             var outcome = spellCasting.Process(strokes, center, strokeCount, seals.Select(view => view.seal).ToList(), Time.time);
+            return ApplySpellOutcome(outcome);
+        }
+
+        private ProcessedSpell ApplySubmittedSpellOutcome(SpellCastOutcome outcome)
+        {
+            trialCounter++;
             return ApplySpellOutcome(outcome);
         }
 
@@ -440,6 +513,18 @@ namespace MagicExamHall
         private SealView FindSealView(CompiledSeal seal)
         {
             return seals.FirstOrDefault(view => ReferenceEquals(view.seal, seal) || view.seal.sealId == seal.sealId);
+        }
+
+        private CompiledSeal FindActiveSealById(string sealId)
+        {
+            return seals
+                .Select(view => view.seal)
+                .FirstOrDefault(seal => seal.sealId == sealId && Time.time <= seal.expiresAt);
+        }
+
+        private static bool OverlayCenterIsAttachable(CompiledSeal seal, Vector2 center)
+        {
+            return Vector2.Distance(center, seal.worldCenter) <= SpellCastingService.AttachRadiusFor(seal);
         }
 
         private GoalEffect ApplyBaseToGoals(SpellFamily family, Vector2 center)
@@ -1326,6 +1411,33 @@ namespace MagicExamHall
                     renderer.color = new Color(1f, 1f, 1f, Mathf.Clamp01(normalizedLifetime + 0.16f));
                 }
             }
+        }
+    }
+
+    public sealed class SpellSealSnapshot
+    {
+        public string sealId = "";
+        public SpellFamily baseFamily;
+        public IReadOnlyList<OverlayOperator> overlayStack = Array.Empty<OverlayOperator>();
+        public Vector2 worldCenter;
+        public float worldScale;
+        public float attachRadius;
+        public float remainingSeconds;
+        public string label = "";
+
+        internal static SpellSealSnapshot From(CompiledSeal seal, float now)
+        {
+            return new SpellSealSnapshot
+            {
+                sealId = seal.sealId,
+                baseFamily = seal.baseFamily,
+                overlayStack = seal.overlayStack.ToList(),
+                worldCenter = seal.worldCenter,
+                worldScale = seal.worldScale,
+                attachRadius = SpellCastingService.AttachRadiusFor(seal),
+                remainingSeconds = Mathf.Max(0f, seal.expiresAt - now),
+                label = seal.Label
+            };
         }
     }
 

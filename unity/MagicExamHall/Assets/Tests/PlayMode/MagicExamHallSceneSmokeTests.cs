@@ -100,6 +100,88 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator ExternalRecognitionFacadeAppliesSubmittedResults()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            var baseStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Earth, 1.6f, 0.03f), Vector2.zero, 0.8f);
+            var baseResult = SpellRuntime.RecognizeBase(baseStrokes);
+            var submittedBase = controller.SubmitBaseRecognitionResult(baseResult, Vector2.zero, baseStrokes.Count);
+            yield return null;
+
+            Assert.That(submittedBase.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(controller.TrialCountForTests, Is.EqualTo(1));
+            var snapshots = controller.GetActiveSealSnapshots();
+            Assert.That(snapshots, Has.Count.EqualTo(1));
+            Assert.That(snapshots[0].baseFamily, Is.EqualTo(SpellFamily.Earth));
+            Assert.That(snapshots[0].sealId, Is.Not.Empty);
+            Assert.That(snapshots[0].attachRadius, Is.GreaterThan(0f));
+
+            var attachable = controller.FindAttachableSealSnapshot(Vector2.zero);
+            Assert.That(attachable, Is.Not.Null);
+            Assert.That(attachable.sealId, Is.EqualTo(snapshots[0].sealId));
+
+            var overlayResult = new OverlayRecognitionResult
+            {
+                status = RecognitionStatus.Recognized,
+                recognizedOperator = OverlayOperator.IceBar,
+                score = 0.96f,
+                shapeConfidence = 0.94f,
+                scaleRatio = 0.24f,
+                anchorZone = "upper",
+                feedbackReason = "external input accepted"
+            };
+            var submittedOverlay = controller.SubmitOverlayRecognitionResult(overlayResult, snapshots[0].sealId, Vector2.zero, 1);
+            yield return null;
+
+            Assert.That(submittedOverlay.success, Is.True);
+            Assert.That(controller.TrialCountForTests, Is.EqualTo(2));
+            Assert.That(controller.LastOverlayStack, Does.Contain(OverlayOperator.IceBar));
+
+            var farOverlayResult = new OverlayRecognitionResult
+            {
+                status = RecognitionStatus.Recognized,
+                recognizedOperator = OverlayOperator.MartialAxis,
+                score = 0.95f,
+                shapeConfidence = 0.93f,
+                scaleRatio = 0.23f,
+                anchorZone = "upper",
+                feedbackReason = "far external input rejected"
+            };
+            Assert.Throws<System.InvalidOperationException>(() =>
+                controller.SubmitOverlayRecognitionResult(farOverlayResult, snapshots[0].sealId, new Vector2(6f, 0f), 1));
+        }
+
+        [UnityTest]
+        public IEnumerator RecognizedBaseRetryNearExistingSealCreatesNewSeal()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            yield return null;
+            Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
+
+            var retryStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, 1.6f, 0.03f), Vector2.zero, 0.8f);
+            var retryResult = controller.CastRawBaseForTests(retryStrokes, Vector2.zero);
+            yield return null;
+
+            Assert.That(retryResult.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(retryResult.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
+            Assert.That(controller.ActiveSealCount, Is.EqualTo(2));
+            Assert.That(controller.LastOverlayStack, Is.Empty);
+        }
+
+        [UnityTest]
         public IEnumerator OverlayAttachesToSealStack()
         {
             SceneManager.LoadScene("MagicExamHall");
@@ -462,6 +544,13 @@ namespace MagicExamHall.Tests
             Assert.That(controller.EndingReportTextForTests, Does.Contain("평균 문양 안정도"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("자기 평가"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("MagicExamHallLogs"));
+        }
+
+        private static List<List<StrokeSample>> Offset(List<List<StrokeSample>> strokes, Vector2 center, float canonicalCenter)
+        {
+            return strokes
+                .Select(stroke => stroke.Select(sample => new StrokeSample(sample.position - Vector2.one * canonicalCenter + center, sample.time)).ToList())
+                .ToList();
         }
     }
 }

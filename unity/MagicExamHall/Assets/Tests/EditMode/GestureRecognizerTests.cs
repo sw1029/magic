@@ -461,6 +461,23 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void SpellCastingServiceKeepsRecognizedBaseRetryNearExistingSeal()
+        {
+            var service = new SpellCastingService();
+            var seal = CreateWorldSeal();
+            var retryStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, 1.6f, 0.03f), seal.worldCenter, 0.8f);
+            var basePreview = SpellRuntime.RecognizeBase(retryStrokes);
+            var overlayPreview = OverlayRecognizer.Recognize(retryStrokes, seal);
+
+            var outcome = service.Process(retryStrokes, seal.worldCenter, retryStrokes.Count, new List<CompiledSeal> { seal }, 0.2f);
+
+            Assert.That(basePreview.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(outcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded), $"overlay status={overlayPreview.status}, op={overlayPreview.OperatorText}, score={overlayPreview.score:0.000}, shape={overlayPreview.shapeConfidence:0.000}, scale={overlayPreview.scaleRatio:0.000}, hint={overlayPreview.scaleHint}");
+            Assert.That(outcome.createdSeal.baseFamily, Is.EqualTo(SpellFamily.Wind));
+            Assert.That(seal.overlayStack, Is.Empty);
+        }
+
+        [Test]
         public void SpellCastingServiceExposesAttachLookupForInputAdapters()
         {
             var seal = CreateWorldSeal();

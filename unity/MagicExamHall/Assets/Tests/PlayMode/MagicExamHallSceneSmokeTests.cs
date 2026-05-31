@@ -158,6 +158,30 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator RecognizedBaseRetryNearExistingSealCreatesNewSeal()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
+            yield return null;
+            Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
+
+            var retryStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, 1.6f, 0.03f), Vector2.zero, 0.8f);
+            var retryResult = controller.CastRawBaseForTests(retryStrokes, Vector2.zero);
+            yield return null;
+
+            Assert.That(retryResult.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(retryResult.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
+            Assert.That(controller.ActiveSealCount, Is.EqualTo(2));
+            Assert.That(controller.LastOverlayStack, Is.Empty);
+        }
+
+        [UnityTest]
         public IEnumerator OverlayAttachesToSealStack()
         {
             SceneManager.LoadScene("MagicExamHall");

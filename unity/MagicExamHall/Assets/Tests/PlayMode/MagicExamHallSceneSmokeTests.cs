@@ -460,6 +460,9 @@ namespace MagicExamHall.Tests
             Assert.That(controller.EndingReportTextForTests, Does.Contain("가장 많이 사용한 base"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("가장 많이 사용한 overlay"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("평균 문양 안정도"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("힌트 표시"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("문양 습관"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("보정 정책"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("자기 평가"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("MagicExamHallLogs"));
         }

@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
-using UnityEngine.EventSystems;
 
 namespace MagicExamHall
 {
@@ -10,203 +8,140 @@ namespace MagicExamHall
     {
         public const float DefaultBufferSeconds = 1.05f;
         public const float DefaultMinPointDistance = 0.05f;
-        public const float StrokeVisualLifetimeSeconds = 2.3f;
+        public const float StrokeVisualLifetimeSeconds = WorldStrokeVisuals.DefaultStrokeVisualLifetimeSeconds;
 
         public Camera mainCamera = null!;
         public float bufferSeconds = DefaultBufferSeconds;
         public float minPointDistance = DefaultMinPointDistance;
         public Color strokeColor = new(0.22f, 0.95f, 1f, 0.92f);
 
-        private readonly List<List<StrokeSample>> bufferedStrokes = new();
-        private readonly List<StrokeSample> activeStroke = new();
-        private readonly List<StrokeVisual> visuals = new();
-        private bool drawing;
-        private bool waitingForBuffer;
-        private float lastReleaseTime;
+        private StrokeSessionBuffer sessionBuffer = null!;
+        private WorldPointerInputSource inputSource = null!;
+        private WorldStrokeVisuals strokeVisuals = null!;
+        private bool wired;
 
+        public event Action<StrokeInputSession> StrokeSessionCompleted = delegate { };
+
+        // Legacy event kept for tests/tools that still hand off StrokeSample groups directly.
         public event Action<List<List<StrokeSample>>, Vector2, int> SpellBuffered = delegate { };
 
-        public bool HasBufferedInput => bufferedStrokes.Count > 0 || activeStroke.Count > 0;
+        public bool HasBufferedInput => (sessionBuffer?.HasPendingStrokes ?? false) || (inputSource?.IsDrawing ?? false);
 
         public void ApplyPlayableDefaults()
         {
             bufferSeconds = DefaultBufferSeconds;
             minPointDistance = DefaultMinPointDistance;
+            EnsureComponents();
+            SyncOptions();
         }
 
         private void Awake()
         {
             mainCamera ??= Camera.main;
+            EnsureComponents();
+            SyncOptions();
+        }
+
+        private void OnDestroy()
+        {
+            if (!wired || inputSource == null || sessionBuffer == null || strokeVisuals == null)
+            {
+                return;
+            }
+
+            inputSource.StrokeStarted -= strokeVisuals.HandleStrokeStarted;
+            inputSource.StrokeUpdated -= strokeVisuals.HandleStrokeUpdated;
+            inputSource.StrokeCompleted -= strokeVisuals.HandleStrokeCompleted;
+            inputSource.StrokeCompleted -= OnStrokeCompleted;
+            inputSource.StrokeCanceled -= strokeVisuals.HandleStrokeCanceled;
+            sessionBuffer.SessionCompleted -= OnSessionCompleted;
+            wired = false;
         }
 
         private void Update()
         {
-            TickInput();
-            TickBuffer();
-            TickVisuals();
+            EnsureComponents();
+            SyncOptions();
+            inputSource.Tick(Time.deltaTime);
+            sessionBuffer.Tick(Time.time);
+            strokeVisuals.Tick(Time.deltaTime);
         }
 
         public void SubmitSyntheticSpell(List<List<StrokeSample>> strokes)
         {
-            if (strokes == null || strokes.Count == 0)
-            {
-                SpellBuffered(new List<List<StrokeSample>>(), Vector2.zero, 0);
-                return;
-            }
-
-            var copy = strokes.Select(stroke => stroke.Select(sample => new StrokeSample(sample.position, sample.time)).ToList()).ToList();
-            SpellBuffered(copy, CenterOf(copy), copy.Count);
+            var session = StrokeInputSessionExtensions.FromStrokeSamples(
+                strokes ?? new List<List<StrokeSample>>(),
+                $"synthetic-{Guid.NewGuid():N}",
+                Time.time,
+                InputCoordinateSpace.World);
+            SubmitSyntheticSession(session);
         }
 
-        private void TickInput()
+        public void SubmitSyntheticSession(StrokeInputSession session)
         {
-            if (mainCamera == null)
-            {
-                return;
-            }
-
-            if (Input.GetMouseButtonDown(1) && !PointerIsOverUi())
-            {
-                drawing = true;
-                waitingForBuffer = false;
-                activeStroke.Clear();
-                AddPoint(Input.mousePosition);
-            }
-
-            if (drawing && Input.GetMouseButton(1))
-            {
-                AddPoint(Input.mousePosition);
-            }
-
-            if (!drawing || !Input.GetMouseButtonUp(1))
-            {
-                return;
-            }
-
-            AddPoint(Input.mousePosition);
-            if (activeStroke.Count >= 2)
-            {
-                var stroke = new List<StrokeSample>(activeStroke);
-                bufferedStrokes.Add(stroke);
-                CreateStrokeVisual(stroke);
-            }
-
-            activeStroke.Clear();
-            drawing = false;
-            waitingForBuffer = true;
-            lastReleaseTime = Time.time;
+            EnsureComponents();
+            strokeVisuals.ShowCompletedSession(session);
+            sessionBuffer.SubmitSession(session);
         }
 
-        private void TickBuffer()
+        private void EnsureComponents()
         {
-            if (!waitingForBuffer || Time.time - lastReleaseTime < bufferSeconds)
+            if (sessionBuffer == null)
+            {
+                sessionBuffer = new StrokeSessionBuffer(bufferSeconds);
+            }
+
+            inputSource = inputSource != null
+                ? inputSource
+                : gameObject.GetComponent<WorldPointerInputSource>() ?? gameObject.AddComponent<WorldPointerInputSource>();
+            strokeVisuals = strokeVisuals != null
+                ? strokeVisuals
+                : gameObject.GetComponent<WorldStrokeVisuals>() ?? gameObject.AddComponent<WorldStrokeVisuals>();
+
+            if (wired)
             {
                 return;
             }
 
-            Flush();
+            inputSource.StrokeStarted += strokeVisuals.HandleStrokeStarted;
+            inputSource.StrokeUpdated += strokeVisuals.HandleStrokeUpdated;
+            inputSource.StrokeCompleted += strokeVisuals.HandleStrokeCompleted;
+            inputSource.StrokeCompleted += OnStrokeCompleted;
+            inputSource.StrokeCanceled += strokeVisuals.HandleStrokeCanceled;
+            sessionBuffer.SessionCompleted += OnSessionCompleted;
+            wired = true;
         }
 
-        private void Flush()
+        private void SyncOptions()
         {
-            waitingForBuffer = false;
-            if (bufferedStrokes.Count == 0)
+            if (inputSource != null)
             {
-                return;
+                inputSource.mainCamera = mainCamera;
+                inputSource.minPointDistance = minPointDistance;
             }
 
-            var copy = bufferedStrokes.Select(stroke => stroke.Select(sample => new StrokeSample(sample.position, sample.time)).ToList()).ToList();
-            bufferedStrokes.Clear();
-            SpellBuffered(copy, CenterOf(copy), copy.Count);
-        }
-
-        private void AddPoint(Vector2 screenPoint)
-        {
-            var world = mainCamera.ScreenToWorldPoint(new Vector3(screenPoint.x, screenPoint.y, -mainCamera.transform.position.z));
-            var point = new Vector2(world.x, world.y);
-            if (activeStroke.Count > 0 && Vector2.Distance(activeStroke[^1].position, point) < minPointDistance)
+            if (sessionBuffer != null)
             {
-                return;
+                sessionBuffer.BufferSeconds = bufferSeconds;
             }
 
-            activeStroke.Add(new StrokeSample(point, Time.time));
-        }
-
-        private bool PointerIsOverUi()
-        {
-            return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
-        }
-
-        private void CreateStrokeVisual(IReadOnlyList<StrokeSample> stroke)
-        {
-            if (stroke.Count < 2)
+            if (strokeVisuals != null)
             {
-                return;
-            }
-
-            var body = new GameObject("World Spell Stroke");
-            body.transform.SetParent(transform, true);
-            var line = body.AddComponent<LineRenderer>();
-            line.useWorldSpace = true;
-            line.positionCount = stroke.Count;
-            line.startWidth = 0.075f;
-            line.endWidth = 0.075f;
-            line.numCornerVertices = 0;
-            line.numCapVertices = 0;
-            line.material = new Material(Shader.Find("Sprites/Default"));
-            line.startColor = strokeColor;
-            line.endColor = strokeColor;
-            line.sortingOrder = 20;
-            for (var index = 0; index < stroke.Count; index++)
-            {
-                line.SetPosition(index, new Vector3(stroke[index].position.x, stroke[index].position.y, -0.2f));
-            }
-
-            visuals.Add(new StrokeVisual(body, line));
-        }
-
-        private void TickVisuals()
-        {
-            for (var index = visuals.Count - 1; index >= 0; index--)
-            {
-                var visual = visuals[index];
-                visual.age += Time.deltaTime;
-                var alpha = Mathf.Lerp(0.92f, 0f, visual.age / StrokeVisualLifetimeSeconds);
-                var color = new Color(strokeColor.r, strokeColor.g, strokeColor.b, alpha);
-                if (visual.line != null)
-                {
-                    visual.line.startColor = color;
-                    visual.line.endColor = color;
-                }
-
-                if (visual.age >= StrokeVisualLifetimeSeconds)
-                {
-                    if (visual.body != null)
-                    {
-                        Destroy(visual.body);
-                    }
-                    visuals.RemoveAt(index);
-                }
+                strokeVisuals.strokeColor = strokeColor;
+                strokeVisuals.lifetimeSeconds = StrokeVisualLifetimeSeconds;
             }
         }
 
-        private static Vector2 CenterOf(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)
+        private void OnStrokeCompleted(StrokeInputStroke stroke)
         {
-            var points = strokes.SelectMany(stroke => stroke).Select(sample => sample.position).ToList();
-            return points.Count == 0 ? Vector2.zero : new Vector2(points.Average(point => point.x), points.Average(point => point.y));
+            sessionBuffer.PushCompletedStroke(stroke, Time.time);
         }
 
-        private sealed class StrokeVisual
+        private void OnSessionCompleted(StrokeInputSession session)
         {
-            public readonly GameObject body;
-            public readonly LineRenderer line;
-            public float age;
-
-            public StrokeVisual(GameObject body, LineRenderer line)
-            {
-                this.body = body;
-                this.line = line;
-            }
+            StrokeSessionCompleted(session);
+            var samples = session.ToStrokeSamples();
+            SpellBuffered(samples, session.GetWorldCenter(), samples.Count);
         }
     }
 }

@@ -88,7 +88,13 @@ namespace MagicExamHall
             }
 
             texture.Apply();
-            return Sprite.Create(texture, new Rect(0, 0, Size, Size), new Vector2(0.5f, 0.5f), PixelsPerUnit);
+            return Sprite.Create(
+                texture,
+                new Rect(0, 0, Size, Size),
+                new Vector2(0.5f, 0.5f),
+                PixelsPerUnit,
+                0U,
+                SpriteMeshType.FullRect);
         }
 
         /// <summary>

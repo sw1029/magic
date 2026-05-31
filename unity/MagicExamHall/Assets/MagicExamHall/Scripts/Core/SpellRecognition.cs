@@ -61,6 +61,7 @@ namespace MagicExamHall
         public string feedbackReason;
         public string nextHint;
         public bool success;
+        public TutorialPersonalizationSummary personalization = TutorialPersonalizationSummary.Empty;
 
         public string RecognizedFamilyText => recognizedFamily.HasValue ? SpellLabels.English(recognizedFamily.Value) : "none";
     }

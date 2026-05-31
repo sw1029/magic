@@ -34,6 +34,7 @@ namespace MagicExamHall
         private MagicNote magicNote = null!;
         private EndingReport endingReport = null!;
         private SpellCastingService spellCasting = null!;
+        private IStrokeRecognitionService recognitionService = null!;
         private FloorGoalSystem floorGoals = null!;
         private RectTransform hudPanel = null!;
         private RectTransform notePanel = null!;
@@ -75,6 +76,8 @@ namespace MagicExamHall
         public float PendingAdvanceSecondsForTests => pendingAdvanceAt < 0f ? -1f : pendingAdvanceAt - Time.time;
         public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
+        public int PersonalizationCaptureCountForTests => recognitionService?.PersonalizationStore.CaptureCount ?? 0;
+        public TutorialPersonalizationSummary LastPersonalizationSummaryForTests { get; private set; } = TutorialPersonalizationSummary.Empty;
         private bool IsFinalFloor => floorController.CurrentFloorIndex >= floorController.FloorCount - 1;
 
         private void Awake()
@@ -86,6 +89,7 @@ namespace MagicExamHall
             magicNote = new MagicNote();
             endingReport = new EndingReport();
             spellCasting = new SpellCastingService();
+            recognitionService = new HeuristicStrokeRecognitionService();
             floorGoals = new FloorGoalSystem();
             ResolveSceneReferences();
             BuildUi();
@@ -214,7 +218,7 @@ namespace MagicExamHall
             worldDrawing = gameObject.GetComponent<WorldDrawingController>() ?? gameObject.AddComponent<WorldDrawingController>();
             worldDrawing.mainCamera = mainCamera;
             worldDrawing.ApplyPlayableDefaults();
-            worldDrawing.SpellBuffered += OnSpellBuffered;
+            worldDrawing.StrokeSessionCompleted += OnStrokeSessionCompleted;
         }
 
         private static void ConfigureMainCamera(Camera camera)
@@ -298,11 +302,38 @@ namespace MagicExamHall
             ProcessSpellGroup(strokes, center, strokeCount);
         }
 
+        private void OnStrokeSessionCompleted(StrokeInputSession session)
+        {
+            ProcessStrokeSession(session);
+        }
+
         private ProcessedSpell ProcessSpellGroup(List<List<StrokeSample>> strokes, Vector2 center, int strokeCount)
         {
+            var session = StrokeInputSessionExtensions.FromStrokeSamples(
+                strokes,
+                $"legacy-{Guid.NewGuid():N}",
+                Time.time,
+                InputCoordinateSpace.World);
+            return ProcessStrokeSession(session);
+        }
+
+        private ProcessedSpell ProcessStrokeSession(StrokeInputSession session)
+        {
             trialCounter++;
-            var outcome = spellCasting.Process(strokes, center, strokeCount, seals.Select(view => view.seal).ToList(), Time.time);
-            return ApplySpellOutcome(outcome);
+            var recognition = recognitionService.Recognize(session, new RecognitionContext
+            {
+                activeSeals = seals.Select(view => view.seal).ToList(),
+                now = Time.time
+            });
+            LastPersonalizationSummaryForTests = recognition.personalization ?? TutorialPersonalizationSummary.Empty;
+            var outcome = spellCasting.ProcessRecognitionResult(recognition, Time.time);
+            var processed = ApplySpellOutcome(outcome);
+            if (outcome.kind == SpellCastOutcomeKind.BaseSucceeded || outcome.kind == SpellCastOutcomeKind.OverlaySucceeded)
+            {
+                recognitionService.RecordAcceptedResult(recognition, Time.time);
+            }
+
+            return processed;
         }
 
         private ProcessedSpell ApplySpellOutcome(SpellCastOutcome outcome)

@@ -40,6 +40,7 @@ namespace MagicExamHall
         public OverlayScaleHint scaleHint;
         public string anchorZone = "";
         public string feedbackReason = "";
+        public TutorialPersonalizationSummary personalization = TutorialPersonalizationSummary.Empty;
         public bool success => status == RecognitionStatus.Recognized && recognizedOperator.HasValue;
 
         public string OperatorText => recognizedOperator.HasValue ? SpellLabels.English(recognizedOperator.Value) : "none";
@@ -88,7 +89,7 @@ namespace MagicExamHall
             var candidates = Enum.GetValues(typeof(SpellFamily))
                 .Cast<SpellFamily>()
                 .Select(family => GestureRecognizer.Recognize(strokes, family))
-                .OrderByDescending(result => result.status == RecognitionStatus.Recognized ? 1 : 0)
+                .OrderByDescending(result => result.success ? 2 : result.status == RecognitionStatus.Recognized ? 1 : 0)
                 .ThenByDescending(result => result.confidence)
                 .ToList();
             var best = candidates.First();

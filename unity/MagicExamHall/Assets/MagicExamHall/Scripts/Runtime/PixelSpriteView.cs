@@ -13,6 +13,8 @@ namespace MagicExamHall
         public bool tiled;
         public Vector2 tiledSize = Vector2.one;
 
+        private bool applyPending;
+
         private IEnumerator Start()
         {
             yield return null;
@@ -23,8 +25,19 @@ namespace MagicExamHall
         {
             if (Application.isPlaying)
             {
-                Apply();
+                applyPending = true;
             }
+        }
+
+        private void LateUpdate()
+        {
+            if (!applyPending)
+            {
+                return;
+            }
+
+            applyPending = false;
+            Apply();
         }
 
         public void Apply()

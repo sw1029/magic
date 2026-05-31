@@ -26,6 +26,7 @@ namespace MagicExamHall
         public OverlayOperator? overlayOperator;
         public Vector2 center;
         public int strokeCount;
+        public StrokeRecognitionResult recognitionResult = null!;
     }
 
     public sealed class SpellCastingService
@@ -61,6 +62,40 @@ namespace MagicExamHall
             }
 
             return ProcessBase(strokes, center, strokeCount, now);
+        }
+
+        public SpellCastOutcome ProcessRecognitionResult(StrokeRecognitionResult recognitionResult, float now)
+        {
+            if (recognitionResult == null)
+            {
+                throw new ArgumentNullException(nameof(recognitionResult));
+            }
+
+            var outcome = recognitionResult.kind switch
+            {
+                StrokeRecognitionKind.Base => ProcessBaseResult(
+                    recognitionResult.baseResult,
+                    recognitionResult.center,
+                    recognitionResult.strokeCount,
+                    now),
+                StrokeRecognitionKind.Overlay => ProcessOverlayResult(
+                    recognitionResult.overlayResult,
+                    recognitionResult.targetSeal,
+                    recognitionResult.center,
+                    recognitionResult.strokeCount),
+                StrokeRecognitionKind.DetachedOverlay => new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.DetachedOverlay,
+                    overlayResult = recognitionResult.overlayResult,
+                    targetSeal = recognitionResult.targetSeal,
+                    center = recognitionResult.center,
+                    strokeCount = recognitionResult.strokeCount
+                },
+                _ => throw new ArgumentOutOfRangeException(nameof(recognitionResult.kind), recognitionResult.kind, "Unhandled recognition result.")
+            };
+
+            outcome.recognitionResult = recognitionResult;
+            return outcome;
         }
 
         public static float AttachRadiusFor(CompiledSeal seal)

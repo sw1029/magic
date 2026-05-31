@@ -56,11 +56,14 @@ namespace MagicExamHall
         private const float FamilySlotSpacing = 34f;
         private const float FamilyReelTopPadding = 18f;
         private const int FamilyReelCycles = 3;
-        private const float FamilyReelKickVelocity = 260f;
-        private const float FamilyReelMaxVelocity = 680f;
-        private const float FamilyReelSpring = 38f;
-        private const float FamilyReelDamping = 10f;
+        private const float FamilyReelKickVelocity = 420f;
+        private const float FamilyReelMaxVelocity = 820f;
+        private const float FamilyReelSpring = 62f;
+        private const float FamilyReelDamping = 8.5f;
         private const float FamilyReelFadeDistance = 58f;
+        private const float SlotPreviewStrokeWidth = 2f;
+        private const float SidePreviewStrokeWidth = 2f;
+        private const int SavedSlotPreviewStrokeWidth = 2;
 
         private enum BubbleMode
         {
@@ -326,7 +329,7 @@ namespace MagicExamHall
                 button.image.sprite = CircleSprite;
                 button.image.preserveAspect = true;
                 button.image.color = new Color(0.06f, 0.12f, 0.21f, 0.96f);
-                var icon = CreateShapeIcon($"Custom Shape Slot {index + 1:00} Icon", button.transform, CustomShapeProfileStore.HelperTokens[index % CustomShapeProfileStore.HelperTokens.Length], Vector2.zero, new Vector2(50f, 50f), UiAnchor.Center, new Color(1f, 1f, 1f, 0.42f), 4f);
+                var icon = CreateShapeIcon($"Custom Shape Slot {index + 1:00} Icon", button.transform, CustomShapeProfileStore.HelperTokens[index % CustomShapeProfileStore.HelperTokens.Length], Vector2.zero, new Vector2(50f, 50f), UiAnchor.Center, new Color(1f, 1f, 1f, 0.42f), SlotPreviewStrokeWidth);
                 icon.raycastTarget = false;
                 slotIcons.Add(icon);
                 slotButtons.Add(button);
@@ -355,7 +358,7 @@ namespace MagicExamHall
                     new Vector2(34f, 30f),
                     UiAnchor.TopLeft,
                     new Color(0.92f, 0.96f, 1f, 0.78f),
-                    3.4f);
+                    SidePreviewStrokeWidth);
                 icon.raycastTarget = false;
             }
         }
@@ -629,8 +632,10 @@ namespace MagicExamHall
                 }
             }
 
-            var centerLine = CreatePanel("Custom Shape Family Reel Center Line", familyReelViewport, Vector2.zero, new Vector2(FamilyReelViewportSize.x - 18f, 2f), UiAnchor.Center, new Color(0.55f, 0.75f, 0.78f, 0.34f));
+            var centerLine = CreatePanel("Custom Shape Family Reel Center Line", familyReelViewport, Vector2.zero, new Vector2(FamilyReelViewportSize.x - 18f, 2f), UiAnchor.Center, new Color(0.55f, 0.75f, 0.78f, 0.18f));
             centerLine.GetComponent<Image>().raycastTarget = false;
+            centerLine.SetAsFirstSibling();
+            familyReelViewport.Find($"{familyReelViewport.name} Border")?.SetAsLastSibling();
             ResetFamilyReelPosition();
         }
 
@@ -762,10 +767,10 @@ namespace MagicExamHall
                 var distanceFromCenter = Mathf.Abs(visualY - centerY);
                 var centerWeight = 1f - Mathf.Clamp01(distanceFromCenter / FamilyReelFadeDistance);
                 centerWeight = centerWeight * centerWeight * (3f - 2f * centerWeight);
-                var alpha = Mathf.Lerp(0.24f, 1f, centerWeight);
-                var scale = Mathf.Lerp(0.72f, 1.05f, centerWeight);
+                var alpha = Mathf.Lerp(0.30f, 1f, centerWeight);
                 icon.color = WithAlpha(FamilyColor(familyReelFamilies[index]), alpha);
-                rect.localScale = Vector3.one * scale;
+                rect.localScale = Vector3.one;
+                rect.localRotation = Quaternion.identity;
             }
         }
 
@@ -878,7 +883,8 @@ namespace MagicExamHall
                         icon,
                         string.IsNullOrWhiteSpace(slot.shapeToken) ? "line" : slot.shapeToken,
                         Color.white,
-                        slot.goldCaptures.FirstOrDefault()?.ToStrokeSamples());
+                        slot.goldCaptures.FirstOrDefault()?.ToStrokeSamples(),
+                        SavedSlotPreviewStrokeWidth);
                 }
                 else
                 {
@@ -1009,7 +1015,7 @@ namespace MagicExamHall
             return icon;
         }
 
-        private static void SetShapeIcon(Image icon, string shapeToken, Color color, IReadOnlyList<IReadOnlyList<StrokeSample>> strokes = null)
+        private static void SetShapeIcon(Image icon, string shapeToken, Color color, IReadOnlyList<IReadOnlyList<StrokeSample>> strokes = null, int strokeWidth = 4)
         {
             if (icon == null)
             {
@@ -1017,8 +1023,8 @@ namespace MagicExamHall
             }
 
             icon.sprite = strokes != null && strokes.Count > 0
-                ? CustomShapeSpriteFactory.CreateStrokeSprite(strokes)
-                : CustomShapeSpriteFactory.CreateShapeSprite(shapeToken);
+                ? CustomShapeSpriteFactory.CreateStrokeSprite(strokes, strokeWidth)
+                : CustomShapeSpriteFactory.CreateShapeSprite(shapeToken, strokeWidth);
             icon.enabled = true;
             icon.color = color;
             icon.preserveAspect = true;

@@ -338,6 +338,8 @@ namespace MagicExamHall.Tests
             var shapeImage = shapeSection.GetComponent<Image>();
             var mappingImage = mappingSection.GetComponent<Image>();
             Assert.That(Mathf.Abs(shapeImage.color.r - mappingImage.color.r) + Mathf.Abs(shapeImage.color.g - mappingImage.color.g), Is.GreaterThan(0.04f));
+            var sidePreviewIcon = GameObject.Find("Custom Shape Side Preview 01")?.GetComponent<Image>();
+            Assert.That(sidePreviewIcon?.sprite?.name, Does.Contain(":2"));
             var shapeCorners = new Vector3[4];
             var mappingCorners = new Vector3[4];
             shapeSection.GetWorldCorners(shapeCorners);
@@ -364,6 +366,11 @@ namespace MagicExamHall.Tests
             Assert.That(familyReelViewport.showMaskGraphic, Is.True);
             Assert.That(familyReelContent, Is.Not.Null);
             Assert.That(familyReelIcons.Count, Is.GreaterThan(3));
+            Assert.That(familyReelIcons.Select(image => image.rectTransform.localScale.x), Is.All.EqualTo(1f).Within(0.001f));
+            Assert.That(familyReelIcons.Select(image => image.rectTransform.localScale.y), Is.All.EqualTo(1f).Within(0.001f));
+            var familyReelCenterLine = GameObject.Find("Custom Shape Family Reel Center Line")?.transform;
+            Assert.That(familyReelCenterLine, Is.Not.Null);
+            Assert.That(familyReelCenterLine.GetSiblingIndex(), Is.LessThan(familyReelContent.GetSiblingIndex()));
             Assert.That(familyUpButton, Is.Not.Null);
             var familyReelRestY = familyReelContent.anchoredPosition.y;
             familyUpButton.onClick.Invoke();
@@ -376,6 +383,8 @@ namespace MagicExamHall.Tests
             }
 
             Assert.That(Mathf.Abs(familyReelContent.anchoredPosition.y - earlyReelY), Is.GreaterThan(8f));
+            Assert.That(familyReelIcons.Select(image => image.rectTransform.localScale.x), Is.All.EqualTo(1f).Within(0.001f));
+            Assert.That(familyReelIcons.Select(image => image.rectTransform.localScale.y), Is.All.EqualTo(1f).Within(0.001f));
             for (var frame = 0; frame < 100; frame++)
             {
                 yield return null;

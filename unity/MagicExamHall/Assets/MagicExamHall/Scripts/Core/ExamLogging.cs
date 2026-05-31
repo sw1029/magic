@@ -20,8 +20,13 @@ namespace MagicExamHall
         public string floorId = "";
         public string targetObject = "";
         public string worldEffect = "";
+        public string customShapeId = "";
+        public string customShapeLabel = "";
+        public string mappedFamily = "";
         public string status = "";
         public float confidence;
+        public float customScore;
+        public float defaultSimilarityScore;
         public float closure;
         public float smoothness;
         public float tempo;
@@ -88,8 +93,13 @@ namespace MagicExamHall
                 Csv(log.floorId),
                 Csv(log.targetObject),
                 Csv(log.worldEffect),
+                Csv(log.customShapeId),
+                Csv(log.customShapeLabel),
+                Csv(log.mappedFamily),
                 Csv(log.status),
                 Float(log.confidence),
+                Float(log.customScore),
+                Float(log.defaultSimilarityScore),
                 Float(log.closure),
                 Float(log.smoothness),
                 Float(log.tempo),
@@ -128,7 +138,7 @@ namespace MagicExamHall
             {
                 File.WriteAllText(
                     attemptsCsvPath,
-                    "sessionId,trialId,targetFamily,recognizedFamily,phase,baseFamily,overlayStack,sealId,floorId,targetObject,worldEffect,status,confidence,closure,smoothness,tempo,stability,rotationBias,worldX,worldY,bufferStrokeCount,attemptIndex,elapsedMs,feedbackViewed,success,hintShown,assistLevel,assisted" + Environment.NewLine,
+                    "sessionId,trialId,targetFamily,recognizedFamily,phase,baseFamily,overlayStack,sealId,floorId,targetObject,worldEffect,customShapeId,customShapeLabel,mappedFamily,status,confidence,customScore,defaultSimilarityScore,closure,smoothness,tempo,stability,rotationBias,worldX,worldY,bufferStrokeCount,attemptIndex,elapsedMs,feedbackViewed,success,hintShown,assistLevel,assisted" + Environment.NewLine,
                     Encoding.UTF8);
             }
         }

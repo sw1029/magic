@@ -61,6 +61,12 @@ namespace MagicExamHall
         public string feedbackReason;
         public string nextHint;
         public bool success;
+        public bool isCustomShape;
+        public string customShapeId = "";
+        public string customShapeLabel = "";
+        public SpellFamily? mappedFamily;
+        public float customScore;
+        public float defaultSimilarityScore;
         public TutorialPersonalizationSummary personalization = TutorialPersonalizationSummary.Empty;
 
         public string RecognizedFamilyText => recognizedFamily.HasValue ? SpellLabels.English(recognizedFamily.Value) : "none";

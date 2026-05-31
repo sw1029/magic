@@ -37,6 +37,8 @@ namespace MagicExamHall
         private EndingReport endingReport = null!;
         private SpellCastingService spellCasting = null!;
         private IStrokeRecognitionService recognitionService = null!;
+        private CustomShapeProfileStore customShapeStore = null!;
+        private CustomShapeBookController customShapeBook = null!;
         private FloorGoalSystem floorGoals = null!;
         private RectTransform hudPanel = null!;
         private RectTransform notePanel = null!;
@@ -87,6 +89,11 @@ namespace MagicExamHall
         public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
         public int PersonalizationCaptureCountForTests => recognitionService?.PersonalizationStore.CaptureCount ?? 0;
+        public int CustomShapeSlotCountForTests => customShapeBook?.SlotCount ?? 0;
+        public bool IsCustomPenPopupVisibleForTests => customShapeBook?.IsPenPopupVisible ?? false;
+        public bool IsCustomShapePageOpenForTests => customShapeBook?.IsPageOpen ?? false;
+        public bool IsCustomShapeBubbleVisibleForTests => customShapeBook?.IsBubbleVisible ?? false;
+        public bool IsCustomShapeEditorOpenForTests => customShapeBook?.IsEditorOpen ?? false;
         public TutorialPersonalizationSummary LastPersonalizationSummaryForTests { get; private set; } = TutorialPersonalizationSummary.Empty;
         private bool IsFinalFloor => floorController.CurrentFloorIndex >= floorController.FloorCount - 1;
 
@@ -99,23 +106,44 @@ namespace MagicExamHall
             magicNote = new MagicNote();
             endingReport = new EndingReport();
             spellCasting = new SpellCastingService();
-            recognitionService = new HeuristicStrokeRecognitionService();
+            customShapeStore = CustomShapeProfileStore.LoadDefault();
+            recognitionService = new HeuristicStrokeRecognitionService(null, customShapeStore);
             floorGoals = new FloorGoalSystem();
             ResolveSceneReferences();
             BuildUi();
+            customShapeBook = new CustomShapeBookController();
+            customShapeBook.Initialize(canvas, mainCamera, player, uiFont, customShapeStore);
             ConfigureWorldDrawing();
             LoadFloor(0);
         }
 
         private void Update()
         {
-            TickPlayer();
+            customShapeBook?.Tick();
+            if (customShapeBook?.BlocksGameplayInput == true)
+            {
+                velocity = Vector2.zero;
+            }
+            else
+            {
+                TickGameplayCancelInput();
+                TickPlayer();
+            }
+
             TickSeals();
             TickPulses();
             TickHazards();
             TickFloorAdvance();
             magicNote.Tick(Time.deltaTime);
             UpdateHud();
+        }
+
+        private void TickGameplayCancelInput()
+        {
+            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Backspace))
+            {
+                worldDrawing?.CancelBufferedInput();
+            }
         }
 
         public BaseRecognitionResult CastSyntheticBaseForTests(SpellFamily family, Vector2 worldCenter)
@@ -236,6 +264,77 @@ namespace MagicExamHall
             }
 
             return SubmitOverlayRecognitionResult(result, snapshot.sealId, worldCenter, strokeCount);
+        }
+
+        public void OpenCustomShapePenPopupForTests()
+        {
+            customShapeBook?.OpenPenPopupForTests();
+        }
+
+        public void OpenCustomShapePageForTests()
+        {
+            customShapeBook?.OpenPageForTests();
+        }
+
+        public void RequestCustomShapeSlotForTests(int slotIndex)
+        {
+            customShapeBook?.RequestSlotForTests(slotIndex);
+        }
+
+        public void DeclineCustomShapeBubbleForTests()
+        {
+            customShapeBook?.DeclineBubbleForTests();
+        }
+
+        public void ConfirmCustomShapeBubbleForTests()
+        {
+            customShapeBook?.ConfirmBubbleForTests();
+        }
+
+        public bool IsCustomShapeSlotOccupiedForTests(int slotIndex)
+        {
+            return customShapeBook?.IsSlotOccupied(slotIndex) ?? false;
+        }
+
+        public string CustomShapeSlotLabelForTests(int slotIndex)
+        {
+            return customShapeBook?.SlotLabel(slotIndex) ?? "";
+        }
+
+        public SpellFamily CustomShapeSlotMappedFamilyForTests(int slotIndex)
+        {
+            return customShapeBook?.SlotMappedFamily(slotIndex) ?? SpellFamily.Wind;
+        }
+
+        public bool SaveCustomShapeSlotForTests(
+            int slotIndex,
+            string label,
+            string regexPattern,
+            SpellFamily mappedFamily,
+            IReadOnlyList<IReadOnlyList<StrokeSample>> goldStrokes,
+            out string message)
+        {
+            if (customShapeBook == null)
+            {
+                message = "custom shape controller unavailable";
+                return false;
+            }
+
+            return customShapeBook.SaveSlotForTests(slotIndex, label, regexPattern, mappedFamily, goldStrokes, out message);
+        }
+
+        public bool DeleteCustomShapeSlotForTests(int slotIndex)
+        {
+            return customShapeBook?.DeleteSlotForTests(slotIndex) ?? false;
+        }
+
+        public void UseCustomShapeStoreForTests(string storagePath)
+        {
+            customShapeStore = new CustomShapeProfileStore(storagePath);
+            var personalizationStore = recognitionService?.PersonalizationStore ?? new TutorialPersonalizationStore();
+            recognitionService = new HeuristicStrokeRecognitionService(personalizationStore, customShapeStore);
+            customShapeBook = new CustomShapeBookController();
+            customShapeBook.Initialize(canvas, mainCamera, player, uiFont, customShapeStore);
         }
 
         private void ResolveSceneReferences()
@@ -582,8 +681,15 @@ namespace MagicExamHall
             var family = result.spell.recognizedFamily.HasValue
                 ? SpellLabels.Korean(result.spell.recognizedFamily.Value)
                 : SpellLabels.Korean(result.spell.targetFamily);
+            var label = result.spell.isCustomShape && !string.IsNullOrWhiteSpace(result.spell.customShapeLabel)
+                ? $"{result.spell.customShapeLabel} ({family})"
+                : family;
+            var customLine = result.spell.isCustomShape
+                ? $"커스텀 {Percent(result.spell.customScore)}  기본 유사 {Percent(result.spell.defaultSimilarityScore)}\n"
+                : "";
             resultText.text =
-                $"{title}: {family}\n" +
+                $"{title}: {label}\n" +
+                customLine +
                 $"판정 {StatusLabel(result.spell.status)}  신뢰 {Percent(result.spell.confidence)}  획 {result.bufferStrokeCount}\n" +
                 $"{QualityLine(result.spell.quality)}\n" +
                 $"해석: {ShortLine(QualityCoachLine(result.spell.quality), ResultLineLength(52, 42))}\n" +
@@ -1244,8 +1350,13 @@ namespace MagicExamHall
                 floorId = floorController.Current.number.ToString(CultureInfo.InvariantCulture),
                 targetObject = worldEffect,
                 worldEffect = worldEffect,
+                customShapeId = result.spell.customShapeId ?? "",
+                customShapeLabel = result.spell.customShapeLabel ?? "",
+                mappedFamily = result.spell.mappedFamily.HasValue ? SpellLabels.English(result.spell.mappedFamily.Value) : "",
                 status = result.spell.status.ToString(),
                 confidence = result.spell.confidence,
+                customScore = result.spell.customScore,
+                defaultSimilarityScore = result.spell.defaultSimilarityScore,
                 closure = result.spell.quality.closure,
                 smoothness = result.spell.quality.smoothness,
                 tempo = result.spell.quality.tempo,

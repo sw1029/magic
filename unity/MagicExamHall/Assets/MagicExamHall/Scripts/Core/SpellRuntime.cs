@@ -57,17 +57,22 @@ namespace MagicExamHall
         public float worldScale = 1f;
         public float createdAt;
         public float expiresAt;
+        public string customShapeId = "";
+        public string customShapeLabel = "";
 
         public string Label
         {
             get
             {
+                var baseLabel = string.IsNullOrWhiteSpace(customShapeLabel)
+                    ? SpellLabels.Korean(baseFamily)
+                    : $"{customShapeLabel} ({SpellLabels.Korean(baseFamily)})";
                 if (overlayStack.Count == 0)
                 {
-                    return SpellLabels.Korean(baseFamily);
+                    return baseLabel;
                 }
 
-                return $"{SpellLabels.Korean(baseFamily)} + {string.Join(" + ", overlayStack.Select(SpellLabels.Korean))}";
+                return $"{baseLabel} + {string.Join(" + ", overlayStack.Select(SpellLabels.Korean))}";
             }
         }
     }
@@ -114,7 +119,9 @@ namespace MagicExamHall
                 worldCenter = baseResult.center,
                 worldScale = Mathf.Max(baseResult.worldScale, 0.65f),
                 createdAt = now,
-                expiresAt = now + durationSeconds
+                expiresAt = now + durationSeconds,
+                customShapeId = baseResult.spell.customShapeId ?? "",
+                customShapeLabel = baseResult.spell.customShapeLabel ?? ""
             };
         }
 

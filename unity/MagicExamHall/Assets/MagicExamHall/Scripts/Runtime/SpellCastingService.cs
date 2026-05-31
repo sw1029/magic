@@ -319,7 +319,7 @@ namespace MagicExamHall
             return result.success || result.score >= 0.52f || result.shapeConfidence >= 0.60f;
         }
 
-        private static bool ShouldPreferOverlayNearSeal(OverlayRecognitionResult result)
+        internal static bool ShouldPreferOverlayNearSeal(OverlayRecognitionResult result)
         {
             if (result.success)
             {

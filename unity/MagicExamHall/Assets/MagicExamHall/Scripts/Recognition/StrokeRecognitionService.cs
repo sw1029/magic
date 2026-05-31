@@ -33,18 +33,23 @@ namespace MagicExamHall
     public interface IStrokeRecognitionService
     {
         TutorialPersonalizationStore PersonalizationStore { get; }
+        CustomShapeProfileStore CustomShapeStore { get; }
         StrokeRecognitionResult Recognize(StrokeInputSession session, RecognitionContext context);
         void RecordAcceptedResult(StrokeRecognitionResult result, float now);
     }
 
     public sealed class HeuristicStrokeRecognitionService : IStrokeRecognitionService
     {
-        public HeuristicStrokeRecognitionService(TutorialPersonalizationStore personalizationStore = null)
+        public HeuristicStrokeRecognitionService(
+            TutorialPersonalizationStore personalizationStore = null,
+            CustomShapeProfileStore customShapeStore = null)
         {
             PersonalizationStore = personalizationStore ?? new TutorialPersonalizationStore();
+            CustomShapeStore = customShapeStore ?? new CustomShapeProfileStore();
         }
 
         public TutorialPersonalizationStore PersonalizationStore { get; }
+        public CustomShapeProfileStore CustomShapeStore { get; }
 
         public StrokeRecognitionResult Recognize(StrokeInputSession session, RecognitionContext context)
         {
@@ -64,6 +69,22 @@ namespace MagicExamHall
             {
                 var overlayResult = OverlayRecognizer.Recognize(strokes, targetSeal);
                 PersonalizationStore.ApplyOverlayPersonalization(overlayResult, strokes);
+                var baseResult = RecognizeBaseCandidate(strokes);
+                if (baseResult.spell.status == RecognitionStatus.Recognized &&
+                    baseResult.spell.recognizedFamily.HasValue &&
+                    !SpellCastingService.ShouldPreferOverlayNearSeal(overlayResult))
+                {
+                    return new StrokeRecognitionResult
+                    {
+                        kind = StrokeRecognitionKind.Base,
+                        session = session,
+                        baseResult = baseResult,
+                        center = center,
+                        strokeCount = strokeCount,
+                        personalization = baseResult.spell.personalization
+                    };
+                }
+
                 return new StrokeRecognitionResult
                 {
                     kind = StrokeRecognitionKind.Overlay,
@@ -73,6 +94,20 @@ namespace MagicExamHall
                     center = center,
                     strokeCount = strokeCount,
                     personalization = overlayResult.personalization
+                };
+            }
+
+            var recognizedBase = RecognizeBaseCandidate(strokes);
+            if (recognizedBase.spell.status == RecognitionStatus.Recognized && recognizedBase.spell.recognizedFamily.HasValue)
+            {
+                return new StrokeRecognitionResult
+                {
+                    kind = StrokeRecognitionKind.Base,
+                    session = session,
+                    baseResult = recognizedBase,
+                    center = center,
+                    strokeCount = strokeCount,
+                    personalization = recognizedBase.spell.personalization
                 };
             }
 
@@ -92,17 +127,23 @@ namespace MagicExamHall
                 };
             }
 
-            var baseResult = SpellRuntime.RecognizeBase(strokes);
-            PersonalizationStore.ApplyBasePersonalization(baseResult.spell, strokes);
             return new StrokeRecognitionResult
             {
                 kind = StrokeRecognitionKind.Base,
                 session = session,
-                baseResult = baseResult,
+                baseResult = recognizedBase,
                 center = center,
                 strokeCount = strokeCount,
-                personalization = baseResult.spell.personalization
+                personalization = recognizedBase.spell.personalization
             };
+        }
+
+        private BaseRecognitionResult RecognizeBaseCandidate(List<List<StrokeSample>> strokes)
+        {
+            var baseResult = SpellRuntime.RecognizeBase(strokes);
+            PersonalizationStore.ApplyBasePersonalization(baseResult.spell, strokes);
+            CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, CustomShapeStore);
+            return baseResult;
         }
 
         public void RecordAcceptedResult(StrokeRecognitionResult result, float now)
@@ -118,6 +159,11 @@ namespace MagicExamHall
                 case StrokeRecognitionKind.Base:
                 {
                     var spell = result.baseResult?.spell;
+                    if (spell?.isCustomShape == true && spell.success)
+                    {
+                        CustomShapeStore.RecordAutoCapture(spell.customShapeId, strokes, spell.customScore);
+                    }
+
                     if (spell?.recognizedFamily.HasValue == true)
                     {
                         PersonalizationStore.RecordBaseCapture(spell.recognizedFamily.Value, strokes, spell, now);
@@ -147,12 +193,6 @@ namespace MagicExamHall
                 .OrderBy(seal => Vector2.Distance(center, seal.worldCenter))
                 .FirstOrDefault();
             if (nearestSeal == null)
-            {
-                return null;
-            }
-
-            var basePreview = SpellRuntime.RecognizeBase(strokes);
-            if (basePreview.spell.status == RecognitionStatus.Recognized && basePreview.spell.recognizedFamily.HasValue)
             {
                 return null;
             }

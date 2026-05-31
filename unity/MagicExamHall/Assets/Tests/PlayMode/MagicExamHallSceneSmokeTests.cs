@@ -1,5 +1,7 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using MagicExamHall;
 using NUnit.Framework;
@@ -8,6 +10,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 namespace MagicExamHall.Tests
 {
@@ -255,6 +258,223 @@ namespace MagicExamHall.Tests
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.VoidCut), Is.True);
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.MartialAxis), Is.True);
             Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator CustomShapeAuthoringPageSlotFlowWorks()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+            var profilePath = TempCustomShapeProfilePath();
+            controller.UseCustomShapeStoreForTests(profilePath);
+            ClearCustomSlots(controller);
+
+            controller.OpenCustomShapePenPopupForTests();
+            yield return null;
+            Assert.That(controller.IsCustomPenPopupVisibleForTests, Is.True);
+
+            controller.OpenCustomShapePageForTests();
+            yield return null;
+            Assert.That(controller.IsCustomShapePageOpenForTests, Is.True);
+            Assert.That(controller.CustomShapeSlotCountForTests, Is.EqualTo(12));
+            var emptySlotIcon = GameObject.Find("Custom Shape Slot 12 Icon")?.GetComponent<Image>();
+            Assert.That(emptySlotIcon, Is.Not.Null);
+            Assert.That(emptySlotIcon.enabled, Is.False);
+            Assert.That(emptySlotIcon.sprite, Is.Null);
+
+            controller.RequestCustomShapeSlotForTests(11);
+            yield return null;
+            Assert.That(controller.IsCustomShapeBubbleVisibleForTests, Is.True);
+            AssertVisibleKoreanTextLooksUsable("도형을 작성하시겠습니까?");
+
+            controller.DeclineCustomShapeBubbleForTests();
+            yield return null;
+            Assert.That(controller.IsCustomShapeSlotOccupiedForTests(11), Is.False);
+
+            controller.RequestCustomShapeSlotForTests(11);
+            controller.ConfirmCustomShapeBubbleForTests();
+            yield return null;
+            Assert.That(controller.IsCustomShapeEditorOpenForTests, Is.True);
+            var drawSurface = GameObject.Find("Custom Shape Capture Draw Surface");
+            Assert.That(drawSurface, Is.Not.Null);
+            Assert.That(drawSurface.GetComponent<CanvasRenderer>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Custom Shape Page Border")?.GetComponent<CustomShapeRectBorder>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Custom Shape Editor Border")?.GetComponent<CustomShapeRectBorder>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Custom Shape Capture Panel Border")?.GetComponent<CustomShapeRectBorder>(), Is.Not.Null);
+            var editorScrim = GameObject.Find("Custom Shape Editor Scrim")?.GetComponent<Image>();
+            var editorShadow = GameObject.Find("Custom Shape Editor Shadow")?.GetComponent<Image>();
+            var editorPanel = GameObject.Find("Custom Shape Editor")?.GetComponent<Image>();
+            Assert.That(editorScrim, Is.Not.Null);
+            Assert.That(editorShadow, Is.Not.Null);
+            Assert.That(editorPanel, Is.Not.Null);
+            var editorRect = editorPanel.rectTransform;
+            var canvasRect = editorRect.GetComponentInParent<Canvas>().GetComponent<RectTransform>();
+            Assert.That(editorRect.rect.width, Is.GreaterThan(850f));
+            Assert.That(editorRect.rect.height, Is.GreaterThan(468f));
+            Assert.That(editorRect.rect.width, Is.LessThanOrEqualTo(canvasRect.rect.width));
+            Assert.That(editorRect.rect.height, Is.LessThanOrEqualTo(canvasRect.rect.height));
+            Assert.That(editorScrim.raycastTarget, Is.True);
+            Assert.That(editorScrim.color.a, Is.GreaterThanOrEqualTo(0.5f));
+            Assert.That(editorShadow.raycastTarget, Is.False);
+            Assert.That(editorShadow.transform.GetSiblingIndex(), Is.GreaterThan(editorScrim.transform.GetSiblingIndex()));
+            Assert.That(editorPanel.transform.GetSiblingIndex(), Is.GreaterThan(editorShadow.transform.GetSiblingIndex()));
+            Assert.That(GameObject.Find("Custom Shape Editor Title Bar")?.GetComponent<Image>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Custom Shape Editor Active Accent")?.GetComponent<Image>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Close Custom Shape Editor")?.GetComponent<Button>(), Is.Not.Null);
+            var titleBarRect = GameObject.Find("Custom Shape Editor Title Bar").GetComponent<RectTransform>();
+            Assert.That(titleBarRect.rect.width, Is.EqualTo(editorRect.rect.width).Within(0.5f));
+            var capturePanelRect = GameObject.Find("Custom Shape Capture Panel").GetComponent<RectTransform>();
+            Assert.That(capturePanelRect.rect.width, Is.EqualTo(480f).Within(0.5f));
+            Assert.That(capturePanelRect.rect.height, Is.EqualTo(310f).Within(0.5f));
+            Assert.That(capturePanelRect.anchoredPosition.y, Is.LessThanOrEqualTo(-70f));
+            var shapeSection = GameObject.Find("Custom Shape Section")?.GetComponent<RectTransform>();
+            var mappingSection = GameObject.Find("Custom Shape Family Carousel")?.GetComponent<RectTransform>();
+            Assert.That(shapeSection, Is.Not.Null);
+            Assert.That(mappingSection, Is.Not.Null);
+            var shapeImage = shapeSection.GetComponent<Image>();
+            var mappingImage = mappingSection.GetComponent<Image>();
+            Assert.That(Mathf.Abs(shapeImage.color.r - mappingImage.color.r) + Mathf.Abs(shapeImage.color.g - mappingImage.color.g), Is.GreaterThan(0.04f));
+            var shapeCorners = new Vector3[4];
+            var mappingCorners = new Vector3[4];
+            shapeSection.GetWorldCorners(shapeCorners);
+            mappingSection.GetWorldCorners(mappingCorners);
+            Assert.That(shapeCorners[0].y, Is.GreaterThan(mappingCorners[1].y + 4f));
+            var paletteScroll = GameObject.Find("Custom Shape Palette Scroll View")?.GetComponent<ScrollRect>();
+            Assert.That(paletteScroll, Is.Not.Null);
+            Assert.That(paletteScroll.vertical, Is.True);
+            Assert.That(paletteScroll.inertia, Is.True);
+            Assert.That(paletteScroll.content.rect.height, Is.GreaterThan(paletteScroll.viewport.rect.height));
+            var capturePad = drawSurface.GetComponent<CustomShapeCapturePad>();
+            Assert.That(capturePad, Is.Not.Null);
+            capturePad.SetTemplate("rect");
+            Assert.That(capturePad.strokeColor.r, Is.EqualTo(0.28f).Within(0.01f));
+            Assert.That(capturePad.strokeColor.g, Is.EqualTo(0.64f).Within(0.01f));
+            Assert.That(capturePad.strokeColor.b, Is.EqualTo(0.95f).Within(0.01f));
+            var familyReelViewport = GameObject.Find("Custom Shape Family Reel Viewport")?.GetComponent<Mask>();
+            var familyReelContent = GameObject.Find("Custom Shape Family Reel Content")?.GetComponent<RectTransform>();
+            var familyReelIcons = Object.FindObjectsByType<Image>(FindObjectsSortMode.None)
+                .Where(image => image.name.StartsWith("Custom Shape Family Reel Icon", StringComparison.Ordinal))
+                .ToList();
+            var familyUpButton = GameObject.Find("Custom Shape Family Up")?.GetComponent<Button>();
+            Assert.That(familyReelViewport, Is.Not.Null);
+            Assert.That(familyReelViewport.showMaskGraphic, Is.True);
+            Assert.That(familyReelContent, Is.Not.Null);
+            Assert.That(familyReelIcons.Count, Is.GreaterThan(3));
+            Assert.That(familyUpButton, Is.Not.Null);
+            var familyReelRestY = familyReelContent.anchoredPosition.y;
+            familyUpButton.onClick.Invoke();
+            yield return null;
+            Assert.That(Mathf.Abs(familyReelContent.anchoredPosition.y - familyReelRestY), Is.GreaterThan(2f));
+            var earlyReelY = familyReelContent.anchoredPosition.y;
+            for (var frame = 0; frame < 20; frame++)
+            {
+                yield return null;
+            }
+
+            Assert.That(Mathf.Abs(familyReelContent.anchoredPosition.y - earlyReelY), Is.GreaterThan(8f));
+            for (var frame = 0; frame < 100; frame++)
+            {
+                yield return null;
+            }
+
+            Assert.That(familyReelContent.anchoredPosition.y, Is.EqualTo(familyReelRestY + 34f).Within(2f));
+            var strokePreview = GameObject.Find("Custom Shape Capture Stroke Preview")?.GetComponent<Image>();
+            Assert.That(strokePreview, Is.Not.Null);
+
+            DragCapturePad(capturePad, Vector2.zero, new Vector2(4f, 4f));
+            yield return null;
+            Assert.That(capturePad.PlacedShapeCount, Is.EqualTo(0));
+
+            DragCapturePad(capturePad, new Vector2(-92f, -42f), new Vector2(88f, 52f));
+            yield return null;
+            Assert.That(capturePad.PlacedShapeCount, Is.EqualTo(1));
+            Assert.That(capturePad.CaptureStrokes().Count, Is.GreaterThan(0));
+            Assert.That(strokePreview.enabled, Is.False);
+            Assert.That(capturePad.SelectedShapeIndexForTests, Is.EqualTo(0));
+
+            var originalCenter = capturePad.SelectedShapeCenterForTests;
+            DragCapturePad(capturePad, originalCenter, originalCenter + new Vector2(30f, -18f));
+            yield return null;
+            Assert.That(Vector2.Distance(capturePad.SelectedShapeCenterForTests, originalCenter), Is.GreaterThan(24f));
+
+            var originalSize = capturePad.SelectedShapeSizeForTests;
+            Assert.That(capturePad.TryGetSelectedResizeHandleLocalForTests(1, out var resizeHandle), Is.True);
+            DragCapturePad(capturePad, resizeHandle, resizeHandle + new Vector2(44f, 32f));
+            yield return null;
+            Assert.That(capturePad.SelectedShapeSizeForTests.x, Is.GreaterThan(originalSize.x + 20f));
+            Assert.That(capturePad.SelectedShapeSizeForTests.y, Is.GreaterThan(originalSize.y + 12f));
+
+            Assert.That(capturePad.TryGetSelectedRotateHandleLocalForTests(out var rotateHandle), Is.True);
+            DragCapturePad(capturePad, rotateHandle, rotateHandle + new Vector2(70f, -34f));
+            yield return null;
+            var rotation = capturePad.SelectedShapeRotationDegreesForTests;
+            Assert.That(Mathf.Abs(rotation), Is.GreaterThan(10f));
+            Assert.That(rotation, Is.EqualTo(Mathf.Round(rotation / 15f) * 15f).Within(0.6f));
+
+            var undoButton = GameObject.Find("Custom Shape Undo")?.GetComponent<Button>();
+            Assert.That(undoButton, Is.Not.Null);
+            undoButton.onClick.Invoke();
+            yield return null;
+            Assert.That(capturePad.PlacedShapeCount, Is.EqualTo(0));
+
+            DragCapturePad(capturePad, new Vector2(-70f, -34f), new Vector2(86f, 62f));
+            yield return null;
+            Assert.That(capturePad.PlacedShapeCount, Is.EqualTo(1));
+
+            var saved = controller.SaveCustomShapeSlotForTests(11, "테스트 바람", "테스트|바람|line", SpellFamily.Wind, Samples(SpellFamily.Wind), out var message);
+            yield return null;
+            Assert.That(saved, Is.True, message);
+            Assert.That(controller.IsCustomShapeSlotOccupiedForTests(11), Is.True);
+            Assert.That(controller.CustomShapeSlotLabelForTests(11), Is.EqualTo("테스트 바람"));
+            Assert.That(controller.CustomShapeSlotMappedFamilyForTests(11), Is.EqualTo(SpellFamily.Wind));
+            Assert.That(emptySlotIcon.enabled, Is.True);
+            Assert.That(emptySlotIcon.sprite, Is.Not.Null);
+
+            controller.RequestCustomShapeSlotForTests(11);
+            yield return null;
+            Assert.That(controller.IsCustomShapeBubbleVisibleForTests, Is.True);
+            AssertVisibleKoreanTextLooksUsable("도형을 삭제하시겠습니까?");
+
+            controller.ConfirmCustomShapeBubbleForTests();
+            yield return null;
+            Assert.That(controller.IsCustomShapeSlotOccupiedForTests(11), Is.False);
+            Assert.That(emptySlotIcon.enabled, Is.False);
+            Assert.That(emptySlotIcon.sprite, Is.Null);
+            DeleteIfExists(profilePath);
+        }
+
+        [UnityTest]
+        public IEnumerator CustomSlotCastCanCompleteMappedDefaultGoal()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+            var profilePath = TempCustomShapeProfilePath();
+            controller.UseCustomShapeStoreForTests(profilePath);
+            ClearCustomSlots(controller);
+            var windGoal = new Vector2(5.5f, 2.6f);
+            var gold = Samples(SpellFamily.Wind);
+            Assert.That(controller.SaveCustomShapeSlotForTests(10, "목표 바람", "목표|바람|line", SpellFamily.Wind, gold, out var message), Is.True, message);
+
+            var worldStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, 1.6f, 0.03f), windGoal, 0.8f);
+            var result = controller.CastRawBaseForTests(worldStrokes, windGoal);
+            yield return null;
+
+            Assert.That(result.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.spell.isCustomShape, Is.True);
+            Assert.That(result.spell.customShapeLabel, Is.EqualTo("목표 바람"));
+            Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+
+            ClearCustomSlots(controller);
+            DeleteIfExists(profilePath);
         }
 
         [UnityTest]
@@ -619,11 +839,80 @@ namespace MagicExamHall.Tests
             Assert.That(controller.EndingReportTextForTests, Does.Contain("MagicExamHallLogs"));
         }
 
+        private static void ClearCustomSlots(ExamGameController controller)
+        {
+            for (var index = 0; index < controller.CustomShapeSlotCountForTests; index++)
+            {
+                controller.DeleteCustomShapeSlotForTests(index);
+            }
+        }
+
+        private static string TempCustomShapeProfilePath()
+        {
+            return Path.Combine(Path.GetTempPath(), $"magic-playmode-custom-shapes-{Guid.NewGuid():N}.json");
+        }
+
+        private static void DeleteIfExists(string path)
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+
+        private static IReadOnlyList<IReadOnlyList<StrokeSample>> Samples(SpellFamily family)
+        {
+            return GestureRecognizer.CreateCanonicalSamples(family, 1.6f, 0.03f)
+                .Select(stroke => (IReadOnlyList<StrokeSample>)stroke)
+                .ToList();
+        }
+
         private static List<List<StrokeSample>> Offset(List<List<StrokeSample>> strokes, Vector2 center, float canonicalCenter)
         {
             return strokes
                 .Select(stroke => stroke.Select(sample => new StrokeSample(sample.position - Vector2.one * canonicalCenter + center, sample.time)).ToList())
                 .ToList();
+        }
+
+        private static void AssertVisibleKoreanTextLooksUsable(string expected)
+        {
+            var texts = Object.FindObjectsByType<Text>(FindObjectsSortMode.None)
+                .Where(text => text != null && text.gameObject.activeInHierarchy)
+                .ToList();
+
+            Assert.That(texts.Any(text => text.text.Contains(expected)), Is.True);
+            Assert.That(texts.Any(text => text.text.Contains("\uFFFD")), Is.False);
+
+            foreach (var text in texts.Where(text => text.GetComponentInParent<Button>() != null))
+            {
+                var rect = text.rectTransform.rect;
+                Assert.That(text.preferredWidth, Is.LessThanOrEqualTo(rect.width + 10f), text.text);
+                Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(rect.height + 8f), text.text);
+            }
+        }
+
+        private static void DragCapturePad(CustomShapeCapturePad capturePad, Vector2 start, Vector2 end)
+        {
+            var eventSystem = EventSystem.current;
+            Assert.That(eventSystem, Is.Not.Null);
+            var rect = capturePad.rectTransform;
+            var down = PointerForLocal(rect, start);
+            capturePad.OnPointerDown(down);
+            var drag = PointerForLocal(rect, end);
+            capturePad.OnDrag(drag);
+            capturePad.OnPointerUp(drag);
+        }
+
+        private static PointerEventData PointerForLocal(RectTransform rect, Vector2 local)
+        {
+            var canvas = rect.GetComponentInParent<Canvas>();
+            var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            return new PointerEventData(EventSystem.current)
+            {
+                button = PointerEventData.InputButton.Left,
+                pointerId = -1,
+                position = RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(local))
+            };
         }
     }
 }

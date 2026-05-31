@@ -500,10 +500,15 @@ namespace MagicExamHall.Tests
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
 
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-5.5f, 2.6f));
+            yield return null;
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+
             controller.CompleteCurrentFloorForTests();
             controller.AdvanceFloorForTests();
             yield return null;
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
+            Assert.That(controller.IsResultPanelVisible, Is.False);
 
             controller.LoadFloorForTests(3);
             controller.MovePlayerForTests(new Vector2(-3.1f, -0.4f));
@@ -518,6 +523,7 @@ namespace MagicExamHall.Tests
             }
 
             Assert.That(controller.HasEndingReport, Is.True);
+            Assert.That(controller.IsResultPanelVisible, Is.False);
             Assert.That(controller.EndingReportTextForTests, Does.Contain("입학 시험"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("도달 상태"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("진엔딩 (6/6 완전 복구)"));

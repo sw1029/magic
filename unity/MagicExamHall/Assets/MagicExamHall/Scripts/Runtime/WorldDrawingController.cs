@@ -7,7 +7,7 @@ namespace MagicExamHall
 {
     public sealed class WorldDrawingController : MonoBehaviour
     {
-        public const float DefaultBufferSeconds = 1.05f;
+        public const float DefaultBufferSeconds = 1.75f;
         public const float DefaultMinPointDistance = 0.05f;
         public const float StrokeVisualLifetimeSeconds = WorldStrokeVisuals.DefaultStrokeVisualLifetimeSeconds;
 
@@ -67,7 +67,7 @@ namespace MagicExamHall
             EnsureComponents();
             SyncOptions();
             inputSource.Tick(Time.deltaTime);
-            sessionBuffer.Tick(Time.time);
+            sessionBuffer.Tick(Time.time, inputSource.IsDrawing);
             strokeVisuals.Tick(Time.deltaTime);
         }
 

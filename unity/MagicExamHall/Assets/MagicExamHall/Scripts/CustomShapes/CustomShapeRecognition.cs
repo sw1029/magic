@@ -77,7 +77,7 @@ namespace MagicExamHall
                     return false;
                 }
 
-                ApplyCustomMetadata(spell, result);
+                ApplyCustomMetadata(spell, result, strokes);
                 spell.status = result.defaultConflict ? RecognitionStatus.Incomplete : RecognitionStatus.Ambiguous;
                 spell.recognizedFamily = null;
                 spell.targetFamily = result.slot.mappedFamily;
@@ -90,7 +90,7 @@ namespace MagicExamHall
                 return true;
             }
 
-            ApplyCustomMetadata(spell, result);
+            ApplyCustomMetadata(spell, result, strokes);
             spell.status = RecognitionStatus.Recognized;
             spell.recognizedFamily = result.slot.mappedFamily;
             spell.targetFamily = result.slot.mappedFamily;
@@ -104,15 +104,33 @@ namespace MagicExamHall
             return true;
         }
 
-        private static void ApplyCustomMetadata(SpellResult spell, CustomShapeRecognitionResult result)
+        private static void ApplyCustomMetadata(
+            SpellResult spell,
+            CustomShapeRecognitionResult result,
+            IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)
         {
             spell.isCustomShape = true;
             spell.customShapeId = result.slot.shapeId;
             spell.customShapeLabel = result.slot.label;
+            spell.customShapeToken = result.slot.shapeToken;
             spell.mappedFamily = result.slot.mappedFamily;
             spell.customScore = Round(result.customScore);
             spell.defaultSimilarityScore = Round(result.defaultSimilarityScore);
             spell.personalization = result.summary;
+            var customEvent = CustomShapeEventCatalog.BuildPayload(result.slot.eventShapeTokens, strokes);
+            spell.customEventId = customEvent.eventId;
+            spell.customEventLabel = customEvent.displayName;
+            spell.customEventKind = customEvent.eventKind.ToString();
+            spell.customEventRole = customEvent.role.ToString();
+            spell.customEventUsesDirection = customEvent.usesDirection;
+            spell.customEventOperatorOnly = customEvent.operatorOnly;
+            spell.customEventBlocks = customEvent.blocksEvent;
+            spell.customEventBlocked = customEvent.eventBlocked;
+            spell.customEventBlockedBy = customEvent.blockedByToken;
+            spell.customEventOrigin = customEvent.origin;
+            spell.customEventDirection = customEvent.direction;
+            spell.customEventStartPoint = customEvent.startPoint;
+            spell.customEventEndPoint = customEvent.endPoint;
         }
 
         private static CustomShapeRecognitionResult ScoreSlot(

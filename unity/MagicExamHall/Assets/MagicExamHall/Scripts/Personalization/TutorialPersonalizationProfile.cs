@@ -93,6 +93,11 @@ namespace MagicExamHall
         public IReadOnlyList<TutorialCaptureRecord> Captures => captures;
         public int CaptureCount => captures.Count;
 
+        public int CountBaseCaptures(SpellFamily family)
+        {
+            return captures.Count(capture => capture.kind == TutorialCaptureKind.BaseFamily && capture.family == family);
+        }
+
         public TutorialThresholdState CalculateThresholdState()
         {
             var captureCount = captures.Count;

@@ -45,6 +45,37 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator FloorSkipButtonIsRedAndAdvancesToNextFloor()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1));
+            Assert.That(controller.IsFloorSkipButtonVisibleForTests, Is.True);
+
+            var button = GameObject.Find("Floor Test Skip Button")?.GetComponent<Button>();
+            Assert.That(button, Is.Not.Null);
+            var rect = button.GetComponent<RectTransform>();
+            var image = button.GetComponent<Image>();
+            Assert.That(rect.anchorMin, Is.EqualTo(new Vector2(1f, 0f)));
+            Assert.That(rect.anchorMax, Is.EqualTo(new Vector2(1f, 0f)));
+            Assert.That(rect.pivot, Is.EqualTo(new Vector2(1f, 0f)));
+            Assert.That(image.color.r, Is.GreaterThan(0.75f));
+            Assert.That(image.color.g, Is.LessThan(0.18f));
+            Assert.That(image.color.b, Is.LessThan(0.12f));
+
+            button.onClick.Invoke();
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
+            Assert.That(controller.HasEndingReport, Is.False);
+            Assert.That(controller.IsFloorSkipButtonVisibleForTests, Is.True);
+        }
+
+        [UnityTest]
         public IEnumerator FirstFloorShowsGoalLabelsAndDrawingLocationGuidance()
         {
             SceneManager.LoadScene("MagicExamHall");
@@ -62,6 +93,33 @@ namespace MagicExamHall.Tests
             Assert.That(controller.LastMagicNoteText, Does.Contain("표식 근처"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("물은 닫힌 원"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("바람"));
+        }
+
+        [UnityTest]
+        public IEnumerator GoalLabelsUseHorizontalTwoLineLayout()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            var labels = Object.FindObjectsByType<Text>(FindObjectsSortMode.None)
+                .Where(text => text.name == "Goal Label Text" && text.gameObject.activeInHierarchy)
+                .ToList();
+
+            Assert.That(labels.Count, Is.EqualTo(controller.ActiveGoalCount));
+            foreach (var label in labels)
+            {
+                var rect = label.rectTransform.rect;
+                Assert.That(label.text.Count(ch => ch == '\n'), Is.EqualTo(1), label.text);
+                Assert.That(rect.width, Is.GreaterThanOrEqualTo(200f), label.text);
+                Assert.That(rect.height, Is.GreaterThanOrEqualTo(56f), label.text);
+                Assert.That(label.horizontalOverflow, Is.EqualTo(HorizontalWrapMode.Overflow), label.text);
+                Assert.That(label.preferredWidth, Is.LessThanOrEqualTo(rect.width + 18f), label.text);
+                Assert.That(label.preferredHeight, Is.LessThanOrEqualTo(rect.height + 10f), label.text);
+            }
         }
 
         [UnityTest]
@@ -102,7 +160,7 @@ namespace MagicExamHall.Tests
             Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Fire));
             Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
             Assert.That(controller.LastSealLifetimeSecondsForTests, Is.EqualTo(SpellRuntime.DefaultSealDurationSeconds).Within(0.001f));
-            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(1));
+            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(0));
             Assert.That(controller.IsDrawingPanelVisible, Is.False);
             Assert.That(controller.IsResultPanelVisible, Is.True);
             Assert.That(controller.LastResultPanelTextForTests, Does.Contain("base 성공"));
@@ -110,6 +168,30 @@ namespace MagicExamHall.Tests
             Assert.That(controller.LastResultPanelTextForTests, Does.Contain("품질"));
             Assert.That(controller.LastResultPanelTextForTests, Does.Contain("해석"));
             Assert.That(controller.LastResultPanelTextForTests, Does.Contain("이유"));
+        }
+
+        [UnityTest]
+        public IEnumerator IdleAfterBaseSealCreatesTransparentPlayerBarrier()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-5.5f, 2.6f));
+            yield return null;
+            Assert.That(controller.ActiveDefaultBarrierCountForTests, Is.EqualTo(0));
+
+            yield return new WaitForSeconds(ExamGameController.DefaultSealFallbackDelaySeconds + 0.2f);
+
+            Assert.That(controller.ActiveDefaultBarrierCountForTests, Is.EqualTo(1));
+            var barrierColor = controller.LastDefaultBarrierColorForTests;
+            Assert.That(barrierColor.r, Is.EqualTo(1f).Within(0.01f));
+            Assert.That(barrierColor.g, Is.EqualTo(0.31f).Within(0.01f));
+            Assert.That(barrierColor.b, Is.EqualTo(0.18f).Within(0.01f));
+            Assert.That(GameObject.Find("Default Barrier " + controller.GetActiveSealSnapshots()[0].sealId), Is.Not.Null);
         }
 
         [UnityTest]
@@ -217,7 +299,7 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
-        public IEnumerator RecognizedBaseRetryNearExistingSealCreatesNewSeal()
+        public IEnumerator ActiveSealWorldInputRejectsNonCustomFollowupCandidates()
         {
             SceneManager.LoadScene("MagicExamHall");
             yield return null;
@@ -234,10 +316,11 @@ namespace MagicExamHall.Tests
             var retryResult = controller.CastRawBaseForTests(retryStrokes, Vector2.zero);
             yield return null;
 
-            Assert.That(retryResult.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
-            Assert.That(retryResult.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
-            Assert.That(controller.ActiveSealCount, Is.EqualTo(2));
+            Assert.That(retryResult.spell.status, Is.EqualTo(RecognitionStatus.Invalid));
+            Assert.That(retryResult.spell.recognizedFamily, Is.Null);
+            Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
             Assert.That(controller.LastOverlayStack, Is.Empty);
+            Assert.That(controller.LastMagicNoteText, Does.Contain("커스텀 도형"));
         }
 
         [UnityTest]
@@ -257,7 +340,7 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.VoidCut), Is.True);
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.MartialAxis), Is.True);
-            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(1));
+            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(0));
         }
 
         [UnityTest]
@@ -276,6 +359,14 @@ namespace MagicExamHall.Tests
             controller.OpenCustomShapePenPopupForTests();
             yield return null;
             Assert.That(controller.IsCustomPenPopupVisibleForTests, Is.True);
+            var penPopup = GameObject.Find("Custom Shape Pen Popup")?.GetComponent<RectTransform>();
+            Assert.That(penPopup, Is.Not.Null);
+            var penStart = penPopup.anchoredPosition;
+            yield return new WaitForSecondsRealtime(0.45f);
+
+            Assert.That(Mathf.Abs(penPopup.anchoredPosition.x - penStart.x), Is.LessThan(0.75f));
+            Assert.That(Mathf.Abs(penPopup.anchoredPosition.y - penStart.y), Is.InRange(0.35f, 7f));
+            Assert.That(Quaternion.Angle(penPopup.localRotation, Quaternion.identity), Is.LessThan(0.1f));
 
             controller.OpenCustomShapePageForTests();
             yield return null;
@@ -333,8 +424,11 @@ namespace MagicExamHall.Tests
             Assert.That(capturePanelRect.anchoredPosition.y, Is.LessThanOrEqualTo(-70f));
             var shapeSection = GameObject.Find("Custom Shape Section")?.GetComponent<RectTransform>();
             var mappingSection = GameObject.Find("Custom Shape Family Carousel")?.GetComponent<RectTransform>();
+            var eventLabel = GameObject.Find("Custom Shape Event Label")?.GetComponent<Text>();
             Assert.That(shapeSection, Is.Not.Null);
             Assert.That(mappingSection, Is.Not.Null);
+            Assert.That(eventLabel, Is.Not.Null);
+            Assert.That(eventLabel.text, Does.Contain("이벤트"));
             var shapeImage = shapeSection.GetComponent<Image>();
             var mappingImage = mappingSection.GetComponent<Image>();
             Assert.That(Mathf.Abs(shapeImage.color.r - mappingImage.color.r) + Mathf.Abs(shapeImage.color.g - mappingImage.color.g), Is.GreaterThan(0.04f));
@@ -470,7 +564,7 @@ namespace MagicExamHall.Tests
             ClearCustomSlots(controller);
             var windGoal = new Vector2(5.5f, 2.6f);
             var gold = Samples(SpellFamily.Wind);
-            Assert.That(controller.SaveCustomShapeSlotForTests(10, "목표 바람", "목표|바람|line", SpellFamily.Wind, gold, out var message), Is.True, message);
+            Assert.That(controller.SaveCustomShapeSlotForTests(10, "목표 바람", "목표|바람|rect", "rect", SpellFamily.Wind, gold, out var message), Is.True, message);
 
             var worldStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, 1.6f, 0.03f), windGoal, 0.8f);
             var result = controller.CastRawBaseForTests(worldStrokes, windGoal);
@@ -479,8 +573,77 @@ namespace MagicExamHall.Tests
             Assert.That(result.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.spell.isCustomShape, Is.True);
             Assert.That(result.spell.customShapeLabel, Is.EqualTo("목표 바람"));
+            Assert.That(result.spell.customShapeToken, Is.EqualTo("rect"));
+            Assert.That(result.spell.customEventKind, Is.EqualTo(CustomShapeEventKind.WallEntity.ToString()));
+            Assert.That(controller.LastCustomShapeEventKindForTests, Is.EqualTo(CustomShapeEventKind.WallEntity.ToString()));
+            Assert.That(controller.CustomShapeEventObjectCountForTests, Is.GreaterThan(0));
             Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
             Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("커스텀 이벤트"));
+
+            ClearCustomSlots(controller);
+            DeleteIfExists(profilePath);
+        }
+
+        [UnityTest]
+        public IEnumerator FloorTwoReferenceShelfImportsCustomBaseSlots()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+            var profilePath = TempCustomShapeProfilePath();
+            controller.UseCustomShapeStoreForTests(profilePath);
+            ClearCustomSlots(controller);
+
+            controller.LoadFloorForTests(1);
+            yield return null;
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
+            Assert.That(controller.HudCopyForTests, Does.Contain("좌측 책장"));
+            Assert.That(controller.CustomReferenceCountForTests, Is.EqualTo(5));
+
+            controller.MovePlayerForTests(new Vector2(-7.25f, 1.1f));
+            yield return null;
+            Assert.That(controller.IsCustomReferenceBubbleVisibleForTests, Is.True);
+            AssertVisibleKoreanTextLooksUsable("도형 레퍼런스");
+
+            controller.OpenCustomReferencePanelForTests();
+            yield return null;
+            Assert.That(controller.IsCustomReferencePanelOpenForTests, Is.True);
+
+            var windImportButton = GameObject.Find("Import Custom Reference Wind")?.GetComponent<Button>();
+            Assert.That(windImportButton, Is.Not.Null);
+            windImportButton.onClick.Invoke();
+            yield return null;
+            Assert.That(controller.IsCustomShapeSlotOccupiedForTests(0), Is.True);
+            Assert.That(controller.CustomShapeSlotMappedFamilyForTests(0), Is.EqualTo(SpellFamily.Wind));
+
+            var families = new[] { SpellFamily.Earth, SpellFamily.Fire, SpellFamily.Water, SpellFamily.Life };
+            foreach (var family in families)
+            {
+                Assert.That(controller.ImportCustomReferenceForTests(family, out var slotIndex, out var message), Is.True, message);
+                Assert.That(slotIndex, Is.InRange(0, controller.CustomShapeSlotCountForTests - 1));
+                Assert.That(controller.IsCustomShapeSlotOccupiedForTests(slotIndex), Is.True);
+                Assert.That(controller.CustomShapeSlotMappedFamilyForTests(slotIndex), Is.EqualTo(family));
+            }
+
+            Assert.That(controller.CustomReferenceStatusForTests, Does.Contain("슬롯"));
+
+            var windGoal = new Vector2(0f, 3.05f);
+            var customWind = controller.CastRawBaseForTests(controller.CustomReferenceStrokesForTests(SpellFamily.Wind, windGoal), windGoal);
+            yield return null;
+            Assert.That(customWind.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(customWind.spell.isCustomShape, Is.True);
+            Assert.That(customWind.spell.customShapeLabel, Is.EqualTo("질풍 화살"));
+            Assert.That(customWind.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-5.4f, 2.55f));
+            yield return null;
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("커스텀 도형으로만"));
 
             ClearCustomSlots(controller);
             DeleteIfExists(profilePath);
@@ -496,15 +659,15 @@ namespace MagicExamHall.Tests
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
 
-            controller.LoadFloorForTests(1);
+            controller.LoadFloorForTests(3);
             controller.CastSyntheticBaseForTests(SpellFamily.Fire, Vector2.zero);
             var offTargetOverlay = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, Vector2.zero);
             yield return null;
             Assert.That(offTargetOverlay.success, Is.True);
             Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
 
-            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-0.65f, 3.0f));
-            var onTargetOverlay = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, new Vector2(-0.65f, 3.0f));
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-1.7f, 2.9f));
+            var onTargetOverlay = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, new Vector2(-1.7f, 2.9f));
             yield return null;
             Assert.That(onTargetOverlay.success, Is.True);
             Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
@@ -524,7 +687,7 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
-        public IEnumerator DetachedOverlayShowsSealProximityHint()
+        public IEnumerator WorldDrawnOverlayCandidateAfterSealIsExcluded()
         {
             SceneManager.LoadScene("MagicExamHall");
             yield return null;
@@ -534,15 +697,16 @@ namespace MagicExamHall.Tests
             Assert.That(controller, Is.Not.Null);
 
             controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
-            var result = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, new Vector2(4.8f, 0f));
+            var overlayStrokes = OverlayRecognizer.CreateCanonicalSamples(OverlayOperator.IceBar, new Vector2(4.8f, 0f), 0.48f, 0.03f);
+            var result = controller.CastRawBaseForTests(overlayStrokes, new Vector2(4.8f, 0f));
             yield return null;
 
             Assert.That(result, Is.Not.Null);
-            Assert.That(result.success, Is.False);
-            Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.IceBar));
-            Assert.That(controller.LastMagicNoteText, Does.Contain("seal에서 너무 멀"));
-            Assert.That(controller.LastMagicNoteText, Does.Contain("빛나는 원"));
-            Assert.That(controller.LastHintText, Does.Contain("빛나는 원"));
+            Assert.That(result.spell.success, Is.False);
+            Assert.That(result.spell.status, Is.EqualTo(RecognitionStatus.Invalid));
+            Assert.That(result.spell.recognizedFamily, Is.Null);
+            Assert.That(controller.LastOverlayStack, Is.Empty);
+            Assert.That(controller.LastMagicNoteText, Does.Contain("커스텀 도형"));
         }
 
         [UnityTest]

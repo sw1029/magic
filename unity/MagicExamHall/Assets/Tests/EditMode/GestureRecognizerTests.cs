@@ -101,6 +101,25 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void SlightlyGappedWaterCircleCountsAsClosed()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeEllipseArc(25f, 360f, 64, new Vector2(220f, 220f), 170f, 150f, 0f)
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Water);
+
+            Assert.That(result.quality.closure, Is.LessThan(0.62f).And.GreaterThanOrEqualTo(0.50f));
+            Assert.That(
+                result.status,
+                Is.EqualTo(RecognitionStatus.Recognized),
+                $"closure={result.quality.closure:0.000}, confidence={result.confidence:0.000}, reason={result.feedbackReason}");
+            Assert.That(result.recognizedFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(result.success, Is.True);
+        }
+
+        [Test]
         public void TwoLineWindIsIncomplete()
         {
             var strokes = new List<List<StrokeSample>>
@@ -580,6 +599,19 @@ namespace MagicExamHall.Tests
                 {
                     var t = index / 11f;
                     return new StrokeSample(new Vector2(Mathf.Lerp(x1, x2, t), Mathf.Lerp(y1, y2, t)), start + index * 0.02f);
+                })
+                .ToList();
+        }
+
+        private static List<StrokeSample> MakeEllipseArc(float startDegrees, float endDegrees, int count, Vector2 center, float radiusX, float radiusY, float startTime)
+        {
+            return Enumerable.Range(0, count)
+                .Select(index =>
+                {
+                    var t = index / Mathf.Max(count - 1f, 1f);
+                    var angle = Mathf.Lerp(startDegrees, endDegrees, t) * Mathf.Deg2Rad;
+                    var point = center + new Vector2(Mathf.Cos(angle) * radiusX, Mathf.Sin(angle) * radiusY);
+                    return new StrokeSample(point, startTime + index * 0.025f);
                 })
                 .ToList();
         }

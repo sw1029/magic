@@ -33,6 +33,7 @@ namespace MagicExamHall
         private readonly List<SpellFamily> familyReelFamilies = new();
         private RectTransform familyReelViewport = null!;
         private RectTransform familyReelContent = null!;
+        private Text shapeEventLabel = null!;
         private Text editorStatus = null!;
         private CustomShapeCapturePad capturePad = null!;
         private Image captureTemplatePreview = null!;
@@ -64,6 +65,12 @@ namespace MagicExamHall
         private const float SlotPreviewStrokeWidth = 2f;
         private const float SidePreviewStrokeWidth = 2f;
         private const int SavedSlotPreviewStrokeWidth = 2;
+        private const float PenPopupHeightOffset = 74f;
+        private const float PenPopupFloatAmplitude = 5f;
+        private const float PenPopupFloatSpeed = 1.35f;
+        private const float PenPopupSpring = 24f;
+        private const float PenPopupDamping = 8.5f;
+        private const float PenPopupMaxVelocity = 260f;
 
         private enum BubbleMode
         {
@@ -174,7 +181,20 @@ namespace MagicExamHall
             IReadOnlyList<IReadOnlyList<StrokeSample>> goldStrokes,
             out string message)
         {
-            var saved = store.TrySaveSlot(slotIndex, label, regexPattern, mappedFamily, goldStrokes, out message);
+            var shapeToken = CustomShapeProfileStore.HelperTokens.FirstOrDefault(token => regexPattern?.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) ?? "line";
+            return SaveSlotForTests(slotIndex, label, regexPattern, shapeToken, mappedFamily, goldStrokes, out message);
+        }
+
+        public bool SaveSlotForTests(
+            int slotIndex,
+            string label,
+            string regexPattern,
+            string shapeToken,
+            SpellFamily mappedFamily,
+            IReadOnlyList<IReadOnlyList<StrokeSample>> goldStrokes,
+            out string message)
+        {
+            var saved = store.TrySaveSlot(slotIndex, label, regexPattern, shapeToken, new[] { shapeToken }, mappedFamily, goldStrokes, out message);
             if (saved)
             {
                 CloseEditor();
@@ -193,6 +213,11 @@ namespace MagicExamHall
             }
 
             return deleted;
+        }
+
+        public void RefreshFromStoreForExternalChange()
+        {
+            RefreshSlots();
         }
 
         private void TogglePenPopup()
@@ -230,9 +255,14 @@ namespace MagicExamHall
                 return;
             }
 
-            penFloatPhase += Mathf.Max(deltaTime, 0.016f) * 2.4f;
+            var dt = Mathf.Clamp(deltaTime, 0f, 0.05f);
+            if (!snap)
+            {
+                penFloatPhase += dt * PenPopupFloatSpeed;
+            }
+
             var screen = RectTransformUtility.WorldToScreenPoint(mainCamera, player.position + new Vector3(0f, 1.15f, 0f));
-            screen += new Vector2(Mathf.Sin(penFloatPhase * 0.7f) * 12f, 74f + Mathf.Sin(penFloatPhase) * 8f);
+            screen += new Vector2(0f, PenPopupHeightOffset + Mathf.Sin(penFloatPhase) * PenPopupFloatAmplitude);
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
                     canvas.transform as RectTransform,
                     screen,
@@ -246,14 +276,16 @@ namespace MagicExamHall
             {
                 penPopup.anchoredPosition = target;
                 penPopupVelocity = Vector2.zero;
+                penPopup.localRotation = Quaternion.identity;
                 return;
             }
 
             var current = penPopup.anchoredPosition;
-            var spring = (target - current) * 18f;
-            penPopupVelocity = Vector2.Lerp(penPopupVelocity + spring * deltaTime, Vector2.zero, deltaTime * 3.2f);
-            penPopup.anchoredPosition = current + penPopupVelocity * deltaTime;
-            penPopup.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(penFloatPhase * 0.85f) * 3.5f);
+            var acceleration = (target - current) * PenPopupSpring - penPopupVelocity * PenPopupDamping;
+            penPopupVelocity += acceleration * dt;
+            penPopupVelocity = Vector2.ClampMagnitude(penPopupVelocity, PenPopupMaxVelocity);
+            penPopup.anchoredPosition = current + penPopupVelocity * dt;
+            penPopup.localRotation = Quaternion.identity;
         }
 
         private void DrawPenIcon(Transform root)
@@ -486,7 +518,10 @@ namespace MagicExamHall
             shapeButtonIcons.Clear();
             var section = CreatePanel("Custom Shape Section", parent, new Vector2(18f, -122f), new Vector2(294f, 206f), UiAnchor.TopLeft, new Color(0.043f, 0.058f, 0.086f, 0.985f));
             AddSimpleBorder(section, new Color(0.18f, 0.27f, 0.39f, 0.86f), 1.5f);
-            CreateText("Custom Shape Palette Label", section, "도형", 15, FontStyle.Bold, new Vector2(10f, -8f), new Vector2(250f, 24f), UiAnchor.TopLeft);
+            CreateText("Custom Shape Palette Label", section, "도형", 15, FontStyle.Bold, new Vector2(10f, -8f), new Vector2(92f, 24f), UiAnchor.TopLeft);
+            shapeEventLabel = CreateText("Custom Shape Event Label", section, "", 12, FontStyle.Bold, new Vector2(-12f, -9f), new Vector2(184f, 24f), UiAnchor.TopRight);
+            shapeEventLabel.alignment = TextAnchor.MiddleRight;
+            shapeEventLabel.color = new Color(0.75f, 0.92f, 0.98f, 0.92f);
             var viewport = CreatePanel("Custom Shape Palette Scroll View", section, new Vector2(10f, -42f), new Vector2(268f, 150f), UiAnchor.TopLeft, new Color(0.030f, 0.041f, 0.062f, 0.98f));
             var mask = viewport.gameObject.AddComponent<Mask>();
             mask.showMaskGraphic = true;
@@ -555,6 +590,11 @@ namespace MagicExamHall
                 shapeButtonIcons[index].color = selected
                     ? Color.white
                     : new Color(1f, 1f, 1f, 0.66f);
+            }
+
+            if (shapeEventLabel != null)
+            {
+                shapeEventLabel.text = CustomShapeEventCatalog.UiSummary(editorShapeToken);
             }
         }
 
@@ -649,7 +689,7 @@ namespace MagicExamHall
 
             var strokes = capturePad.CaptureStrokes();
             var regexPattern = CustomShapeProfileStore.BuildGeneratedRegex(labelInput.text, editorShapeToken);
-            if (store.TrySaveSlot(selectedSlotIndex, labelInput.text, regexPattern, editorShapeToken, editorFamily, strokes, out var message))
+            if (store.TrySaveSlot(selectedSlotIndex, labelInput.text, regexPattern, editorShapeToken, capturePad.CaptureShapeTokens(), editorFamily, strokes, out var message))
             {
                 CloseEditor();
                 RefreshSlots();
@@ -1577,6 +1617,15 @@ namespace MagicExamHall
         public IReadOnlyList<IReadOnlyList<StrokeSample>> CaptureStrokes()
         {
             return CapturePlacedShapeStrokes();
+        }
+
+        public IReadOnlyList<string> CaptureShapeTokens()
+        {
+            return placedShapes
+                .Where(shape => shape.IsLargeEnough)
+                .Select(shape => shape.token)
+                .DefaultIfEmpty(templateToken)
+                .ToList();
         }
 
         public void SetTemplate(string shapeToken)

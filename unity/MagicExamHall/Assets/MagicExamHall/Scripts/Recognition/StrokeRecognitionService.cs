@@ -15,6 +15,8 @@ namespace MagicExamHall
     public sealed class RecognitionContext
     {
         public IReadOnlyList<CompiledSeal> activeSeals = Array.Empty<CompiledSeal>();
+        public BaseRecognitionIntent baseIntent;
+        public bool customShapesOnlyWhenSealActive;
         public float now;
     }
 
@@ -40,6 +42,8 @@ namespace MagicExamHall
 
     public sealed class HeuristicStrokeRecognitionService : IStrokeRecognitionService
     {
+        private const int StrongIntentColdStartCaptureLimit = 1;
+
         public HeuristicStrokeRecognitionService(
             TutorialPersonalizationStore personalizationStore = null,
             CustomShapeProfileStore customShapeStore = null)
@@ -63,13 +67,33 @@ namespace MagicExamHall
             var center = session.GetWorldCenter();
             var strokeCount = strokes.Count;
             var seals = context.activeSeals ?? Array.Empty<CompiledSeal>();
+            var hasActiveSeal = seals.Any(seal => context.now <= seal.expiresAt);
+            if (context.customShapesOnlyWhenSealActive && hasActiveSeal)
+            {
+                var customOnlyBase = RecognizeBaseCandidate(strokes, context.baseIntent);
+                if (!customOnlyBase.spell.isCustomShape)
+                {
+                    RejectNonCustomPostSealInput(customOnlyBase);
+                }
+
+                return new StrokeRecognitionResult
+                {
+                    kind = StrokeRecognitionKind.Base,
+                    session = session,
+                    baseResult = customOnlyBase,
+                    center = center,
+                    strokeCount = strokeCount,
+                    personalization = customOnlyBase.spell.personalization
+                };
+            }
+
             var targetSeal = SpellCastingService.FindAttachableSeal(seals, center, context.now);
 
             if (targetSeal != null)
             {
                 var overlayResult = OverlayRecognizer.Recognize(strokes, targetSeal);
                 PersonalizationStore.ApplyOverlayPersonalization(overlayResult, strokes);
-                var baseResult = RecognizeBaseCandidate(strokes);
+                var baseResult = RecognizeBaseCandidate(strokes, context.baseIntent);
                 if (baseResult.spell.status == RecognitionStatus.Recognized &&
                     baseResult.spell.recognizedFamily.HasValue &&
                     !SpellCastingService.ShouldPreferOverlayNearSeal(overlayResult))
@@ -97,7 +121,7 @@ namespace MagicExamHall
                 };
             }
 
-            var recognizedBase = RecognizeBaseCandidate(strokes);
+            var recognizedBase = RecognizeBaseCandidate(strokes, context.baseIntent);
             if (recognizedBase.spell.status == RecognitionStatus.Recognized && recognizedBase.spell.recognizedFamily.HasValue)
             {
                 return new StrokeRecognitionResult
@@ -138,12 +162,49 @@ namespace MagicExamHall
             };
         }
 
-        private BaseRecognitionResult RecognizeBaseCandidate(List<List<StrokeSample>> strokes)
+        private BaseRecognitionResult RecognizeBaseCandidate(
+            List<List<StrokeSample>> strokes,
+            BaseRecognitionIntent intent)
         {
-            var baseResult = SpellRuntime.RecognizeBase(strokes);
+            var baseResult = SpellRuntime.RecognizeBase(strokes, PrepareBaseIntent(intent));
             PersonalizationStore.ApplyBasePersonalization(baseResult.spell, strokes);
             CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, CustomShapeStore);
             return baseResult;
+        }
+
+        private BaseRecognitionIntent PrepareBaseIntent(BaseRecognitionIntent intent)
+        {
+            if (intent == null || !intent.IsActive)
+            {
+                return intent;
+            }
+
+            var targetCaptureCount = PersonalizationStore.CountBaseCaptures(intent.family);
+            return new BaseRecognitionIntent
+            {
+                family = intent.family,
+                goalId = intent.goalId,
+                source = intent.source,
+                distance = intent.distance,
+                radius = intent.radius,
+                strength = intent.strength,
+                tutorialCaptureCount = targetCaptureCount,
+                strongConsiderationEnabled = targetCaptureCount < StrongIntentColdStartCaptureLimit
+            };
+        }
+
+        private static void RejectNonCustomPostSealInput(BaseRecognitionResult baseResult)
+        {
+            if (baseResult?.spell == null)
+            {
+                return;
+            }
+
+            baseResult.spell.status = RecognitionStatus.Invalid;
+            baseResult.spell.recognizedFamily = null;
+            baseResult.spell.success = false;
+            baseResult.spell.feedbackReason = "활성 seal 이후의 추가 입력은 저장된 커스텀 도형만 사용합니다.";
+            baseResult.spell.nextHint = "커스텀 도형 책에 도형을 저장한 뒤, seal이 떠 있는 동안 그 도형을 그려 보세요.";
         }
 
         public void RecordAcceptedResult(StrokeRecognitionResult result, float now)

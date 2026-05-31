@@ -22,11 +22,37 @@ namespace MagicExamHall
         public string worldEffect = "";
         public string customShapeId = "";
         public string customShapeLabel = "";
+        public string customShapeToken = "";
         public string mappedFamily = "";
+        public string customEventId = "";
+        public string customEventLabel = "";
+        public string customEventKind = "";
+        public string customEventRole = "";
+        public bool customEventUsesDirection;
+        public bool customEventOperatorOnly;
+        public bool customEventBlocks;
+        public bool customEventBlocked;
+        public string customEventBlockedBy = "";
+        public float customEventOriginX;
+        public float customEventOriginY;
+        public float customEventDirectionX;
+        public float customEventDirectionY;
         public string status = "";
         public float confidence;
         public float customScore;
         public float defaultSimilarityScore;
+        public string intentFamily = "";
+        public string intentGoalId = "";
+        public string intentSource = "";
+        public float intentStrength;
+        public float intentSimilarityScore;
+        public bool intentWeakConsiderationApplied;
+        public int intentTutorialCaptureCount;
+        public bool intentStrongConsiderationEnabled;
+        public string preIntentFamily = "";
+        public float preIntentConfidence;
+        public bool intentStrongConsiderationApplied;
+        public float intentScoreLift;
         public float closure;
         public float smoothness;
         public float tempo;
@@ -95,11 +121,37 @@ namespace MagicExamHall
                 Csv(log.worldEffect),
                 Csv(log.customShapeId),
                 Csv(log.customShapeLabel),
+                Csv(log.customShapeToken),
                 Csv(log.mappedFamily),
+                Csv(log.customEventId),
+                Csv(log.customEventLabel),
+                Csv(log.customEventKind),
+                Csv(log.customEventRole),
+                Bool(log.customEventUsesDirection),
+                Bool(log.customEventOperatorOnly),
+                Bool(log.customEventBlocks),
+                Bool(log.customEventBlocked),
+                Csv(log.customEventBlockedBy),
+                Float(log.customEventOriginX),
+                Float(log.customEventOriginY),
+                Float(log.customEventDirectionX),
+                Float(log.customEventDirectionY),
                 Csv(log.status),
                 Float(log.confidence),
                 Float(log.customScore),
                 Float(log.defaultSimilarityScore),
+                Csv(log.intentFamily),
+                Csv(log.intentGoalId),
+                Csv(log.intentSource),
+                Float(log.intentStrength),
+                Float(log.intentSimilarityScore),
+                Bool(log.intentWeakConsiderationApplied),
+                log.intentTutorialCaptureCount.ToString(CultureInfo.InvariantCulture),
+                Bool(log.intentStrongConsiderationEnabled),
+                Csv(log.preIntentFamily),
+                Float(log.preIntentConfidence),
+                Bool(log.intentStrongConsiderationApplied),
+                Float(log.intentScoreLift),
                 Float(log.closure),
                 Float(log.smoothness),
                 Float(log.tempo),
@@ -138,7 +190,7 @@ namespace MagicExamHall
             {
                 File.WriteAllText(
                     attemptsCsvPath,
-                    "sessionId,trialId,targetFamily,recognizedFamily,phase,baseFamily,overlayStack,sealId,floorId,targetObject,worldEffect,customShapeId,customShapeLabel,mappedFamily,status,confidence,customScore,defaultSimilarityScore,closure,smoothness,tempo,stability,rotationBias,worldX,worldY,bufferStrokeCount,attemptIndex,elapsedMs,feedbackViewed,success,hintShown,assistLevel,assisted" + Environment.NewLine,
+                    "sessionId,trialId,targetFamily,recognizedFamily,phase,baseFamily,overlayStack,sealId,floorId,targetObject,worldEffect,customShapeId,customShapeLabel,customShapeToken,mappedFamily,customEventId,customEventLabel,customEventKind,customEventRole,customEventUsesDirection,customEventOperatorOnly,customEventBlocks,customEventBlocked,customEventBlockedBy,customEventOriginX,customEventOriginY,customEventDirectionX,customEventDirectionY,status,confidence,customScore,defaultSimilarityScore,intentFamily,intentGoalId,intentSource,intentStrength,intentSimilarityScore,intentWeakConsiderationApplied,intentTutorialCaptureCount,intentStrongConsiderationEnabled,preIntentFamily,preIntentConfidence,intentStrongConsiderationApplied,intentScoreLift,closure,smoothness,tempo,stability,rotationBias,worldX,worldY,bufferStrokeCount,attemptIndex,elapsedMs,feedbackViewed,success,hintShown,assistLevel,assisted" + Environment.NewLine,
                     Encoding.UTF8);
             }
         }

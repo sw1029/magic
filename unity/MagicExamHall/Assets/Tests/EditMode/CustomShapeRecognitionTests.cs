@@ -11,6 +11,52 @@ namespace MagicExamHall.Tests
     public sealed class CustomShapeRecognitionTests
     {
         [Test]
+        public void DefaultShapeTokensHaveEventDefinitions()
+        {
+            foreach (var token in CustomShapeProfileStore.HelperTokens)
+            {
+                var definition = CustomShapeEventCatalog.ForToken(token);
+
+                Assert.That(definition.token, Is.EqualTo(token));
+                Assert.That(definition.eventKind, Is.Not.EqualTo(CustomShapeEventKind.None));
+                Assert.That(definition.eventId, Is.Not.Empty);
+                Assert.That(definition.uiSummary, Does.Contain(":"));
+            }
+
+            Assert.That(CustomShapeEventCatalog.ForToken("arrow").role, Is.EqualTo(CustomShapeEventRole.Operator));
+            Assert.That(CustomShapeEventCatalog.ForToken("cross").role, Is.EqualTo(CustomShapeEventRole.Operator));
+        }
+
+        [Test]
+        public void ArrowOperatorOnlyUsesEndpointDirectionAsAttributeLaser()
+        {
+            var strokes = LineStrokes(Vector2.zero, new Vector2(2f, 0f));
+
+            var payload = CustomShapeEventCatalog.BuildPayload("arrow", strokes);
+
+            Assert.That(payload.operatorOnly, Is.True);
+            Assert.That(payload.eventKind, Is.EqualTo(CustomShapeEventKind.AttributeLaser));
+            Assert.That(payload.usesDirection, Is.True);
+            Assert.That(payload.emitsFromEndPoint, Is.True);
+            Assert.That(payload.origin.x, Is.EqualTo(2f).Within(0.001f));
+            Assert.That(payload.direction.x, Is.GreaterThan(0.99f));
+            Assert.That(Mathf.Abs(payload.direction.y), Is.LessThan(0.01f));
+        }
+
+        [Test]
+        public void CrossOperatorBlocksOverlappedTargetEvent()
+        {
+            var cross = LineStrokes(new Vector2(-1f, -1f), new Vector2(1f, 1f));
+            var target = LineStrokes(new Vector2(-0.5f, 0f), new Vector2(0.5f, 0f));
+
+            var payload = CustomShapeEventCatalog.ComposeWithOperator("cross", "star", cross, target, overlaps: true);
+
+            Assert.That(payload.eventKind, Is.EqualTo(CustomShapeEventKind.EventBlock));
+            Assert.That(payload.eventBlocked, Is.True);
+            Assert.That(payload.blockedByToken, Is.EqualTo("cross"));
+        }
+
+        [Test]
         public void InvalidRegexIsRejected()
         {
             var store = TempStore(out var path);
@@ -114,6 +160,57 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void AcceptedCustomCandidateCarriesShapeEventMetadata()
+        {
+            var store = TempStore(out var path);
+            try
+            {
+                var strokes = Samples(SpellFamily.Wind);
+                var baseResult = SpellRuntime.RecognizeBase(strokes);
+                var mappedFamily = baseResult.spell.recognizedFamily ?? baseResult.spell.targetFamily;
+                Assert.That(store.TrySaveSlot(0, "stun hex", "stun|hexagon", "hexagon", mappedFamily, strokes, out _), Is.True);
+
+                var applied = CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, store);
+
+                Assert.That(applied, Is.True);
+                Assert.That(baseResult.spell.isCustomShape, Is.True);
+                Assert.That(baseResult.spell.customShapeToken, Is.EqualTo("hexagon"));
+                Assert.That(baseResult.spell.customEventKind, Is.EqualTo(CustomShapeEventKind.Stun.ToString()));
+                Assert.That(baseResult.spell.customEventLabel, Is.EqualTo("스턴"));
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        }
+
+        [Test]
+        public void ArrowAndTargetTokenSequenceEmitsTargetEventFromArrowEndpoint()
+        {
+            var store = TempStore(out var path);
+            try
+            {
+                var strokes = LineStrokes(Vector2.zero, new Vector2(2f, 0f));
+                var baseResult = SpellRuntime.RecognizeBase(strokes);
+                var mappedFamily = baseResult.spell.recognizedFamily ?? baseResult.spell.targetFamily;
+                Assert.That(store.TrySaveSlot(0, "arrow wall", "arrow|rect|wall", "arrow", new[] { "arrow", "rect" }, mappedFamily, strokes, out _), Is.True);
+
+                var applied = CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, store);
+
+                Assert.That(applied, Is.True);
+                Assert.That(baseResult.spell.customShapeToken, Is.EqualTo("arrow"));
+                Assert.That(baseResult.spell.customEventKind, Is.EqualTo(CustomShapeEventKind.DirectionalProjectile.ToString()));
+                Assert.That(baseResult.spell.customEventUsesDirection, Is.True);
+                Assert.That(baseResult.spell.customEventOrigin.x, Is.EqualTo(2f).Within(0.001f));
+                Assert.That(baseResult.spell.customEventDirection.x, Is.GreaterThan(0.99f));
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        }
+
+        [Test]
         public void ShadowGateHoldsWhenMappedFamilyConflictsWithStrongDefault()
         {
             var store = TempStore(out var path);
@@ -181,6 +278,7 @@ namespace MagicExamHall.Tests
                 Assert.That(slot.label, Is.EqualTo("branch mark"));
                 Assert.That(slot.regexPattern, Is.EqualTo("branch|freeform"));
                 Assert.That(slot.mappedFamily, Is.EqualTo(SpellFamily.Life));
+                Assert.That(slot.eventShapeTokens, Does.Contain("line"));
                 Assert.That(slot.goldCaptures.Count, Is.EqualTo(1));
                 Assert.That(slot.autoCaptures.Count, Is.EqualTo(1));
                 Assert.That(slot.goldCaptures[0].ToStrokeSamples().Count, Is.GreaterThan(0));
@@ -202,6 +300,18 @@ namespace MagicExamHall.Tests
             return GestureRecognizer.CreateCanonicalSamples(family, 1.6f, 0.03f)
                 .Select(stroke => (IReadOnlyList<StrokeSample>)stroke)
                 .ToList();
+        }
+
+        private static IReadOnlyList<IReadOnlyList<StrokeSample>> LineStrokes(Vector2 start, Vector2 end)
+        {
+            return new List<IReadOnlyList<StrokeSample>>
+            {
+                new List<StrokeSample>
+                {
+                    new(start, 0f),
+                    new(end, 0.1f)
+                }
+            };
         }
 
         private static void DeleteIfExists(string path)

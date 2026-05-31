@@ -23,6 +23,21 @@ namespace MagicExamHall
     }
 
     [Serializable]
+    public sealed class BaseRecognitionIntent
+    {
+        public SpellFamily family;
+        public string goalId = "";
+        public string source = "";
+        public float distance;
+        public float radius;
+        public float strength;
+        public int tutorialCaptureCount;
+        public bool strongConsiderationEnabled = true;
+
+        public bool IsActive => radius > 0f && strength > 0f;
+    }
+
+    [Serializable]
     public struct StrokeSample
     {
         public Vector2 position;
@@ -64,9 +79,33 @@ namespace MagicExamHall
         public bool isCustomShape;
         public string customShapeId = "";
         public string customShapeLabel = "";
+        public string customShapeToken = "";
         public SpellFamily? mappedFamily;
         public float customScore;
         public float defaultSimilarityScore;
+        public string customEventId = "";
+        public string customEventLabel = "";
+        public string customEventKind = "";
+        public string customEventRole = "";
+        public bool customEventUsesDirection;
+        public bool customEventOperatorOnly;
+        public bool customEventBlocks;
+        public bool customEventBlocked;
+        public string customEventBlockedBy = "";
+        public Vector2 customEventOrigin;
+        public Vector2 customEventDirection = Vector2.right;
+        public Vector2 customEventStartPoint;
+        public Vector2 customEventEndPoint;
+        public SpellFamily? intentFamily;
+        public string intentGoalId = "";
+        public string intentSource = "";
+        public float intentStrength;
+        public float intentSimilarityScore;
+        public bool intentWeakConsiderationApplied;
+        public bool intentStrongConsiderationApplied;
+        public float intentScoreLift;
+        public SpellFamily? preIntentFamily;
+        public float preIntentConfidence;
         public TutorialPersonalizationSummary personalization = TutorialPersonalizationSummary.Empty;
 
         public string RecognizedFamilyText => recognizedFamily.HasValue ? SpellLabels.English(recognizedFamily.Value) : "none";
@@ -84,9 +123,31 @@ namespace MagicExamHall
     public static class GestureRecognizer
     {
         private const int CloudPointCount = 64;
+        private const float WeakIntentMinimumStrength = 0.05f;
+        private const float WeakIntentMaximumScoreLift = 0.045f;
+        private const float StrongIntentMinimumStrength = 0.25f;
+        private const float StrongIntentMinimumSimilarity = 0.50f;
+        private const float StrongIntentMaximumScoreLift = 0.16f;
+        private const float StrongIntentAcceptThreshold = 0.66f;
+        private const float StrongIntentHoldThreshold = 0.54f;
+        private const float DefaultClosureAcceptThreshold = 0.62f;
+        private const float WaterClosureAcceptThreshold = 0.50f;
+        private const float DefaultIntentClosureAcceptThreshold = 0.50f;
+        private const float WaterIntentClosureAcceptThreshold = 0.45f;
+        private const float DefaultClosureHintThreshold = 0.72f;
+        private const float WaterClosureHintThreshold = 0.58f;
+        private const float WaterClosureScoringFloor = 0.70f;
         private static readonly IReadOnlyList<SpellTemplate> Templates = BuildTemplates();
 
         public static SpellResult Recognize(IReadOnlyList<IReadOnlyList<StrokeSample>> rawStrokes, SpellFamily targetFamily)
+        {
+            return Recognize(rawStrokes, targetFamily, null);
+        }
+
+        public static SpellResult Recognize(
+            IReadOnlyList<IReadOnlyList<StrokeSample>> rawStrokes,
+            SpellFamily targetFamily,
+            BaseRecognitionIntent intent)
         {
             var drawable = rawStrokes
                 .Select(stroke => stroke.Where(point => IsFinite(point.position)).ToList())
@@ -113,35 +174,62 @@ namespace MagicExamHall
                 .OrderByDescending(candidate => candidate.score)
                 .ToList();
 
-            var top = scored[0];
-            var second = scored.Count > 1 ? scored[1] : top;
-            var margin = top.score - second.score;
+            var rawTop = scored[0];
+            var rawSecond = scored.Count > 1 ? scored[1] : rawTop;
+            var target = scored.First(candidate => candidate.template.family == targetFamily);
+            var intentSimilarity = intent != null && intent.IsActive
+                ? scored.First(candidate => candidate.template.family == intent.family).score
+                : target.score;
+            var weakLift = CalculateWeakIntentLift(targetFamily, intent);
+            (SpellTemplate template, float score, float distance) adjustedTarget = (target.template, Mathf.Clamp01(target.score + weakLift), target.distance);
+            var adjustedScored = scored
+                .Select(candidate => candidate.template.family == targetFamily ? adjustedTarget : candidate)
+                .OrderByDescending(candidate => candidate.score)
+                .ToList();
+            var top = adjustedScored[0];
+            var second = adjustedScored.Count > 1 ? adjustedScored[1] : top;
+            var bestCompetitor = adjustedScored.FirstOrDefault(candidate => candidate.template.family != targetFamily);
+            var targetMargin = bestCompetitor.template == null ? adjustedTarget.score : adjustedTarget.score - bestCompetitor.score;
             var parallelism = EstimateParallelism(drawable);
             var windSpacing = EstimateWindSpacingBalance(drawable);
-            var status = ResolveStatus(top, margin, quality, drawable.Count);
-            if (targetFamily == SpellFamily.Wind && drawable.Count != 3)
-            {
-                status = RecognitionStatus.Incomplete;
-            }
-            else if (targetFamily == SpellFamily.Wind && (parallelism < 0.62f || windSpacing < 0.45f))
-            {
-                status = RecognitionStatus.Incomplete;
-            }
-            else if (RequiresClosure(targetFamily) && quality.closure < 0.62f)
-            {
-                status = RecognitionStatus.Incomplete;
-            }
-            SpellFamily? recognized = status == RecognitionStatus.Recognized ? top.template.family : null;
+            var status = ResolveTargetStatus(targetFamily, adjustedTarget, targetMargin, quality, drawable.Count, parallelism, windSpacing);
+            SpellFamily? recognized = status == RecognitionStatus.Recognized ? targetFamily : null;
             var success = recognized.HasValue && recognized.Value == targetFamily;
+
+            if (TryBuildIntentResult(
+                    targetFamily,
+                    intent,
+                    rawTop,
+                    rawSecond,
+                    target,
+                    weakLift,
+                    status,
+                    quality,
+                    drawable.Count,
+                    parallelism,
+                    windSpacing,
+                    out var intentResult))
+            {
+                return intentResult;
+            }
 
             return new SpellResult
             {
                 status = status,
                 targetFamily = targetFamily,
                 recognizedFamily = recognized,
-                confidence = Mathf.Clamp01(top.score),
+                confidence = Mathf.Clamp01(adjustedTarget.score),
                 quality = quality,
                 success = success,
+                intentFamily = intent != null && intent.IsActive ? intent.family : null,
+                intentGoalId = intent?.goalId ?? "",
+                intentSource = intent?.source ?? "",
+                intentStrength = intent == null ? 0f : Mathf.Clamp01(intent.strength),
+                intentSimilarityScore = Mathf.Clamp01(intentSimilarity),
+                intentWeakConsiderationApplied = weakLift > 0f,
+                intentScoreLift = weakLift,
+                preIntentFamily = rawTop.template.family,
+                preIntentConfidence = Mathf.Clamp01(rawTop.score),
                 feedbackReason = BuildReason(targetFamily, top, second, status, quality, drawable.Count, parallelism, windSpacing),
                 nextHint = BuildHint(targetFamily, top, status, quality, drawable.Count, parallelism, windSpacing)
             };
@@ -168,28 +256,174 @@ namespace MagicExamHall
             return result;
         }
 
-        private static RecognitionStatus ResolveStatus(
+        private static bool TryBuildIntentResult(
+            SpellFamily targetFamily,
+            BaseRecognitionIntent intent,
             (SpellTemplate template, float score, float distance) top,
-            float margin,
+            (SpellTemplate template, float score, float distance) second,
+            (SpellTemplate template, float score, float distance) target,
+            float weakLift,
+            RecognitionStatus normalStatus,
             QualityVector quality,
-            int strokeCount)
+            int strokeCount,
+            float parallelism,
+            float windSpacing,
+            out SpellResult result)
         {
-            if (top.template.family == SpellFamily.Wind && strokeCount < 3 && top.score >= 0.42f)
+            result = null;
+            if (intent == null ||
+                !intent.IsActive ||
+                !intent.strongConsiderationEnabled ||
+                intent.family != targetFamily ||
+                intent.strength < StrongIntentMinimumStrength)
+            {
+                return false;
+            }
+
+            if (normalStatus == RecognitionStatus.Recognized)
+            {
+                return false;
+            }
+
+            if (target.score < StrongIntentMinimumSimilarity)
+            {
+                return false;
+            }
+
+            var lift = Mathf.Clamp01(intent.strength) * StrongIntentMaximumScoreLift;
+            var adjustedScore = Mathf.Clamp01(target.score + weakLift + lift);
+            if (adjustedScore < top.score - 0.10f && target.score < 0.58f)
+            {
+                return false;
+            }
+
+            (SpellTemplate template, float score, float distance) intentTop = (target.template, adjustedScore, target.distance);
+            var status = ResolveIntentStatus(targetFamily, adjustedScore, target.score, quality, strokeCount, parallelism, windSpacing);
+            SpellFamily? recognized = status == RecognitionStatus.Recognized ? targetFamily : null;
+            result = new SpellResult
+            {
+                status = status,
+                targetFamily = targetFamily,
+                recognizedFamily = recognized,
+                confidence = adjustedScore,
+                quality = quality,
+                success = recognized == targetFamily,
+                intentFamily = intent.family,
+                intentGoalId = intent.goalId ?? "",
+                intentSource = intent.source ?? "",
+                intentStrength = Mathf.Clamp01(intent.strength),
+                intentSimilarityScore = Mathf.Clamp01(target.score),
+                intentWeakConsiderationApplied = weakLift > 0f,
+                intentStrongConsiderationApplied = true,
+                intentScoreLift = weakLift + lift,
+                preIntentFamily = top.template.family,
+                preIntentConfidence = Mathf.Clamp01(top.score),
+                feedbackReason = BuildIntentReason(targetFamily, status, target.score, top.template.family),
+                nextHint = BuildHint(targetFamily, intentTop, status, quality, strokeCount, parallelism, windSpacing)
+            };
+            return true;
+        }
+
+        private static RecognitionStatus ResolveIntentStatus(
+            SpellFamily targetFamily,
+            float adjustedScore,
+            float rawSimilarity,
+            QualityVector quality,
+            int strokeCount,
+            float parallelism,
+            float windSpacing)
+        {
+            if (targetFamily == SpellFamily.Wind &&
+                (strokeCount != 3 || parallelism < 0.52f || windSpacing < 0.35f))
             {
                 return RecognitionStatus.Incomplete;
             }
 
-            if (RequiresClosure(top.template.family) && quality.closure < 0.62f && top.score >= 0.42f)
+            if (RequiresClosure(targetFamily) && quality.closure < IntentClosureAcceptThreshold(targetFamily))
             {
                 return RecognitionStatus.Incomplete;
             }
 
-            if (top.score >= 0.70f && margin >= 0.08f)
+            if (targetFamily == SpellFamily.Life && quality.closure > 0.78f)
+            {
+                return RecognitionStatus.Incomplete;
+            }
+
+            if (adjustedScore >= StrongIntentAcceptThreshold && rawSimilarity >= StrongIntentMinimumSimilarity)
             {
                 return RecognitionStatus.Recognized;
             }
 
-            if (top.score >= 0.54f)
+            if (adjustedScore >= StrongIntentHoldThreshold)
+            {
+                return RecognitionStatus.Ambiguous;
+            }
+
+            return RecognitionStatus.Invalid;
+        }
+
+        private static string BuildIntentReason(
+            SpellFamily targetFamily,
+            RecognitionStatus status,
+            float similarity,
+            SpellFamily originalTopFamily)
+        {
+            if (status == RecognitionStatus.Recognized)
+            {
+                return $"{SpellLabels.Korean(targetFamily)} 표식 근처 입력과 도형 유사도 {similarity:0.00}를 함께 반영했습니다.";
+            }
+
+            return $"{SpellLabels.Korean(targetFamily)} 표식 근처 입력으로 의도는 감지했지만 {SpellLabels.Korean(originalTopFamily)} 후보와 아직 가깝습니다.";
+        }
+
+        private static float CalculateWeakIntentLift(SpellFamily targetFamily, BaseRecognitionIntent intent)
+        {
+            if (intent == null ||
+                !intent.IsActive ||
+                intent.family != targetFamily ||
+                intent.strength < WeakIntentMinimumStrength)
+            {
+                return 0f;
+            }
+
+            return Mathf.Clamp01(intent.strength) * WeakIntentMaximumScoreLift;
+        }
+
+        private static RecognitionStatus ResolveTargetStatus(
+            SpellFamily targetFamily,
+            (SpellTemplate template, float score, float distance) target,
+            float margin,
+            QualityVector quality,
+            int strokeCount,
+            float parallelism,
+            float windSpacing)
+        {
+            if (targetFamily == SpellFamily.Wind && strokeCount != 3)
+            {
+                return RecognitionStatus.Incomplete;
+            }
+
+            if (targetFamily == SpellFamily.Wind && (parallelism < 0.62f || windSpacing < 0.45f) && target.score >= 0.42f)
+            {
+                return RecognitionStatus.Incomplete;
+            }
+
+            if (RequiresClosure(targetFamily) && quality.closure < ClosureAcceptThreshold(targetFamily) && target.score >= 0.42f)
+            {
+                return RecognitionStatus.Incomplete;
+            }
+
+            if (targetFamily == SpellFamily.Life && quality.closure > 0.78f && target.score >= 0.42f)
+            {
+                return RecognitionStatus.Incomplete;
+            }
+
+            if (target.score >= 0.70f && margin >= 0.04f)
+            {
+                return RecognitionStatus.Recognized;
+            }
+
+            if (target.score >= 0.54f)
             {
                 return RecognitionStatus.Ambiguous;
             }
@@ -230,7 +464,7 @@ namespace MagicExamHall
                     score = templateScore * 0.42f + quality.closure * 0.24f + corners * 0.21f + Closeness(fill, 0.5f, 0.18f) * 0.07f + strokeScore * 0.06f;
                     break;
                 case SpellFamily.Water:
-                    score = templateScore * 0.48f + quality.closure * 0.19f + circularity * 0.22f + quality.smoothness * 0.11f;
+                    score = templateScore * 0.48f + ClosureScoreFor(template.family, quality.closure) * 0.19f + circularity * 0.22f + quality.smoothness * 0.11f;
                     break;
                 case SpellFamily.Life:
                     score = templateScore * 0.36f + ExpectedEndpointScore(strokes) * 0.28f + openness * 0.18f + strokeScore * 0.10f + Closeness(fill, 0.16f, 0.20f) * 0.08f;
@@ -250,7 +484,7 @@ namespace MagicExamHall
             float parallelism,
             float windSpacing)
         {
-            if (RequiresClosure(target) && quality.closure < 0.62f)
+            if (RequiresClosure(target) && quality.closure < ClosureAcceptThreshold(target))
             {
                 return ClosureReasonFor(target);
             }
@@ -275,7 +509,7 @@ namespace MagicExamHall
                 return $"{SpellLabels.Korean(top.template.family)} 문양에 더 가까워 목표 문양과 다르게 처리되었습니다.";
             }
 
-            if (status == RecognitionStatus.Incomplete && RequiresClosure(top.template.family) && quality.closure < 0.62f)
+            if (status == RecognitionStatus.Incomplete && RequiresClosure(top.template.family) && quality.closure < ClosureAcceptThreshold(top.template.family))
             {
                 return ClosureReasonFor(top.template.family);
             }
@@ -327,7 +561,7 @@ namespace MagicExamHall
                 return "좋습니다. 같은 문양을 유지하면 다음 시험으로 넘어갈 수 있습니다.";
             }
 
-            if (RequiresClosure(target) && quality.closure < 0.72f)
+            if (RequiresClosure(target) && quality.closure < ClosureHintThreshold(target))
             {
                 return ClosureHintFor(target);
             }
@@ -484,6 +718,31 @@ namespace MagicExamHall
         private static bool RequiresClosure(SpellFamily family)
         {
             return family == SpellFamily.Earth || family == SpellFamily.Fire || family == SpellFamily.Water;
+        }
+
+        private static float ClosureAcceptThreshold(SpellFamily family)
+        {
+            return family == SpellFamily.Water ? WaterClosureAcceptThreshold : DefaultClosureAcceptThreshold;
+        }
+
+        private static float IntentClosureAcceptThreshold(SpellFamily family)
+        {
+            return family == SpellFamily.Water ? WaterIntentClosureAcceptThreshold : DefaultIntentClosureAcceptThreshold;
+        }
+
+        private static float ClosureHintThreshold(SpellFamily family)
+        {
+            return family == SpellFamily.Water ? WaterClosureHintThreshold : DefaultClosureHintThreshold;
+        }
+
+        private static float ClosureScoreFor(SpellFamily family, float closure)
+        {
+            if (family == SpellFamily.Water && closure >= WaterClosureAcceptThreshold)
+            {
+                return Mathf.Max(closure, WaterClosureScoringFloor);
+            }
+
+            return closure;
         }
 
         private static int ExpectedCorners(SpellFamily family)

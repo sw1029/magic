@@ -109,6 +109,7 @@ namespace MagicExamHall
         public string label = "";
         public string regexPattern = "";
         public string shapeToken = "";
+        public List<string> eventShapeTokens = new();
         public SpellFamily mappedFamily = SpellFamily.Wind;
         public List<CustomShapeCaptureRecord> goldCaptures = new();
         public List<CustomShapeCaptureRecord> autoCaptures = new();
@@ -250,6 +251,19 @@ namespace MagicExamHall
             IReadOnlyList<IReadOnlyList<StrokeSample>> goldStrokes,
             out string message)
         {
+            return TrySaveSlot(slotIndex, label, regexPattern, shapeToken, new[] { shapeToken }, mappedFamily, goldStrokes, out message);
+        }
+
+        public bool TrySaveSlot(
+            int slotIndex,
+            string label,
+            string regexPattern,
+            string shapeToken,
+            IReadOnlyList<string> eventShapeTokens,
+            SpellFamily mappedFamily,
+            IReadOnlyList<IReadOnlyList<StrokeSample>> goldStrokes,
+            out string message)
+        {
             if (!IsValidSlotIndex(slotIndex))
             {
                 message = "슬롯 번호가 올바르지 않습니다.";
@@ -259,6 +273,7 @@ namespace MagicExamHall
             var safeLabel = (label ?? "").Trim();
             var safePattern = (regexPattern ?? "").Trim();
             var safeShapeToken = NormalizeShapeToken(shapeToken);
+            var safeEventShapeTokens = NormalizeShapeTokens(eventShapeTokens, safeShapeToken);
             var validation = ValidateDefinition(safeLabel, safePattern);
             if (!validation.valid)
             {
@@ -283,6 +298,7 @@ namespace MagicExamHall
                 label = safeLabel[..Math.Min(safeLabel.Length, MaxLabelLength)],
                 regexPattern = safePattern[..Math.Min(safePattern.Length, MaxRegexLength)],
                 shapeToken = safeShapeToken,
+                eventShapeTokens = safeEventShapeTokens,
                 mappedFamily = mappedFamily,
                 goldCaptures = new List<CustomShapeCaptureRecord> { gold },
                 autoCaptures = LastItems(slot.autoCaptures, MaxAutoCapturesPerSlot).ToList(),
@@ -427,10 +443,12 @@ namespace MagicExamHall
 
                 slot.goldCaptures ??= new List<CustomShapeCaptureRecord>();
                 slot.autoCaptures ??= new List<CustomShapeCaptureRecord>();
+                slot.eventShapeTokens = NormalizeShapeTokens(slot.eventShapeTokens, slot.shapeToken);
                 slot.autoCaptures = LastItems(slot.autoCaptures, MaxAutoCapturesPerSlot).ToList();
                 slot.shapeToken = NormalizeShapeToken(string.IsNullOrWhiteSpace(slot.shapeToken)
                     ? InferShapeToken(slot.regexPattern)
                     : slot.shapeToken);
+                slot.eventShapeTokens = NormalizeShapeTokens(slot.eventShapeTokens, slot.shapeToken);
                 normalized[slot.slotIndex] = slot;
             }
 
@@ -451,6 +469,7 @@ namespace MagicExamHall
                 label = "",
                 regexPattern = "",
                 shapeToken = "",
+                eventShapeTokens = new List<string>(),
                 mappedFamily = SpellFamily.Wind,
                 goldCaptures = new List<CustomShapeCaptureRecord>(),
                 autoCaptures = new List<CustomShapeCaptureRecord>(),
@@ -485,6 +504,21 @@ namespace MagicExamHall
             return HelperTokens.Contains(shapeToken ?? "", StringComparer.OrdinalIgnoreCase)
                 ? HelperTokens.First(token => string.Equals(token, shapeToken, StringComparison.OrdinalIgnoreCase))
                 : "line";
+        }
+
+        private static List<string> NormalizeShapeTokens(IEnumerable<string> shapeTokens, string fallback)
+        {
+            var normalized = (shapeTokens ?? Array.Empty<string>())
+                .Select(NormalizeShapeToken)
+                .Where(token => !string.IsNullOrWhiteSpace(token))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (normalized.Count == 0)
+            {
+                normalized.Add(NormalizeShapeToken(fallback));
+            }
+
+            return normalized;
         }
 
         private static string InferShapeToken(string value)

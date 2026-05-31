@@ -6,7 +6,7 @@ namespace MagicExamHall
 {
     public sealed class WorldStrokeVisuals : MonoBehaviour
     {
-        public const float DefaultStrokeVisualLifetimeSeconds = 2.3f;
+        public const float DefaultStrokeVisualLifetimeSeconds = 4.2f;
 
         public Color strokeColor = new(0.22f, 0.95f, 1f, 0.92f);
         public float lineWidth = 0.075f;

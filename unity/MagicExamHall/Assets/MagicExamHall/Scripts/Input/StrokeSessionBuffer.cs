@@ -41,7 +41,17 @@ namespace MagicExamHall
 
         public void Tick(float now)
         {
+            Tick(now, inputInProgress: false);
+        }
+
+        public void Tick(float now, bool inputInProgress)
+        {
             if (!waitingForBuffer || now - lastStrokeCompletedAt < BufferSeconds)
+            {
+                return;
+            }
+
+            if (inputInProgress)
             {
                 return;
             }

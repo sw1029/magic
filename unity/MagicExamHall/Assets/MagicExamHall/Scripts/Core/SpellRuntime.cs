@@ -59,6 +59,13 @@ namespace MagicExamHall
         public float expiresAt;
         public string customShapeId = "";
         public string customShapeLabel = "";
+        public string customShapeToken = "";
+        public string customEventId = "";
+        public string customEventLabel = "";
+        public string customEventKind = "";
+        public string customEventRole = "";
+        public Vector2 customEventOrigin;
+        public Vector2 customEventDirection = Vector2.right;
 
         public string Label
         {
@@ -83,6 +90,7 @@ namespace MagicExamHall
         public Vector2 center;
         public float worldScale = 1f;
         public int bufferStrokeCount;
+        public BaseRecognitionIntent intent;
     }
 
     public static class SpellRuntime
@@ -91,10 +99,17 @@ namespace MagicExamHall
 
         public static BaseRecognitionResult RecognizeBase(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)
         {
+            return RecognizeBase(strokes, null);
+        }
+
+        public static BaseRecognitionResult RecognizeBase(
+            IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
+            BaseRecognitionIntent intent)
+        {
             var candidates = Enum.GetValues(typeof(SpellFamily))
                 .Cast<SpellFamily>()
-                .Select(family => GestureRecognizer.Recognize(strokes, family))
-                .OrderByDescending(result => result.success ? 2 : result.status == RecognitionStatus.Recognized ? 1 : 0)
+                .Select(family => GestureRecognizer.Recognize(strokes, family, intent))
+                .OrderByDescending(result => result.intentStrongConsiderationApplied ? 3 : result.success ? 2 : result.status == RecognitionStatus.Recognized ? 1 : 0)
                 .ThenByDescending(result => result.confidence)
                 .ToList();
             var best = candidates.First();
@@ -105,7 +120,8 @@ namespace MagicExamHall
                 spell = best,
                 center = allPoints.Count == 0 ? Vector2.zero : new Vector2(allPoints.Average(point => point.x), allPoints.Average(point => point.y)),
                 worldScale = EstimateWorldScale(allPoints),
-                bufferStrokeCount = strokes.Count
+                bufferStrokeCount = strokes.Count,
+                intent = intent
             };
         }
 
@@ -121,7 +137,14 @@ namespace MagicExamHall
                 createdAt = now,
                 expiresAt = now + durationSeconds,
                 customShapeId = baseResult.spell.customShapeId ?? "",
-                customShapeLabel = baseResult.spell.customShapeLabel ?? ""
+                customShapeLabel = baseResult.spell.customShapeLabel ?? "",
+                customShapeToken = baseResult.spell.customShapeToken ?? "",
+                customEventId = baseResult.spell.customEventId ?? "",
+                customEventLabel = baseResult.spell.customEventLabel ?? "",
+                customEventKind = baseResult.spell.customEventKind ?? "",
+                customEventRole = baseResult.spell.customEventRole ?? "",
+                customEventOrigin = baseResult.spell.customEventOrigin,
+                customEventDirection = baseResult.spell.customEventDirection
             };
         }
 

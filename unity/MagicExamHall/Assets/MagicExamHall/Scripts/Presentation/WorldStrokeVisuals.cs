@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace MagicExamHall
@@ -13,6 +14,8 @@ namespace MagicExamHall
 
         private readonly Dictionary<string, StrokeVisual> active = new();
         private readonly List<StrokeVisual> visuals = new();
+
+        public int VisualCountForTests => visuals.Count(visual => visual.body != null);
 
         public void HandleStrokeStarted(StrokeInputStroke stroke)
         {
@@ -45,6 +48,20 @@ namespace MagicExamHall
             {
                 HandleStrokeCompleted(stroke);
             }
+        }
+
+        public void ClearAll()
+        {
+            foreach (var visual in visuals)
+            {
+                if (visual.body != null)
+                {
+                    Destroy(visual.body);
+                }
+            }
+
+            visuals.Clear();
+            active.Clear();
         }
 
         public void Tick(float deltaTime)

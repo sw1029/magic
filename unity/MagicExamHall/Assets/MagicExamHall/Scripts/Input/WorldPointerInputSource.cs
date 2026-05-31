@@ -51,6 +51,20 @@ namespace MagicExamHall
             }
         }
 
+        public bool CancelActiveStroke()
+        {
+            if (!drawing && activePoints.Count == 0)
+            {
+                return false;
+            }
+
+            drawing = false;
+            activePoints.Clear();
+            activeStrokeId = "";
+            StrokeCanceled();
+            return true;
+        }
+
         private void BeginStroke(Vector2 screenPoint)
         {
             drawing = true;

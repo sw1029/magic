@@ -24,8 +24,11 @@ namespace MagicExamHall
 
         // Legacy event kept for tests/tools that still hand off StrokeSample groups directly.
         public event Action<List<List<StrokeSample>>, Vector2, int> SpellBuffered = delegate { };
+        public event Action InputCancelled = delegate { };
 
         public bool HasBufferedInput => (sessionBuffer?.HasPendingStrokes ?? false) || (inputSource?.IsDrawing ?? false);
+        public int BufferedStrokeCountForTests => sessionBuffer?.PendingStrokeCount ?? 0;
+        public int StrokeVisualCountForTests => strokeVisuals?.VisualCountForTests ?? 0;
 
         public void ApplyPlayableDefaults()
         {
@@ -82,6 +85,36 @@ namespace MagicExamHall
             EnsureComponents();
             strokeVisuals.ShowCompletedSession(session);
             sessionBuffer.SubmitSession(session);
+        }
+
+        public bool CancelBufferedInput()
+        {
+            EnsureComponents();
+            var hadInput = HasBufferedInput;
+            var canceledActive = inputSource.CancelActiveStroke();
+            sessionBuffer.Cancel();
+            strokeVisuals.ClearAll();
+
+            if (hadInput || canceledActive)
+            {
+                InputCancelled();
+            }
+
+            return hadInput || canceledActive;
+        }
+
+        public void BufferStrokeForTests(List<StrokeSample> stroke)
+        {
+            if (stroke == null || stroke.Count < 2)
+            {
+                return;
+            }
+
+            EnsureComponents();
+            var points = stroke.Select(sample => new StrokeInputPoint(sample.position, sample.time, 1f, 0, InputCoordinateSpace.World)).ToList();
+            var inputStroke = new StrokeInputStroke($"buffered-test-{Guid.NewGuid():N}", points);
+            strokeVisuals.HandleStrokeCompleted(inputStroke);
+            sessionBuffer.PushCompletedStroke(inputStroke, Time.time);
         }
 
         private void EnsureComponents()

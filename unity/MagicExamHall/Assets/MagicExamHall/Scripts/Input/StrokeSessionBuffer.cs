@@ -20,6 +20,7 @@ namespace MagicExamHall
 
         public float BufferSeconds { get; set; }
         public bool HasPendingStrokes => pendingStrokes.Count > 0;
+        public int PendingStrokeCount => pendingStrokes.Count;
 
         public void PushCompletedStroke(StrokeInputStroke stroke, float now)
         {

@@ -36,6 +36,9 @@ namespace MagicExamHall.Tests
             Assert.That(drawing.bufferSeconds, Is.EqualTo(WorldDrawingController.DefaultBufferSeconds).Within(0.001f));
             Assert.That(drawing.minPointDistance, Is.EqualTo(WorldDrawingController.DefaultMinPointDistance).Within(0.001f));
             Assert.That(controller.OutputDirectory, Does.Contain("MagicExamHallLogs"));
+            Assert.That(controller.IsResultPanelVisible, Is.False);
+            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(0));
+            Assert.That(controller.VersionLabelForTests, Is.EqualTo(ExamGameController.BuildVersion));
         }
 
         [UnityTest]
@@ -52,6 +55,7 @@ namespace MagicExamHall.Tests
             Assert.That(controller.VisibleGoalLabelCountForTests, Is.EqualTo(controller.ActiveGoalCount));
             Assert.That(controller.HudCopyForTests, Does.Contain("표식 아래 라벨"));
             Assert.That(controller.HudCopyForTests, Does.Contain("남은 표식"));
+            Assert.That(controller.HudCopyForTests, Does.Contain("Esc/Backspace"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("표식 근처"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("물은 닫힌 원"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("바람"));
@@ -79,7 +83,7 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
-        public IEnumerator SyntheticBaseCastCreatesWorldSealWithoutPanel()
+        public IEnumerator SyntheticBaseCastCreatesWorldSealAndResultSummary()
         {
             SceneManager.LoadScene("MagicExamHall");
             yield return null;
@@ -95,8 +99,60 @@ namespace MagicExamHall.Tests
             Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Fire));
             Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
             Assert.That(controller.LastSealLifetimeSecondsForTests, Is.EqualTo(SpellRuntime.DefaultSealDurationSeconds).Within(0.001f));
+            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(1));
             Assert.That(controller.IsDrawingPanelVisible, Is.False);
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("base 성공"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("불꽃"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("품질"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("해석"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("이유"));
+        }
+
+        [UnityTest]
+        public IEnumerator DrawingCancelClearsBufferedInputAndHidesResultPanel()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            var drawing = Object.FindFirstObjectByType<WorldDrawingController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(drawing, Is.Not.Null);
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-5.5f, 2.6f));
+            yield return null;
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+
+            drawing.BufferStrokeForTests(new List<StrokeSample>
+            {
+                new(new Vector2(-1f, -1f), 0f),
+                new(new Vector2(1f, 1f), 0.1f)
+            });
+            Assert.That(drawing.HasBufferedInput, Is.True);
+            Assert.That(drawing.BufferedStrokeCountForTests, Is.EqualTo(1));
+            Assert.That(drawing.StrokeVisualCountForTests, Is.EqualTo(1));
+
+            var canceled = drawing.CancelBufferedInput();
+            yield return null;
+
+            Assert.That(canceled, Is.True);
+            Assert.That(drawing.HasBufferedInput, Is.False);
+            Assert.That(drawing.BufferedStrokeCountForTests, Is.EqualTo(0));
+            Assert.That(drawing.StrokeVisualCountForTests, Is.EqualTo(0));
             Assert.That(controller.IsResultPanelVisible, Is.False);
+            Assert.That(controller.LastMagicNoteText, Does.Contain("입력을 취소"));
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Wind, new Vector2(4.6f, 1.5f));
+            yield return null;
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+
+            var idleCancel = drawing.CancelBufferedInput();
+            yield return null;
+
+            Assert.That(idleCancel, Is.False);
+            Assert.That(controller.IsResultPanelVisible, Is.True);
         }
 
         [UnityTest]
@@ -198,6 +254,7 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.VoidCut), Is.True);
             Assert.That(controller.LastOverlayStack.Contains(OverlayOperator.MartialAxis), Is.True);
+            Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(1));
         }
 
         [UnityTest]
@@ -299,6 +356,10 @@ namespace MagicExamHall.Tests
             Assert.That(result.scaleHint, Is.EqualTo(OverlayScaleHint.TooLarge));
             Assert.That(controller.LastMagicNoteText, Does.Contain("너무 커"));
             Assert.That(controller.LastHintText, Does.Contain("너무 큽니다"));
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("overlay 실패"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("크기"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("너무 큽니다"));
         }
 
         [UnityTest]
@@ -315,6 +376,9 @@ namespace MagicExamHall.Tests
             yield return null;
             Assert.That(controller.CurrentAssistLevel, Is.EqualTo(1));
             Assert.That(controller.LastMagicNoteText, Does.Contain("짧은 힌트"));
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("base 실패"));
+            Assert.That(controller.LastResultPanelTextForTests, Does.Contain("무효"));
 
             controller.CastRawBaseForTests(new List<List<StrokeSample>>(), Vector2.zero);
             yield return null;
@@ -518,10 +582,15 @@ namespace MagicExamHall.Tests
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
 
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-5.5f, 2.6f));
+            yield return null;
+            Assert.That(controller.IsResultPanelVisible, Is.True);
+
             controller.CompleteCurrentFloorForTests();
             controller.AdvanceFloorForTests();
             yield return null;
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
+            Assert.That(controller.IsResultPanelVisible, Is.False);
 
             controller.LoadFloorForTests(3);
             controller.MovePlayerForTests(new Vector2(-3.1f, -0.4f));
@@ -536,6 +605,7 @@ namespace MagicExamHall.Tests
             }
 
             Assert.That(controller.HasEndingReport, Is.True);
+            Assert.That(controller.IsResultPanelVisible, Is.False);
             Assert.That(controller.EndingReportTextForTests, Does.Contain("입학 시험"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("도달 상태"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("진엔딩 (6/6 완전 복구)"));

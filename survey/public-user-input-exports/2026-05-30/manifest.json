@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "public-user-input-export-manifest-v1",
+  "description": "Sanitized public survey exports focused on user-authored drawing inputs. Direct identifiers, timestamps, browser metadata, timing logs, and stroke timing/ids are excluded.",
+  "privacy": {
+    "excludedFields": [
+      "submissionId",
+      "sessionId",
+      "consentAccepted",
+      "startedAtIso",
+      "completedAtIso",
+      "userAgent",
+      "locale",
+      "timezone",
+      "notes",
+      "savedAtIso",
+      "elapsedMs",
+      "pointerType",
+      "stroke.id",
+      "point.t",
+      "point.pressure",
+      "trialId",
+      "captureId",
+      "saveState",
+      "thresholdBefore",
+      "thresholdAfter",
+      "thresholdState",
+      "tinyMlTwoTrackState"
+    ]
+  },
+  "files": [
+    {
+      "sourceKey": "tinyml_noisy_eval_a",
+      "sourceSurvey": "tinyml-noisy-eval",
+      "sourceFiles": [
+        "local_20260530030744_tinyml-noisy-eval.json",
+        "local_20260530030744_tinyml-noisy-eval-summary.csv"
+      ],
+      "publicFiles": [
+        "tinyml-noisy-eval/run-a.user-input.json",
+        "tinyml-noisy-eval/run-a.summary.csv"
+      ],
+      "recordCount": 78,
+      "coordinateSpace": "normalized_0_to_1_from_source_canvas"
+    },
+    {
+      "sourceKey": "tinyml_noisy_eval_b",
+      "sourceSurvey": "tinyml-noisy-eval",
+      "sourceFiles": [
+        "local_20260530030744_tinyml-noisy-eval (1).json",
+        "local_20260530030744_tinyml-noisy-eval-summary (1).csv"
+      ],
+      "publicFiles": [
+        "tinyml-noisy-eval/run-b.user-input.json",
+        "tinyml-noisy-eval/run-b.summary.csv"
+      ],
+      "recordCount": 79,
+      "coordinateSpace": "normalized_0_to_1_from_source_canvas"
+    },
+    {
+      "sourceKey": "tutorial_threshold_eval",
+      "sourceSurvey": "tutorial-threshold-eval",
+      "sourceFiles": [
+        "local_20260530060527_tutorial-threshold-eval.json",
+        "local_20260530060527_tutorial-threshold-eval-summary.csv"
+      ],
+      "publicFiles": [
+        "tutorial-threshold-eval/run-a.user-input.json",
+        "tutorial-threshold-eval/run-a.summary.csv"
+      ],
+      "recordCount": 74,
+      "coordinateSpace": "normalized_0_to_1_from_source_canvas"
+    }
+  ]
+}

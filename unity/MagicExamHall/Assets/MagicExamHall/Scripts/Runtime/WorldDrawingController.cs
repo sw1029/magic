@@ -25,8 +25,11 @@ namespace MagicExamHall
         private float lastReleaseTime;
 
         public event Action<List<List<StrokeSample>>, Vector2, int> SpellBuffered = delegate { };
+        public event Action InputCancelled = delegate { };
 
         public bool HasBufferedInput => bufferedStrokes.Count > 0 || activeStroke.Count > 0;
+        public int BufferedStrokeCountForTests => bufferedStrokes.Count;
+        public int StrokeVisualCountForTests => visuals.Count(visual => visual.body != null);
 
         public void ApplyPlayableDefaults()
         {
@@ -41,6 +44,7 @@ namespace MagicExamHall
 
         private void Update()
         {
+            TickCancelInput();
             TickInput();
             TickBuffer();
             TickVisuals();
@@ -56,6 +60,37 @@ namespace MagicExamHall
 
             var copy = strokes.Select(stroke => stroke.Select(sample => new StrokeSample(sample.position, sample.time)).ToList()).ToList();
             SpellBuffered(copy, CenterOf(copy), copy.Count);
+        }
+
+        public bool CancelBufferedInput()
+        {
+            var hadInput = HasBufferedInput || drawing || waitingForBuffer;
+            drawing = false;
+            waitingForBuffer = false;
+            activeStroke.Clear();
+            bufferedStrokes.Clear();
+            ClearVisuals();
+
+            if (hadInput)
+            {
+                InputCancelled();
+            }
+
+            return hadInput;
+        }
+
+        public void BufferStrokeForTests(List<StrokeSample> stroke)
+        {
+            if (stroke == null || stroke.Count < 2)
+            {
+                return;
+            }
+
+            var copy = stroke.Select(sample => new StrokeSample(sample.position, sample.time)).ToList();
+            bufferedStrokes.Add(copy);
+            waitingForBuffer = true;
+            lastReleaseTime = Time.time;
+            CreateStrokeVisual(copy);
         }
 
         private void TickInput()
@@ -95,6 +130,14 @@ namespace MagicExamHall
             drawing = false;
             waitingForBuffer = true;
             lastReleaseTime = Time.time;
+        }
+
+        private void TickCancelInput()
+        {
+            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Backspace))
+            {
+                CancelBufferedInput();
+            }
         }
 
         private void TickBuffer()
@@ -188,6 +231,19 @@ namespace MagicExamHall
                     visuals.RemoveAt(index);
                 }
             }
+        }
+
+        private void ClearVisuals()
+        {
+            foreach (var visual in visuals)
+            {
+                if (visual.body != null)
+                {
+                    Destroy(visual.body);
+                }
+            }
+
+            visuals.Clear();
         }
 
         private static Vector2 CenterOf(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)

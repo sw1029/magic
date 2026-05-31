@@ -15,6 +15,8 @@ namespace MagicExamHall
         public const float StandardFloorAdvanceDelaySeconds = 1.4f;
         public const float FinalFloorPassReportDelaySeconds = 4.8f;
         public const float FinalFloorCompleteReportDelaySeconds = 1.9f;
+        public const string BuildVersion = "Magic Exam Hall 0.6.0-dev";
+        private const int ResultPanelCompactScreenWidth = 1100;
 
         [Header("Scene References")]
         public Camera mainCamera = null!;
@@ -45,6 +47,7 @@ namespace MagicExamHall
         private Text noteText = null!;
         private Text resultText = null!;
         private Text reportText = null!;
+        private Text versionText = null!;
         private Font uiFont = null!;
         private string sessionId = "";
         private int trialCounter;
@@ -54,6 +57,7 @@ namespace MagicExamHall
         private Vector2 safePosition;
         private bool finalCompletionCelebrated;
         private bool finalTrueEnding;
+        private bool resultPanelCompact;
 
         public int CurrentFloorNumber => floorController?.CurrentFloorNumber ?? 1;
         public int FloorCount => floorController?.FloorCount ?? 5;
@@ -72,6 +76,7 @@ namespace MagicExamHall
         public string HudCopyForTests => hudCopy == null ? "" : hudCopy.text;
         public string FloorProgressForTests => floorProgress == null ? "" : floorProgress.text;
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
+        public string VersionLabelForTests => versionText == null ? "" : versionText.text;
         public int ActivePulseCountForTests => pulses.Count;
         public int VisibleGoalLabelCountForTests => activeGoals.Count(goal => goal.label != null);
         public int VisibleOverlayGuideCountForTests => seals.Count(seal => seal.HasAttachGuide);
@@ -219,6 +224,7 @@ namespace MagicExamHall
             worldDrawing.mainCamera = mainCamera;
             worldDrawing.ApplyPlayableDefaults();
             worldDrawing.SpellBuffered += OnSpellBuffered;
+            worldDrawing.InputCancelled += OnDrawingCancelled;
         }
 
         private static void ConfigureMainCamera(Camera camera)
@@ -242,11 +248,16 @@ namespace MagicExamHall
 
             resultPanel = CreatePanel("Spell Result", canvas.transform, new Vector2(-20, -20), new Vector2(430, 178), Anchor.TopRight, new Color(0.04f, 0.055f, 0.075f, 0.88f));
             resultText = CreateText("Result Text", resultPanel, "", 13, FontStyle.Normal, new Vector2(14, -12), new Vector2(402, 152), Anchor.TopLeft);
+            UpdateResultPanelLayout();
             resultPanel.gameObject.SetActive(false);
 
             reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(760, 520), Anchor.Center, new Color(0.035f, 0.045f, 0.065f, 0.96f));
             reportText = CreateText("Report Text", reportPanel, "", 17, FontStyle.Normal, new Vector2(28, -28), new Vector2(704, 464), Anchor.TopLeft);
             reportPanel.gameObject.SetActive(false);
+
+            versionText = CreateText("Build Version", canvas.transform, BuildVersion, 11, FontStyle.Normal, new Vector2(-14, 10), new Vector2(300, 20), Anchor.BottomRight);
+            versionText.alignment = TextAnchor.MiddleRight;
+            versionText.color = new Color(1f, 1f, 1f, 0.62f);
         }
 
         private void LoadFloor(int index)
@@ -305,6 +316,17 @@ namespace MagicExamHall
         private void OnSpellBuffered(List<List<StrokeSample>> strokes, Vector2 center, int strokeCount)
         {
             ProcessSpellGroup(strokes, center, strokeCount);
+        }
+
+        private void OnDrawingCancelled()
+        {
+            if (HasEndingReport)
+            {
+                return;
+            }
+
+            resultPanel.gameObject.SetActive(false);
+            magicNote.Show("입력을 취소했습니다. 우클릭 hold로 다시 그리세요.");
         }
 
         private ProcessedSpell ProcessSpellGroup(List<List<StrokeSample>> strokes, Vector2 center, int strokeCount)
@@ -447,6 +469,7 @@ namespace MagicExamHall
 
         private void ShowBaseResultSummary(BaseRecognitionResult result, string title, string resultSummary)
         {
+            UpdateResultPanelLayout();
             var family = result.spell.recognizedFamily.HasValue
                 ? SpellLabels.Korean(result.spell.recognizedFamily.Value)
                 : SpellLabels.Korean(result.spell.targetFamily);
@@ -454,21 +477,43 @@ namespace MagicExamHall
                 $"{title}: {family}\n" +
                 $"판정 {StatusLabel(result.spell.status)}  신뢰 {Percent(result.spell.confidence)}  획 {result.bufferStrokeCount}\n" +
                 $"{QualityLine(result.spell.quality)}\n" +
-                $"이유: {ShortLine(result.spell.feedbackReason, 52)}\n" +
-                $"다음: {ShortLine(resultSummary, 56)}";
+                $"해석: {ShortLine(QualityCoachLine(result.spell.quality), ResultLineLength(52, 42))}\n" +
+                $"이유: {ShortLine(result.spell.feedbackReason, ResultLineLength(52, 42))}\n" +
+                $"다음: {ShortLine(resultSummary, ResultLineLength(56, 46))}";
             resultPanel.gameObject.SetActive(true);
         }
 
         private void ShowOverlayResultSummary(OverlayRecognitionResult result, CompiledSeal seal, string title, string resultSummary)
         {
+            UpdateResultPanelLayout();
             var op = result.recognizedOperator.HasValue ? SpellLabels.Korean(result.recognizedOperator.Value) : "미확정";
             resultText.text =
                 $"{title}: {op}\n" +
-                $"대상 seal: {ShortLine(seal.Label, 30)}\n" +
+                $"대상 seal: {ShortLine(seal.Label, ResultLineLength(30, 24))}\n" +
                 $"판정 {StatusLabel(result.status)}  점수 {Percent(result.score)}  모양 {Percent(result.shapeConfidence)}\n" +
                 $"크기 {result.scaleRatio:0.00}x  위치 {AnchorLabel(result.anchorZone)}\n" +
-                $"다음: {ShortLine(resultSummary, 56)}";
+                $"다음: {ShortLine(resultSummary, ResultLineLength(56, 46))}";
             resultPanel.gameObject.SetActive(true);
+        }
+
+        private void UpdateResultPanelLayout()
+        {
+            if (resultPanel == null || resultText == null)
+            {
+                return;
+            }
+
+            resultPanelCompact = Screen.width > 0 && Screen.width < ResultPanelCompactScreenWidth;
+            resultPanel.anchoredPosition = resultPanelCompact ? new Vector2(-20, -166) : new Vector2(-20, -20);
+            resultPanel.sizeDelta = resultPanelCompact ? new Vector2(360, 188) : new Vector2(430, 206);
+            resultText.fontSize = resultPanelCompact ? 12 : 13;
+            resultText.rectTransform.anchoredPosition = new Vector2(14, -12);
+            resultText.rectTransform.sizeDelta = resultPanelCompact ? new Vector2(332, 162) : new Vector2(402, 180);
+        }
+
+        private int ResultLineLength(int wideLength, int compactLength)
+        {
+            return resultPanelCompact ? compactLength : wideLength;
         }
 
         private SealView FindAttachableSeal(Vector2 center)
@@ -889,6 +934,7 @@ namespace MagicExamHall
                 return;
             }
 
+            UpdateResultPanelLayout();
             var floor = floorController.Current;
             if (finalCompletionCelebrated && IsFinalFloor && pendingAdvanceAt > 0f)
             {
@@ -913,8 +959,8 @@ namespace MagicExamHall
             else
             {
                 hudCopy.text = floor.number == 1
-                    ? $"{floor.objective}\n{BuildFirstFloorGoalSummary()}\n표식 아래 라벨을 보고 목표 근처에 우클릭 hold로 그리세요."
-                    : $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요.";
+                    ? $"{floor.objective}\n{BuildFirstFloorGoalSummary()}\n표식 아래 라벨을 보고 목표 근처에 우클릭 hold로 그리세요. Esc/Backspace 취소."
+                    : $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요. Esc/Backspace 취소.";
                 floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   seal {seals.Count}";
             }
             notePanel.gameObject.SetActive(magicNote.Visible);
@@ -1254,6 +1300,10 @@ namespace MagicExamHall
                     rect.anchorMin = rect.anchorMax = new Vector2(0f, 0f);
                     rect.pivot = new Vector2(0f, 0f);
                     break;
+                case Anchor.BottomRight:
+                    rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
+                    rect.pivot = new Vector2(1f, 0f);
+                    break;
                 case Anchor.Center:
                     rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
                     rect.pivot = new Vector2(0.5f, 0.5f);
@@ -1305,6 +1355,42 @@ namespace MagicExamHall
             return $"품질 닫힘 {Percent(quality.closure)} / 선 {Percent(quality.smoothness)} / 속도 {Percent(quality.tempo)} / 안정 {Percent(quality.stability)}";
         }
 
+        private static string QualityCoachLine(QualityVector quality)
+        {
+            var strongestName = "닫힘";
+            var strongestValue = quality.closure;
+            var weakestName = "닫힘";
+            var weakestValue = quality.closure;
+
+            CompareQualityMetric("선", quality.smoothness, ref strongestName, ref strongestValue, ref weakestName, ref weakestValue);
+            CompareQualityMetric("속도", quality.tempo, ref strongestName, ref strongestValue, ref weakestName, ref weakestValue);
+            CompareQualityMetric("안정", quality.stability, ref strongestName, ref strongestValue, ref weakestName, ref weakestValue);
+            CompareQualityMetric("기울기 억제", 1f - quality.rotationBias, ref strongestName, ref strongestValue, ref weakestName, ref weakestValue);
+
+            return $"{strongestName}이 강점이고 {weakestName}을 조금 더 보완하면 품질이 오릅니다.";
+        }
+
+        private static void CompareQualityMetric(
+            string name,
+            float value,
+            ref string strongestName,
+            ref float strongestValue,
+            ref string weakestName,
+            ref float weakestValue)
+        {
+            if (value > strongestValue)
+            {
+                strongestName = name;
+                strongestValue = value;
+            }
+
+            if (value < weakestValue)
+            {
+                weakestName = name;
+                weakestValue = value;
+            }
+        }
+
         private static string Percent(float value)
         {
             return $"{Mathf.RoundToInt(Mathf.Clamp01(value) * 100f)}%";
@@ -1347,7 +1433,8 @@ namespace MagicExamHall
             Center,
             TopLeft,
             TopRight,
-            BottomLeft
+            BottomLeft,
+            BottomRight
         }
 
         private readonly struct GoalEffect

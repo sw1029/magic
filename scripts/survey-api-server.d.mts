@@ -1,9 +1,13 @@
 import type { Server } from "node:http";
 
 export const SURVEY_SCHEMA_VERSION: string;
+export const TINYML_NOISY_EVAL_SCHEMA_VERSION: string;
+export const TUTORIAL_THRESHOLD_EVAL_SCHEMA_VERSION: string;
 export const SURVEY_EXPERIMENT_GROUPS: string[];
 export const SURVEY_HCI_PROBE_VARIANTS: string[];
 export const MAX_BODY_BYTES: number;
+export const TINYML_NOISY_EVAL_MAX_BODY_BYTES: number;
+export const TUTORIAL_THRESHOLD_EVAL_MAX_BODY_BYTES: number;
 export function assignExperimentGroup(seed: string): string;
 export function assignBalancedExperimentGroup(groupCounts: Record<string, number> | Map<string, number>, seed: string): string;
 export function assignBalancedHciProbeVariant(variantCounts: Record<string, number> | Map<string, number>, seed: string): string;
@@ -11,10 +15,14 @@ export function countExperimentGroupsFromResponseLog(text: string): Record<strin
 export function countExperimentCellsFromResponseLog(text: string): Record<string, Record<string, number>>;
 export function validateSurveyResponsePayload(payload: unknown): string[];
 export function validateSurveyRaffleContactPayload(payload: unknown): string[];
+export function validateTinyMlNoisyEvalPayload(payload: unknown): string[];
+export function validateTutorialThresholdEvalPayload(payload: unknown): string[];
 export function createSurveyApiServer(options?: {
   dataDir?: string;
   responsePath?: string;
   raffleContactPath?: string;
+  tinyMlNoisyEvalResponsePath?: string;
+  tutorialThresholdEvalResponsePath?: string;
   initialExperimentGroupCounts?: Record<string, number> | Map<string, number>;
   initialExperimentCellCounts?: Record<string, Record<string, number>> | Map<string, Map<string, number>>;
   allowedOrigins?: string[];
@@ -24,6 +32,8 @@ export function createSurveyApiServer(options?: {
   sessions: Map<string, unknown>;
   responsePath: string;
   raffleContactPath: string;
+  tinyMlNoisyEvalResponsePath: string;
+  tutorialThresholdEvalResponsePath: string;
   experimentGroupCounts: {
     completed: Map<string, number>;
     active: Map<string, number>;

@@ -5,9 +5,13 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const SURVEY_SCHEMA_VERSION = "magic-symbol-survey-v8";
+export const TINYML_NOISY_EVAL_SCHEMA_VERSION = "tinyml-noisy-eval-v1";
+export const TUTORIAL_THRESHOLD_EVAL_SCHEMA_VERSION = "tutorial-threshold-eval-v1";
 export const SURVEY_EXPERIMENT_GROUPS = ["shape_only", "scent_effects", "tutorial_quality"];
 export const SURVEY_HCI_PROBE_VARIANTS = ["log_discovery", "goal_scaffold"];
 export const MAX_BODY_BYTES = 96 * 1024;
+export const TINYML_NOISY_EVAL_MAX_BODY_BYTES = 1024 * 1024;
+export const TUTORIAL_THRESHOLD_EVAL_MAX_BODY_BYTES = 1024 * 1024;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 const SURVEY_PROMPT_WORDS = ["fire", "water", "wind"];
@@ -24,6 +28,18 @@ const FORBIDDEN_DRAWING_FIELDS = [
 ];
 const FORBIDDEN_GUESS_TRIAL_FIELDS = ["trialId", "correct"];
 const FORBIDDEN_RESPONSE_FIELDS = ["phone", "email", "raffleContact"];
+const TINYML_TOPOLOGIES = ["closed", "open", "mixed"];
+const TINYML_NOISE_RECIPE_IDS = [
+  "stable",
+  "jitter",
+  "rotation_drift",
+  "scale_offset",
+  "open_gap",
+  "stroke_merge",
+  "point_dropout",
+  "fast_compression",
+  "personal_residual"
+];
 
 const DEFAULT_ALLOWED_ORIGINS = [
   "http://localhost:5173",
@@ -221,12 +237,102 @@ export function validateSurveyRaffleContactPayload(payload) {
   return errors;
 }
 
+export function validateTinyMlNoisyEvalPayload(payload) {
+  const errors = [];
+
+  if (!isRecord(payload)) {
+    return ["payload must be an object"];
+  }
+
+  requireString(payload, "schemaVersion", errors);
+  requireString(payload, "submissionId", errors);
+  requireString(payload, "sessionId", errors);
+
+  if (payload.schemaVersion !== TINYML_NOISY_EVAL_SCHEMA_VERSION) {
+    errors.push(`schemaVersion must be ${TINYML_NOISY_EVAL_SCHEMA_VERSION}`);
+  }
+
+  validateCompactId(payload.submissionId, "submissionId", errors);
+  validateStringLength(payload.sessionId, "sessionId", 16, 128, errors);
+
+  if (payload.participantId !== undefined) {
+    validateStringLength(payload.participantId, "participantId", 0, 64, errors);
+  }
+
+  if (payload.consentAccepted !== true) {
+    errors.push("consentAccepted must be true");
+  }
+
+  validateStringLength(payload.startedAtIso, "startedAtIso", 10, 40, errors);
+  validateStringLength(payload.completedAtIso, "completedAtIso", 10, 40, errors);
+  validateTinyMlCanvas(payload.canvas, "canvas", errors);
+  validateTinyMlTrialPlan(payload.trialPlan, errors);
+  validateTinyMlTrials(payload.trials, errors);
+  validateTinyMlAggregate(payload.aggregate, errors);
+
+  return errors;
+}
+
+export function validateTutorialThresholdEvalPayload(payload) {
+  const errors = [];
+
+  if (!isRecord(payload)) {
+    return ["payload must be an object"];
+  }
+
+  requireString(payload, "schemaVersion", errors);
+  requireString(payload, "submissionId", errors);
+  requireString(payload, "sessionId", errors);
+
+  if (payload.schemaVersion !== TUTORIAL_THRESHOLD_EVAL_SCHEMA_VERSION) {
+    errors.push(`schemaVersion must be ${TUTORIAL_THRESHOLD_EVAL_SCHEMA_VERSION}`);
+  }
+
+  validateCompactId(payload.submissionId, "submissionId", errors);
+  validateStringLength(payload.sessionId, "sessionId", 16, 128, errors);
+
+  if (payload.participantId !== undefined) {
+    validateStringLength(payload.participantId, "participantId", 0, 64, errors);
+  }
+
+  if (payload.notes !== undefined) {
+    validateStringLength(payload.notes, "notes", 0, 1000, errors);
+  }
+
+  if (payload.consentAccepted !== true) {
+    errors.push("consentAccepted must be true");
+  }
+
+  validateStringLength(payload.startedAtIso, "startedAtIso", 10, 40, errors);
+  validateStringLength(payload.completedAtIso, "completedAtIso", 10, 40, errors);
+  validateTinyMlCanvas(payload.canvas, "canvas", errors);
+  validateTutorialThresholdEvalState(payload.thresholdState, "thresholdState", errors);
+  validateTutorialTinyMlSessionState(payload.tinyMlTwoTrackState, "tinyMlTwoTrackState", errors);
+  validateTutorialThresholdEvalCaptures(payload.captures, errors);
+  validateTutorialThresholdEvalTrials(payload.evals, errors);
+  validateTutorialThresholdEvalAggregate(payload.aggregate, errors);
+
+  const captureCount = Array.isArray(payload.captures) ? payload.captures.length : 0;
+  const evalCount = Array.isArray(payload.evals) ? payload.evals.length : 0;
+  if (captureCount + evalCount < 1) {
+    errors.push("captures or evals must contain at least 1 item");
+  }
+
+  return errors;
+}
+
 export function createSurveyApiServer(options = {}) {
   const sessions = new Map();
   const rateBuckets = new Map();
   const dataDir = resolve(options.dataDir ?? join(process.cwd(), "data"));
   const responsePath = resolve(options.responsePath ?? join(dataDir, "survey-responses.ndjson"));
   const raffleContactPath = resolve(options.raffleContactPath ?? join(dataDir, "survey-raffle-contacts.ndjson"));
+  const tinyMlNoisyEvalResponsePath = resolve(
+    options.tinyMlNoisyEvalResponsePath ?? join(dataDir, "tinyml-noisy-eval-responses.ndjson")
+  );
+  const tutorialThresholdEvalResponsePath = resolve(
+    options.tutorialThresholdEvalResponsePath ?? join(dataDir, "tutorial-threshold-eval-responses.ndjson")
+  );
   const allowedOrigins = new Set(options.allowedOrigins ?? readAllowedOrigins());
   const now = options.now ?? (() => Date.now());
   const completedGroupCounts = createExperimentGroupCounts(options.initialExperimentGroupCounts);
@@ -283,7 +389,9 @@ export function createSurveyApiServer(options = {}) {
           assignmentCounted: true,
           completed: false,
           submissionIds: new Set(),
-          raffleContactSubmissionIds: new Set()
+          raffleContactSubmissionIds: new Set(),
+          tinyMlNoisyEvalSubmissionIds: new Set(),
+          tutorialThresholdEvalSubmissionIds: new Set()
         });
 
         response.setHeader("Set-Cookie", [
@@ -339,6 +447,100 @@ export function createSurveyApiServer(options = {}) {
         await mkdir(dataDir, { recursive: true });
         await appendFile(
           responsePath,
+          `${JSON.stringify({ receivedAt: new Date(timestamp).toISOString(), payload })}\n`,
+          "utf8"
+        );
+        markSessionCompleted(session, completedGroupCounts, activeGroupCounts, completedCellCounts, activeCellCounts);
+
+        sendJson(response, 201, { ok: true });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/tinyml-noisy-eval-responses") {
+        const sessionId = readCookie(request.headers.cookie ?? "", "survey_session");
+        const session = sessionId ? sessions.get(sessionId) : undefined;
+
+        if (!session || timestamp - session.createdAt > SESSION_TTL_MS) {
+          sendJson(response, 401, { error: "session_expired" });
+          return;
+        }
+
+        const csrfToken = request.headers["x-csrf-token"];
+
+        if (typeof csrfToken !== "string" || !safeEqual(csrfToken, session.csrfToken)) {
+          sendJson(response, 403, { error: "csrf_failed" });
+          return;
+        }
+
+        const bodyText = await readRequestBody(request, TINYML_NOISY_EVAL_MAX_BODY_BYTES);
+        const payload = JSON.parse(bodyText);
+        const errors = validateTinyMlNoisyEvalPayload(payload);
+
+        if (payload.sessionId !== sessionId) {
+          errors.push("sessionId does not match cookie");
+        }
+
+        if (errors.length > 0) {
+          sendJson(response, 400, { error: "validation_failed", details: errors });
+          return;
+        }
+
+        if (session.tinyMlNoisyEvalSubmissionIds.has(payload.submissionId)) {
+          sendJson(response, 409, { error: "duplicate_tinyml_noisy_eval_submission" });
+          return;
+        }
+
+        session.tinyMlNoisyEvalSubmissionIds.add(payload.submissionId);
+        await mkdir(dataDir, { recursive: true });
+        await appendFile(
+          tinyMlNoisyEvalResponsePath,
+          `${JSON.stringify({ receivedAt: new Date(timestamp).toISOString(), payload })}\n`,
+          "utf8"
+        );
+        markSessionCompleted(session, completedGroupCounts, activeGroupCounts, completedCellCounts, activeCellCounts);
+
+        sendJson(response, 201, { ok: true });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/tutorial-threshold-eval-responses") {
+        const sessionId = readCookie(request.headers.cookie ?? "", "survey_session");
+        const session = sessionId ? sessions.get(sessionId) : undefined;
+
+        if (!session || timestamp - session.createdAt > SESSION_TTL_MS) {
+          sendJson(response, 401, { error: "session_expired" });
+          return;
+        }
+
+        const csrfToken = request.headers["x-csrf-token"];
+
+        if (typeof csrfToken !== "string" || !safeEqual(csrfToken, session.csrfToken)) {
+          sendJson(response, 403, { error: "csrf_failed" });
+          return;
+        }
+
+        const bodyText = await readRequestBody(request, TUTORIAL_THRESHOLD_EVAL_MAX_BODY_BYTES);
+        const payload = JSON.parse(bodyText);
+        const errors = validateTutorialThresholdEvalPayload(payload);
+
+        if (payload.sessionId !== sessionId) {
+          errors.push("sessionId does not match cookie");
+        }
+
+        if (errors.length > 0) {
+          sendJson(response, 400, { error: "validation_failed", details: errors });
+          return;
+        }
+
+        if (session.tutorialThresholdEvalSubmissionIds.has(payload.submissionId)) {
+          sendJson(response, 409, { error: "duplicate_tutorial_threshold_eval_submission" });
+          return;
+        }
+
+        session.tutorialThresholdEvalSubmissionIds.add(payload.submissionId);
+        await mkdir(dataDir, { recursive: true });
+        await appendFile(
+          tutorialThresholdEvalResponsePath,
           `${JSON.stringify({ receivedAt: new Date(timestamp).toISOString(), payload })}\n`,
           "utf8"
         );
@@ -421,6 +623,8 @@ export function createSurveyApiServer(options = {}) {
     sessions,
     responsePath,
     raffleContactPath,
+    tinyMlNoisyEvalResponsePath,
+    tutorialThresholdEvalResponsePath,
     experimentGroupCounts: {
       completed: completedGroupCounts,
       active: activeGroupCounts
@@ -942,6 +1146,439 @@ function validateInteractionMetrics(value, errors) {
   validateNumber(value.resetCounts.asciiTutorial, "interactionMetrics.resetCounts.asciiTutorial", 0, 200, errors);
 }
 
+function validateTinyMlTrialPlan(value, errors) {
+  validateArray(value, "trialPlan", 1, 80, errors);
+
+  if (!Array.isArray(value)) {
+    return;
+  }
+
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      errors.push(`trialPlan[${index}] must be an object`);
+      return;
+    }
+
+    validateStringLength(item.id, `trialPlan[${index}].id`, 1, 80, errors);
+    validateStringLength(item.label, `trialPlan[${index}].label`, 1, 120, errors);
+    validateStringLength(item.targetPresetId, `trialPlan[${index}].targetPresetId`, 1, 128, errors);
+    validateStringLength(item.noiseRecipeId, `trialPlan[${index}].noiseRecipeId`, 1, 80, errors);
+  });
+}
+
+function validateTinyMlTrials(value, errors) {
+  validateArray(value, "trials", 1, 500, errors);
+
+  if (!Array.isArray(value)) {
+    return;
+  }
+
+  value.forEach((item, index) => {
+    const path = `trials[${index}]`;
+
+    if (!isRecord(item)) {
+      errors.push(`${path} must be an object`);
+      return;
+    }
+
+    validateCompactId(item.trialId, `${path}.trialId`, errors);
+    validateStringLength(item.targetPresetId, `${path}.targetPresetId`, 1, 128, errors);
+    validateStringLength(item.targetPattern, `${path}.targetPattern`, 1, 160, errors);
+
+    if (!TINYML_TOPOLOGIES.includes(item.topology)) {
+      errors.push(`${path}.topology is invalid`);
+    }
+
+    validateTinyMlNoiseRecipe(item.noiseRecipe, `${path}.noiseRecipe`, errors);
+    validateTinyMlStrokeArray(item.rawStrokes, `${path}.rawStrokes`, errors);
+    validateTinyMlStrokeArray(item.noisyStrokes, `${path}.noisyStrokes`, errors);
+    validateTinyMlRecognitionSummary(item.rawRecognition, `${path}.rawRecognition`, errors);
+    validateTinyMlRecognitionSummary(item.noisyRecognition, `${path}.noisyRecognition`, errors);
+
+    if (!isRecord(item.contrast)) {
+      errors.push(`${path}.contrast must be an object`);
+    }
+
+    validateNumber(item.elapsedMs, `${path}.elapsedMs`, 0, 600000, errors);
+    validateTinyMlCanvas(item.canvas, `${path}.canvas`, errors);
+
+    if (typeof item.userMarkedConfused !== "boolean") {
+      errors.push(`${path}.userMarkedConfused must be boolean`);
+    }
+
+    if (item.pointerType !== undefined) {
+      validateStringLength(item.pointerType, `${path}.pointerType`, 0, 32, errors);
+    }
+  });
+}
+
+function validateTinyMlNoiseRecipe(value, path, errors) {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  if (!TINYML_NOISE_RECIPE_IDS.includes(value.id)) {
+    errors.push(`${path}.id is invalid`);
+  }
+
+  if (!isRecord(value.settings)) {
+    errors.push(`${path}.settings must be an object`);
+  }
+}
+
+function validateTinyMlStrokeArray(value, path, errors) {
+  validateArray(value, path, 1, 16, errors);
+
+  if (!Array.isArray(value)) {
+    return;
+  }
+
+  value.forEach((stroke, strokeIndex) => {
+    if (!isRecord(stroke)) {
+      errors.push(`${path}[${strokeIndex}] must be an object`);
+      return;
+    }
+
+    validateStringLength(stroke.id, `${path}[${strokeIndex}].id`, 1, 128, errors);
+
+    if (!Array.isArray(stroke.points) || stroke.points.length < 1 || stroke.points.length > 512) {
+      errors.push(`${path}[${strokeIndex}].points must contain 1-512 points`);
+      return;
+    }
+
+    stroke.points.forEach((point, pointIndex) => {
+      if (!isRecord(point)) {
+        errors.push(`${path}[${strokeIndex}].points[${pointIndex}] must be an object`);
+        return;
+      }
+
+      validateNumber(point.x, `${path}[${strokeIndex}].points[${pointIndex}].x`, -2000, 3000, errors);
+      validateNumber(point.y, `${path}[${strokeIndex}].points[${pointIndex}].y`, -2000, 3000, errors);
+      validateNumber(point.t, `${path}[${strokeIndex}].points[${pointIndex}].t`, 0, 600000, errors);
+
+      if (point.pressure !== undefined) {
+        validateNumber(point.pressure, `${path}[${strokeIndex}].points[${pointIndex}].pressure`, 0, 1, errors);
+      }
+    });
+  });
+}
+
+function validateTinyMlRecognitionSummary(value, path, errors) {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  validateStringLength(value.selectedCandidateId, `${path}.selectedCandidateId`, 1, 128, errors);
+  validateStringLength(value.finalCandidateId, `${path}.finalCandidateId`, 1, 128, errors);
+
+  if (!["recognized", "ambiguous", "incomplete", "invalid"].includes(String(value.finalStatus))) {
+    errors.push(`${path}.finalStatus is invalid`);
+  }
+
+  validateNumber(value.score, `${path}.score`, 0, 1, errors);
+  validateNumber(value.shadowConfidence, `${path}.shadowConfidence`, 0, 1, errors);
+  validateNumber(value.meaningConfidence, `${path}.meaningConfidence`, 0, 1, errors);
+  validateNumber(value.unsafeRisk, `${path}.unsafeRisk`, 0, 1, errors);
+  validateNumber(value.flipRisk, `${path}.flipRisk`, 0, 1, errors);
+
+  if (!Array.isArray(value.topCandidates) || value.topCandidates.length < 1 || value.topCandidates.length > 5) {
+    errors.push(`${path}.topCandidates must contain 1-5 items`);
+    return;
+  }
+
+  value.topCandidates.forEach((candidate, index) => {
+    if (!isRecord(candidate)) {
+      errors.push(`${path}.topCandidates[${index}] must be an object`);
+      return;
+    }
+
+    validateStringLength(candidate.id, `${path}.topCandidates[${index}].id`, 1, 128, errors);
+    validateNumber(candidate.score, `${path}.topCandidates[${index}].score`, 0, 1, errors);
+  });
+}
+
+function validateTinyMlAggregate(value, errors) {
+  if (!isRecord(value)) {
+    errors.push("aggregate must be an object");
+    return;
+  }
+
+  for (const key of [
+    "trialCount",
+    "precisionProxy",
+    "recallProxy",
+    "unsafeAcceptCount",
+    "priorityFlipCount",
+    "avgUnsafeRisk",
+    "avgFlipRisk"
+  ]) {
+    validateNumber(value[key], `aggregate.${key}`, 0, key.endsWith("Count") || key === "trialCount" ? 10000 : 1, errors);
+  }
+
+  if (!isRecord(value.blockerCounts)) {
+    errors.push("aggregate.blockerCounts must be an object");
+  }
+}
+
+function validateTutorialThresholdEvalCaptures(value, errors) {
+  validateArray(value, "captures", 0, 500, errors);
+
+  if (!Array.isArray(value)) {
+    return;
+  }
+
+  value.forEach((item, index) => {
+    const path = `captures[${index}]`;
+
+    if (!isRecord(item)) {
+      errors.push(`${path} must be an object`);
+      return;
+    }
+
+    validateCompactId(item.captureId, `${path}.captureId`, errors);
+    validateTutorialThresholdEvalShapeFields(item, path, errors);
+    validateTinyMlStrokeArray(item.rawStrokes, `${path}.rawStrokes`, errors);
+    validateTinyMlRecognitionSummary(item.recognition, `${path}.recognition`, errors);
+
+    if (!isRecord(item.contrast)) {
+      errors.push(`${path}.contrast must be an object`);
+    }
+
+    validateTutorialThresholdEvalState(item.thresholdBefore, `${path}.thresholdBefore`, errors);
+    validateTutorialThresholdEvalState(item.thresholdAfter, `${path}.thresholdAfter`, errors);
+    validateTutorialTinyMlCorrection(item.tinyMlCorrection, `${path}.tinyMlCorrection`, errors);
+    validateTutorialThresholdEvalConfusion(item.confusion, `${path}.confusion`, errors);
+    validateNumber(item.elapsedMs, `${path}.elapsedMs`, 0, 600000, errors);
+    validateStringLength(item.pointerType, `${path}.pointerType`, 0, 32, errors);
+    validateStringLength(item.savedAtIso, `${path}.savedAtIso`, 10, 40, errors);
+  });
+}
+
+function validateTutorialThresholdEvalTrials(value, errors) {
+  validateArray(value, "evals", 0, 500, errors);
+
+  if (!Array.isArray(value)) {
+    return;
+  }
+
+  value.forEach((item, index) => {
+    const path = `evals[${index}]`;
+
+    if (!isRecord(item)) {
+      errors.push(`${path} must be an object`);
+      return;
+    }
+
+    validateCompactId(item.trialId, `${path}.trialId`, errors);
+    validateTutorialThresholdEvalShapeFields(item, path, errors);
+    validateTinyMlStrokeArray(item.rawStrokes, `${path}.rawStrokes`, errors);
+    validateTinyMlRecognitionSummary(item.recognition, `${path}.recognition`, errors);
+
+    if (!isRecord(item.contrast)) {
+      errors.push(`${path}.contrast must be an object`);
+    }
+
+    validateTutorialThresholdEvalState(item.thresholdState, `${path}.thresholdState`, errors);
+    validateTutorialTinyMlCorrection(item.tinyMlCorrection, `${path}.tinyMlCorrection`, errors);
+
+    if (!["accept", "hold", "retry"].includes(item.dynamicDecision)) {
+      errors.push(`${path}.dynamicDecision is invalid`);
+    }
+
+    validateStringLength(item.dynamicReason, `${path}.dynamicReason`, 1, 240, errors);
+    validateTutorialThresholdEvalConfusion(item.confusion, `${path}.confusion`, errors);
+    validateNumber(item.elapsedMs, `${path}.elapsedMs`, 0, 600000, errors);
+    validateStringLength(item.pointerType, `${path}.pointerType`, 0, 32, errors);
+
+    if (typeof item.userMarkedConfused !== "boolean") {
+      errors.push(`${path}.userMarkedConfused must be boolean`);
+    }
+
+    validateStringLength(item.savedAtIso, `${path}.savedAtIso`, 10, 40, errors);
+  });
+}
+
+function validateTutorialThresholdEvalShapeFields(item, path, errors) {
+  validateStringLength(item.targetPresetId, `${path}.targetPresetId`, 1, 128, errors);
+  validateStringLength(item.targetPattern, `${path}.targetPattern`, 1, 240, errors);
+
+  if (!TINYML_TOPOLOGIES.includes(item.topology)) {
+    errors.push(`${path}.topology is invalid`);
+  }
+}
+
+function validateTutorialThresholdEvalState(value, path, errors) {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  validateNumber(value.captureCount, `${path}.captureCount`, 0, 10000, errors);
+  validateNumber(value.globalMaturity, `${path}.globalMaturity`, 0, 1, errors);
+  validateNumber(value.globalScoreLift, `${path}.globalScoreLift`, 0, 1, errors);
+  validateNumber(value.acceptThreshold, `${path}.acceptThreshold`, 0, 1, errors);
+  validateNumber(value.holdThreshold, `${path}.holdThreshold`, 0, 1, errors);
+  validateNumber(value.unsafeLimit, `${path}.unsafeLimit`, 0, 1, errors);
+  validateNumber(value.flipLimit, `${path}.flipLimit`, 0, 1, errors);
+  validateNumber(value.targetRankLimit, `${path}.targetRankLimit`, 1, 5, errors);
+  validateNumber(value.topGapFloor, `${path}.topGapFloor`, 0, 1, errors);
+
+  if (!isRecord(value.targetAdjustments)) {
+    errors.push(`${path}.targetAdjustments must be an object`);
+    return;
+  }
+
+  for (const [id, targetState] of Object.entries(value.targetAdjustments).slice(0, 80)) {
+    const targetPath = `${path}.targetAdjustments.${id}`;
+
+    if (!isRecord(targetState)) {
+      errors.push(`${targetPath} must be an object`);
+      continue;
+    }
+
+    validateNumber(targetState.captureCount, `${targetPath}.captureCount`, 0, 10000, errors);
+    validateNumber(targetState.evalCount, `${targetPath}.evalCount`, 0, 10000, errors);
+    validateNumber(targetState.top1Rate, `${targetPath}.top1Rate`, 0, 1, errors);
+    validateNumber(targetState.confusionScore, `${targetPath}.confusionScore`, 0, 1, errors);
+    validateNumber(targetState.acceptThreshold, `${targetPath}.acceptThreshold`, 0, 1, errors);
+  }
+
+  if (Object.keys(value.targetAdjustments).length > 80) {
+    errors.push(`${path}.targetAdjustments must contain 0-80 items`);
+  }
+}
+
+function validateTutorialTinyMlSessionState(value, path, errors) {
+  if (value === undefined) {
+    return;
+  }
+
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  validateNumber(value.correctionCount, `${path}.correctionCount`, 0, 10000, errors);
+  validateNumber(value.promoteCount, `${path}.promoteCount`, 0, 10000, errors);
+  validateNumber(value.shadowBlockCount, `${path}.shadowBlockCount`, 0, 10000, errors);
+  validateNumber(value.avgDelta, `${path}.avgDelta`, -1, 1, errors);
+  validateStringLength(value.lastFinalDecision, `${path}.lastFinalDecision`, 1, 16, errors);
+}
+
+function validateTutorialTinyMlCorrection(value, path, errors) {
+  if (value === undefined) {
+    return;
+  }
+
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  validateStringLength(value.version, `${path}.version`, 1, 40, errors);
+  validateTutorialTinyMlTrack(value.shadowTrack, `${path}.shadowTrack`, errors);
+  validateTutorialTinyMlTrack(value.meaningTrack, `${path}.meaningTrack`, errors);
+
+  if (!["agree_accept", "agree_hold", "agree_retry", "contrast"].includes(value.agreement)) {
+    errors.push(`${path}.agreement is invalid`);
+  }
+
+  validateNumber(value.delta, `${path}.delta`, -1, 1, errors);
+
+  if (!["shadow_gate", "meaning_recovery", "balanced"].includes(value.selectedTrack)) {
+    errors.push(`${path}.selectedTrack is invalid`);
+  }
+
+  if (!["accept", "hold", "retry"].includes(value.finalDecision)) {
+    errors.push(`${path}.finalDecision is invalid`);
+  }
+
+  validateStringLength(value.finalReason, `${path}.finalReason`, 1, 260, errors);
+
+  if (typeof value.promotePriority !== "boolean") {
+    errors.push(`${path}.promotePriority must be boolean`);
+  }
+
+  if (typeof value.blockPriorityFlip !== "boolean") {
+    errors.push(`${path}.blockPriorityFlip must be boolean`);
+  }
+}
+
+function validateTutorialTinyMlTrack(value, path, errors) {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  if (!["shadow_gate", "meaning_recovery"].includes(value.track)) {
+    errors.push(`${path}.track is invalid`);
+  }
+
+  validateStringLength(value.label, `${path}.label`, 1, 80, errors);
+  validateNumber(value.adjustedScore, `${path}.adjustedScore`, 0, 1, errors);
+  validateNumber(value.threshold, `${path}.threshold`, 0, 1, errors);
+  validateNumber(value.margin, `${path}.margin`, -1, 1, errors);
+
+  if (!["accept", "hold", "retry"].includes(value.decision)) {
+    errors.push(`${path}.decision is invalid`);
+  }
+
+  validateNumber(value.correction, `${path}.correction`, -1, 1, errors);
+
+  if (!Array.isArray(value.reasons) || value.reasons.length > 8) {
+    errors.push(`${path}.reasons must contain 0-8 items`);
+    return;
+  }
+
+  value.reasons.forEach((reason, index) => {
+    validateStringLength(reason, `${path}.reasons[${index}]`, 1, 120, errors);
+  });
+}
+
+function validateTutorialThresholdEvalConfusion(value, path, errors) {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  if (value.targetRank !== null) {
+    validateNumber(value.targetRank, `${path}.targetRank`, 1, 50, errors);
+  }
+
+  validateStringLength(value.topPair, `${path}.topPair`, 1, 260, errors);
+  validateNumber(value.topGap, `${path}.topGap`, 0, 1, errors);
+
+  if (typeof value.targetInTop5 !== "boolean") {
+    errors.push(`${path}.targetInTop5 must be boolean`);
+  }
+
+  validateStringLength(value.confusedWith, `${path}.confusedWith`, 1, 128, errors);
+  validateNumber(value.confusionScore, `${path}.confusionScore`, 0, 1, errors);
+}
+
+function validateTutorialThresholdEvalAggregate(value, errors) {
+  if (!isRecord(value)) {
+    errors.push("aggregate must be an object");
+    return;
+  }
+
+  for (const key of ["acceptRate", "top1Rate", "avgUnsafeRisk", "avgConfusion"]) {
+    validateNumber(value[key], `aggregate.${key}`, 0, 1, errors);
+  }
+}
+
+function validateTinyMlCanvas(value, path, errors) {
+  if (!isRecord(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  validateNumber(value.width, `${path}.width`, 100, 4000, errors);
+  validateNumber(value.height, `${path}.height`, 100, 4000, errors);
+}
+
 function rejectForbiddenDrawingFields(value, path, errors) {
   for (const field of FORBIDDEN_DRAWING_FIELDS) {
     if (field in value) {
@@ -1044,11 +1681,14 @@ class PayloadTooLargeError extends Error {}
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const port = Number(process.env.SURVEY_API_PORT ?? 4174);
   const host = process.env.SURVEY_API_HOST ?? "127.0.0.1";
-  const { server, responsePath, raffleContactPath } = createSurveyApiServer();
+  const { server, responsePath, raffleContactPath, tinyMlNoisyEvalResponsePath, tutorialThresholdEvalResponsePath } =
+    createSurveyApiServer();
 
   server.listen(port, host, () => {
     console.log(`survey api listening on http://${host}:${port}`);
     console.log(`survey responses append to ${responsePath}`);
     console.log(`survey raffle contacts append to ${raffleContactPath}`);
+    console.log(`tinyml noisy eval responses append to ${tinyMlNoisyEvalResponsePath}`);
+    console.log(`tutorial threshold eval responses append to ${tutorialThresholdEvalResponsePath}`);
   });
 }

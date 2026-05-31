@@ -45,7 +45,9 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, "index.html"),
-        survey: resolve(__dirname, "survey/magic-symbol-tutorial/index.html")
+        survey: resolve(__dirname, "survey/magic-symbol-tutorial/index.html"),
+        tinymlNoisyEval: resolve(__dirname, "survey/tinyml-noisy-eval/index.html"),
+        tutorialThresholdEval: resolve(__dirname, "survey/tutorial-threshold-eval/index.html")
       }
     }
   },

@@ -33,6 +33,113 @@ namespace MagicExamHall
         CurveProjectile
     }
 
+    public enum CustomSpellEffectKind
+    {
+        None,
+        Ice,
+        Electric,
+        Cleanse,
+        Focus,
+        Flow,
+        Connection,
+        Stability,
+        LivingBridge,
+        WindPlatform
+    }
+
+    public readonly struct CustomSpellEffectDefinition
+    {
+        public CustomSpellEffectDefinition(CustomSpellEffectKind kind, string displayName, string requirementLabel, string note, int impact)
+        {
+            this.kind = kind;
+            this.displayName = displayName;
+            this.requirementLabel = requirementLabel;
+            this.note = note;
+            this.impact = impact;
+        }
+
+        public readonly CustomSpellEffectKind kind;
+        public readonly string displayName;
+        public readonly string requirementLabel;
+        public readonly string note;
+        public readonly int impact;
+        public bool IsValid => kind != CustomSpellEffectKind.None;
+    }
+
+    public static class CustomSpellEffectCatalog
+    {
+        public static CustomSpellEffectDefinition Resolve(SpellFamily baseFamily, SpellResult spell)
+        {
+            if (spell == null || !spell.isCustomShape)
+            {
+                return For(CustomSpellEffectKind.None);
+            }
+
+            return baseFamily switch
+            {
+                SpellFamily.Water when HasToken(spell, "hexagon") || IsEvent(spell, CustomShapeEventKind.Stun) => For(CustomSpellEffectKind.Ice),
+                SpellFamily.Fire when HasToken(spell, "line") || IsEvent(spell, CustomShapeEventKind.SlashDamage) => For(CustomSpellEffectKind.Electric),
+                SpellFamily.Water when HasToken(spell, "ellipse") || IsEvent(spell, CustomShapeEventKind.Barrier) => For(CustomSpellEffectKind.Cleanse),
+                SpellFamily.Fire when HasToken(spell, "star") || IsEvent(spell, CustomShapeEventKind.MagicAmplify) => For(CustomSpellEffectKind.Focus),
+                SpellFamily.Wind when HasToken(spell, "wave") || IsEvent(spell, CustomShapeEventKind.MoveSpeedBuff) => For(CustomSpellEffectKind.Flow),
+                SpellFamily.Life when IsEvent(spell, CustomShapeEventKind.DirectionalProjectile) && HasToken(spell, "rect") => For(CustomSpellEffectKind.LivingBridge),
+                SpellFamily.Life when HasToken(spell, "brace") || IsEvent(spell, CustomShapeEventKind.AttackBuff) => For(CustomSpellEffectKind.Connection),
+                SpellFamily.Wind when HasToken(spell, "rect") || IsEvent(spell, CustomShapeEventKind.WallEntity) => For(CustomSpellEffectKind.WindPlatform),
+                SpellFamily.Earth when HasToken(spell, "rect") || IsEvent(spell, CustomShapeEventKind.WallEntity) => For(CustomSpellEffectKind.Stability),
+                _ => For(CustomSpellEffectKind.None)
+            };
+        }
+
+        public static CustomSpellEffectDefinition For(CustomSpellEffectKind kind)
+        {
+            return kind switch
+            {
+                CustomSpellEffectKind.Ice => new(kind, "얼음", "물 + 육각형", "물이 육각 결정으로 굳어 발판과 제압 효과를 만듭니다.", 28),
+                CustomSpellEffectKind.Electric => new(kind, "전기", "불꽃 + 직선", "불꽃이 직선 경로를 타고 전류처럼 뻗습니다.", 34),
+                CustomSpellEffectKind.Cleanse => new(kind, "정화", "물 + 원", "둥근 물막이 오염을 씻어 내고 상태를 안정시킵니다.", 18),
+                CustomSpellEffectKind.Focus => new(kind, "집중", "불꽃 + 별", "별 모양 초점이 다음 타격이 모일 지점을 밝혀 줍니다.", 24),
+                CustomSpellEffectKind.Flow => new(kind, "흐름", "바람 + 물결", "바람이 물결 경로를 따라 이동 흐름을 만듭니다.", 20),
+                CustomSpellEffectKind.Connection => new(kind, "연결", "생명 + 중괄호", "생명 마법이 떨어진 대상을 묶는 연결감을 만듭니다.", 22),
+                CustomSpellEffectKind.Stability => new(kind, "안정", "땅 + 사각형", "사각 구조물이 흔들리는 바닥을 받쳐 안정시킵니다.", 16),
+                CustomSpellEffectKind.LivingBridge => new(kind, "생명 다리", "생명 + 화살표 + 사각형", "생명 마법이 사각 발판을 뻗어 낭떠러지를 잇습니다.", 0),
+                CustomSpellEffectKind.WindPlatform => new(kind, "바람 발판", "바람 + 사각형", "바람이 사각 발판을 띄워 건너갈 길을 만듭니다.", 0),
+                _ => new(CustomSpellEffectKind.None, "", "", "", 0)
+            };
+        }
+
+        public static string RequirementLabel(CustomSpellEffectKind kind)
+        {
+            var definition = For(kind);
+            return definition.IsValid ? definition.requirementLabel : "";
+        }
+
+        public static string Korean(CustomSpellEffectKind kind)
+        {
+            var definition = For(kind);
+            return definition.IsValid ? definition.displayName : "";
+        }
+
+        private static bool IsEvent(SpellResult spell, CustomShapeEventKind eventKind)
+        {
+            return Enum.TryParse<CustomShapeEventKind>(spell.customEventKind, out var parsed) && parsed == eventKind;
+        }
+
+        private static bool HasToken(SpellResult spell, string token)
+        {
+            var needle = token.ToLowerInvariant();
+            return Contains(spell.customShapeToken, needle) ||
+                   Contains(spell.customEventId, needle) ||
+                   Contains(spell.customEventLabel, needle) ||
+                   Contains(spell.customEventKind, needle);
+        }
+
+        private static bool Contains(string value, string needle)
+        {
+            return !string.IsNullOrWhiteSpace(value) &&
+                   value.ToLowerInvariant().Contains(needle);
+        }
+    }
+
     public sealed class CustomShapeEventDefinition
     {
         public CustomShapeEventDefinition(

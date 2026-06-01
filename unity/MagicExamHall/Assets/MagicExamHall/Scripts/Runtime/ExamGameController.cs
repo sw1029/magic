@@ -25,11 +25,14 @@ namespace MagicExamHall
         private static readonly Vector2 WestBookcasePosition = new(-7.25f, 1.1f);
         private static readonly IReadOnlyList<CustomShapeReferenceDefinition> CustomShapeReferences = new List<CustomShapeReferenceDefinition>
         {
-            new(SpellFamily.Wind, "질풍 화살", "arrow", new[] { "arrow", "wave" }, "끝점 방향으로 바람을 사출합니다."),
-            new(SpellFamily.Earth, "대지 벽", "rect", new[] { "rect" }, "사각 벽 구조물을 생성합니다."),
-            new(SpellFamily.Fire, "불꽃 별", "star", new[] { "star" }, "다음 마법을 강화합니다."),
-            new(SpellFamily.Water, "물막 원", "ellipse", new[] { "ellipse" }, "캐릭터를 감싸는 배리어를 생성합니다."),
-            new(SpellFamily.Life, "생명 가새", "brace", new[] { "brace" }, "지속 공격력 버프를 부여합니다.")
+            new(SpellFamily.Life, "생명 다리", "rect", new[] { "arrow", "rect" }, "화살표 방향으로 발판을 뻗어 낭떠러지를 잇습니다."),
+            new(SpellFamily.Water, "얼음 결정", "hexagon", new[] { "hexagon" }, "육각 결정으로 물을 얼려 지나갈 수 있게 합니다."),
+            new(SpellFamily.Earth, "대지 계단", "rect", new[] { "rect" }, "사각 구조물을 쌓아 경사를 오를 계단을 만듭니다."),
+            new(SpellFamily.Wind, "바람 발판", "rect", new[] { "rect" }, "사각 발판을 바람으로 띄워 건너갈 길을 만듭니다."),
+            new(SpellFamily.Fire, "전기 직선", "line", new[] { "line" }, "직선 경로로 전류 타격을 만듭니다."),
+            new(SpellFamily.Water, "정화 원", "ellipse", new[] { "ellipse" }, "둥근 물막으로 오염을 씻어 냅니다."),
+            new(SpellFamily.Fire, "집중 별", "star", new[] { "star" }, "별 모양 초점으로 타격을 한곳에 모읍니다."),
+            new(SpellFamily.Life, "연결 가새", "brace", new[] { "brace" }, "떨어진 대상을 생명력으로 묶어 연결합니다.")
         };
 
         [Header("Scene References")]
@@ -40,6 +43,8 @@ namespace MagicExamHall
         private readonly List<SealView> seals = new();
         private readonly List<ParticlePulse> pulses = new();
         private readonly List<CharacterBarrierView> defaultBarriers = new();
+        private readonly List<DamagePopupView> damagePopups = new();
+        private readonly List<StageGate> activeStageGates = new();
         private readonly List<GameObject> floorObjects = new();
         private readonly List<WorldStateGoal> activeGoals = new();
         private readonly List<HazardZone> activeHazards = new();
@@ -104,6 +109,9 @@ namespace MagicExamHall
         public int ActivePulseCountForTests => pulses.Count;
         public int ActiveDefaultBarrierCountForTests => defaultBarriers.Count;
         public Color LastDefaultBarrierColorForTests => defaultBarriers.Count == 0 ? Color.clear : defaultBarriers[^1].Color;
+        public int ActiveStageGateCountForTests => activeStageGates.Count;
+        public int ActiveDamagePopupCountForTests => damagePopups.Count;
+        public string LastDamagePopupTextForTests { get; private set; } = "";
         public string LastCustomShapeEventKindForTests { get; private set; } = "";
         public string LastCustomShapeEventLabelForTests { get; private set; } = "";
         public Vector2 LastCustomShapeEventDirectionForTests { get; private set; } = Vector2.right;
@@ -160,11 +168,13 @@ namespace MagicExamHall
             {
                 TickGameplayCancelInput();
                 TickPlayer();
+                TickStageGates();
             }
 
             TickSeals();
             TickPulses();
             TickDefaultBarriers();
+            TickDamagePopups();
             TickHazards();
             TickFloorAdvance();
             magicNote.Tick(Time.deltaTime);
@@ -559,11 +569,11 @@ namespace MagicExamHall
                 "Custom Reference Panel",
                 canvas.transform,
                 Vector2.zero,
-                new Vector2(700f, 454f),
+                new Vector2(760f, 610f),
                 Anchor.Center,
                 new Color(0.025f, 0.035f, 0.055f, 0.98f));
             AddPanelBorder(customReferencePanel, new Color(0.65f, 0.78f, 0.95f, 0.82f), 2f);
-            var title = CreateText("Custom Reference Panel Title", customReferencePanel, "반응층 도형 레퍼런스", 23, FontStyle.Bold, new Vector2(24f, -18f), new Vector2(460f, 34f), Anchor.TopLeft);
+            var title = CreateText("Custom Reference Panel Title", customReferencePanel, "커스텀 도형 레퍼런스", 23, FontStyle.Bold, new Vector2(24f, -18f), new Vector2(500f, 34f), Anchor.TopLeft);
             title.color = new Color(0.95f, 0.99f, 1f, 1f);
             CreateButton(
                 "Custom Reference Panel Close Button",
@@ -589,7 +599,7 @@ namespace MagicExamHall
                 14,
                 FontStyle.Bold,
                 new Vector2(24f, 22f),
-                new Vector2(652f, 24f),
+                new Vector2(712f, 24f),
                 Anchor.BottomLeft);
             customReferenceStatus.color = new Color(0.80f, 0.92f, 1f, 0.92f);
             customReferencePanel.gameObject.SetActive(false);
@@ -597,12 +607,12 @@ namespace MagicExamHall
 
         private void CreateCustomReferenceCard(CustomShapeReferenceDefinition reference, int index)
         {
-            var y = -66f - index * 68f;
+            var y = -64f - index * 60f;
             var card = CreatePanel(
                 $"Custom Reference Card {reference.family}",
                 customReferencePanel,
                 new Vector2(24f, y),
-                new Vector2(652f, 58f),
+                new Vector2(712f, 52f),
                 Anchor.TopLeft,
                 new Color(0.045f, 0.065f, 0.095f, 0.96f));
             AddPanelBorder(card, new Color(1f, 1f, 1f, 0.12f), 1f);
@@ -627,7 +637,7 @@ namespace MagicExamHall
                 12,
                 FontStyle.Normal,
                 new Vector2(62f, -31f),
-                new Vector2(420f, 20f),
+                new Vector2(470f, 18f),
                 Anchor.TopLeft);
             summary.color = new Color(0.82f, 0.88f, 0.94f, 0.90f);
             var capturedReference = reference;
@@ -637,7 +647,7 @@ namespace MagicExamHall
                 "들여오기",
                 13,
                 FontStyle.Bold,
-                new Vector2(532f, -10f),
+                new Vector2(592f, -8f),
                 new Vector2(104f, 38f),
                 Anchor.TopLeft,
                 new Color(0.10f, 0.24f, 0.38f, 0.98f),
@@ -694,7 +704,7 @@ namespace MagicExamHall
                 return;
             }
 
-            var onReferenceFloor = floorController.Current.number == CustomReferenceFloorNumber;
+            var onReferenceFloor = floorController.Current.number >= CustomReferenceFloorNumber && floorController.Current.number <= 4;
             var closeToShelf = onReferenceFloor && Vector2.Distance(player.position, WestBookcasePosition) <= CustomReferenceShelfRadius;
             var shouldShowBubble = closeToShelf &&
                                    !IsCustomReferencePanelOpenForTests &&
@@ -844,6 +854,15 @@ namespace MagicExamHall
             CreateWorldSprite("Northwest Candle", new Vector2(-6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
             CreateWorldSprite("Northeast Candle", new Vector2(6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
 
+            if (floor.number == 3)
+            {
+                BuildFloorThreeStageArt(floorRoot.transform);
+            }
+            else if (floor.number == 4)
+            {
+                BuildFloorFourCombatArt(floorRoot.transform);
+            }
+
             foreach (var goal in activeGoals)
             {
                 var body = CreateWorldSprite(goal.title, goal.position, Vector3.one * goal.visualScale, goal.color, Color.white, goal.kind, 3, false, Vector2.one, floorRoot.transform);
@@ -860,6 +879,90 @@ namespace MagicExamHall
             {
                 var body = CreateWorldSprite(hazard.title, hazard.position, Vector3.one * hazard.radius, hazard.color, new Color(1f, 1f, 1f, 0.6f), PixelSpriteKind.Pulse, 1, false, Vector2.one, floorRoot.transform);
                 hazard.body = body;
+            }
+        }
+
+        private void BuildFloorThreeStageArt(Transform parent)
+        {
+            AddStageGate(
+                "living_bridge",
+                "낭떠러지",
+                new Vector2(0f, -2.45f),
+                new Vector2(15.0f, 0.72f),
+                new Vector2(0f, -3.25f),
+                new Color(0.025f, 0.030f, 0.045f, 1f),
+                "앞의 낭떠러지는 발판 없이는 건널 수 없습니다. 생명 문양 위에 화살표와 사각 발판 도형을 얹으세요.",
+                parent);
+            AddStageGate(
+                "frozen_river",
+                "강",
+                new Vector2(0f, -0.62f),
+                new Vector2(15.0f, 0.64f),
+                new Vector2(0f, -1.34f),
+                new Color(0.05f, 0.23f, 0.38f, 1f),
+                "강물은 얼린 뒤 지나갈 수 있습니다. 물 문양 위에 육각형 도형을 얹으세요.",
+                parent);
+            AddStageGate(
+                "earth_stairs",
+                "가파른 길",
+                new Vector2(0f, 1.08f),
+                new Vector2(15.0f, 0.72f),
+                new Vector2(0f, 0.30f),
+                new Color(0.27f, 0.17f, 0.11f, 1f),
+                "가파른 길에는 계단이 필요합니다. 땅 문양 위에 사각형 도형을 얹으세요.",
+                parent);
+            AddStageGate(
+                "wind_platform",
+                "먼 발판",
+                new Vector2(0f, 2.78f),
+                new Vector2(15.0f, 0.64f),
+                new Vector2(0f, 2.05f),
+                new Color(0.06f, 0.12f, 0.16f, 1f),
+                "마지막 빈 공간은 떠 있는 발판으로 건넙니다. 바람 문양 위에 사각형 도형을 얹으세요.",
+                parent);
+        }
+
+        private void AddStageGate(
+            string requiredGoalId,
+            string title,
+            Vector2 center,
+            Vector2 size,
+            Vector2 resetPosition,
+            Color color,
+            string lockedNote,
+            Transform parent)
+        {
+            var body = CreateWorldSprite(
+                $"Stage Gate {title}",
+                center,
+                Vector3.one,
+                color,
+                Color.Lerp(color, Color.white, 0.22f),
+                PixelSpriteKind.FloorTile,
+                -3,
+                true,
+                size,
+                parent);
+            activeStageGates.Add(new StageGate(requiredGoalId, center, size, resetPosition, lockedNote, body));
+        }
+
+        private void BuildFloorFourCombatArt(Transform parent)
+        {
+            foreach (var goal in activeGoals)
+            {
+                var dummy = CreateWorldSprite(
+                    $"Training Target {goal.id}",
+                    goal.position + new Vector2(0f, -0.42f),
+                    Vector3.one * 0.78f,
+                    new Color(0.46f, 0.42f, 0.34f),
+                    goal.color,
+                    PixelSpriteKind.Target,
+                    1,
+                    false,
+                    Vector2.one,
+                    parent);
+                var renderer = dummy.GetComponent<SpriteRenderer>();
+                renderer.color = Color.Lerp(goal.color, Color.white, 0.34f);
             }
         }
 
@@ -903,7 +1006,8 @@ namespace MagicExamHall
         {
             trialCounter++;
             var now = Time.time;
-            if (HasActiveSeal(now))
+            var hadActiveSeal = HasActiveSeal(now);
+            if (hadActiveSeal)
             {
                 MarkPostSealInputSeen(now);
             }
@@ -917,6 +1021,16 @@ namespace MagicExamHall
                 now = now
             });
             LastPersonalizationSummaryForTests = recognition.personalization ?? TutorialPersonalizationSummary.Empty;
+            if (hadActiveSeal && TryApplyCustomShapeFollowup(recognition, out var customFollowup))
+            {
+                if (recognition.baseResult?.spell?.success == true)
+                {
+                    recognitionService.RecordAcceptedResult(recognition, now);
+                }
+
+                return customFollowup;
+            }
+
             var outcome = spellCasting.ProcessRecognitionResult(recognition, now);
             var processed = ApplySpellOutcome(outcome);
             if (outcome.kind == SpellCastOutcomeKind.BaseSucceeded || outcome.kind == SpellCastOutcomeKind.OverlaySucceeded)
@@ -925,6 +1039,74 @@ namespace MagicExamHall
             }
 
             return processed;
+        }
+
+        private bool TryApplyCustomShapeFollowup(StrokeRecognitionResult recognition, out ProcessedSpell processed)
+        {
+            processed = null;
+            if (recognition.kind != StrokeRecognitionKind.Base ||
+                recognition.baseResult?.spell?.isCustomShape != true)
+            {
+                return false;
+            }
+
+            var sealView = FindAttachableSeal(recognition.center);
+            if (sealView == null)
+            {
+                CurrentAssistLevel = 1;
+                LastHintText = "커스텀 도형은 먼저 만든 기본 문양의 빛나는 원 안에 얹어야 합니다.";
+                endingReport.RecordHintShown(1);
+                magicNote.Show(LastHintText);
+                ShowBaseResultSummary(recognition.baseResult, "커스텀 부착 실패", LastHintText);
+                LogBaseAttempt(recognition.baseResult, null, "custom_followup_detached");
+                processed = new ProcessedSpell { baseResult = recognition.baseResult };
+                return true;
+            }
+
+            processed = ApplyCustomShapeFollowup(sealView, recognition.baseResult, recognition.center);
+            return true;
+        }
+
+        private ProcessedSpell ApplyCustomShapeFollowup(SealView sealView, BaseRecognitionResult result, Vector2 center)
+        {
+            var seal = sealView.seal;
+            var customEffect = CustomSpellEffectCatalog.Resolve(seal.baseFamily, result.spell);
+            if (!customEffect.IsValid)
+            {
+                CurrentAssistLevel = 1;
+                LastHintText =
+                    $"{SpellLabels.Korean(seal.baseFamily)} 문양 위에서 지금 도형 조합은 특별한 반응을 만들지 못했습니다.\n" +
+                    "표식에 적힌 조합처럼 기본 문양을 먼저 만들고, 그 위에 맞는 커스텀 도형을 얹으세요.";
+                endingReport.RecordHintShown(1);
+                magicNote.Show(LastHintText);
+                ShowBaseResultSummary(result, "커스텀 반응 실패", LastHintText);
+                pulses.Add(new ParticlePulse(center, FamilyColor(seal.baseFamily), weak: true));
+                LogBaseAttempt(result, seal, "custom_effect_unmatched");
+                return new ProcessedSpell { baseResult = result };
+            }
+
+            var goalEffect = ApplyCustomSpellToGoals(seal, customEffect, center);
+            var eventNote = ApplyCustomShapeEvent(result, seal, center);
+            var note = $"{SpellLabels.Korean(seal.baseFamily)} 문양에 {result.spell.customShapeLabel}을 얹었습니다.\n{customEffect.note}";
+            if (!string.IsNullOrWhiteSpace(goalEffect.note))
+            {
+                note += $"\n{goalEffect.note}";
+            }
+
+            if (!string.IsNullOrWhiteSpace(eventNote))
+            {
+                note += $"\n{eventNote}";
+            }
+
+            CurrentAssistLevel = 0;
+            LastHintText = "";
+            magicNote.Show(note);
+            ShowBaseResultSummary(result, $"{customEffect.displayName} 반응", note);
+            pulses.Add(new ParticlePulse(center, FamilyColor(seal.baseFamily)));
+            LogBaseAttempt(result, seal, $"{goalEffect.worldEffect}|{customEffect.kind}");
+            EvaluateFloorCompletion();
+            ConsumeSeal(sealView);
+            return new ProcessedSpell { baseResult = result };
         }
 
         private bool HasActiveSeal(float now)
@@ -1216,6 +1398,20 @@ namespace MagicExamHall
             return Vector2.Distance(center, seal.worldCenter) <= SpellCastingService.AttachRadiusFor(seal);
         }
 
+        private void ConsumeSeal(SealView sealView)
+        {
+            if (sealView == null)
+            {
+                return;
+            }
+
+            seals.Remove(sealView);
+            if (sealView.root != null)
+            {
+                Destroy(sealView.root);
+            }
+        }
+
         private GoalEffect ApplyBaseToGoals(BaseRecognitionResult result, SpellFamily family, Vector2 center)
         {
             var resolution = floorGoals.ResolveBase(activeGoals, family, center, result?.spell?.isCustomShape == true);
@@ -1232,12 +1428,47 @@ namespace MagicExamHall
                     "custom_required");
             }
 
+            if (resolution.kind == GoalResolutionKind.CustomEffectRequired)
+            {
+                return new GoalEffect(
+                    $"{resolution.targetGoal.title} 표식은 기본 문양만으로는 열리지 않습니다.\n" +
+                    $"{resolution.targetGoal.RequirementLabel} 조합이 되도록 기본 문양 위에 커스텀 도형을 얹으세요.",
+                    "custom_effect_required");
+            }
+
             if (resolution.kind == GoalResolutionKind.BaseOffTarget)
             {
                 return new GoalEffect(BuildBaseOffTargetGoalNote(family, resolution.targetGoal, resolution.distance, resolution.radius), resolution.worldEffect);
             }
 
             return new GoalEffect($"{SpellLabels.Korean(family)} seal이 바닥에 잠깐 고정되었습니다.", "seal_only");
+        }
+
+        private GoalEffect ApplyCustomSpellToGoals(
+            CompiledSeal seal,
+            CustomSpellEffectDefinition customEffect,
+            Vector2 center)
+        {
+            var resolution = floorGoals.ResolveBase(activeGoals, seal.baseFamily, center, true, customEffect.kind);
+            if (resolution.kind == GoalResolutionKind.Completed)
+            {
+                ActivateGoal(resolution.goal, customEffect.kind.ToString().ToLowerInvariant());
+                return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id);
+            }
+
+            if (resolution.kind == GoalResolutionKind.CustomEffectRequired)
+            {
+                return new GoalEffect(
+                    $"{resolution.targetGoal.title}에는 {resolution.targetGoal.RequirementLabel} 조합이 필요합니다.",
+                    "custom_effect_mismatch");
+            }
+
+            if (resolution.kind == GoalResolutionKind.BaseOffTarget)
+            {
+                return new GoalEffect(BuildBaseOffTargetGoalNote(seal.baseFamily, resolution.targetGoal, resolution.distance, resolution.radius), resolution.worldEffect);
+            }
+
+            return new GoalEffect($"{customEffect.displayName} 반응이 만들어졌지만 아직 맞는 표식에 닿지 않았습니다.", "custom_effect_only");
         }
 
         private string ApplyCustomShapeEvent(BaseRecognitionResult result, CompiledSeal seal, Vector2 center)
@@ -1470,6 +1701,21 @@ namespace MagicExamHall
                 case WorldReactionKind.HazardStabilizer:
                     StabilizeHazardReaction(goal);
                     break;
+                case WorldReactionKind.LivingBridge:
+                    CreateLivingBridgeReaction(goal);
+                    break;
+                case WorldReactionKind.FreezeRiver:
+                    CreateFrozenRiverReaction(goal);
+                    break;
+                case WorldReactionKind.EarthStairs:
+                    CreateEarthStairsReaction(goal);
+                    break;
+                case WorldReactionKind.WindPlatform:
+                    CreateWindPlatformReaction(goal);
+                    break;
+                case WorldReactionKind.CombatHit:
+                    CreateCombatHitReaction(goal);
+                    break;
             }
         }
 
@@ -1522,6 +1768,83 @@ namespace MagicExamHall
                 PixelSpriteKind.Target,
                 6);
             floorObjects.Add(pin);
+        }
+
+        private void CreateLivingBridgeReaction(WorldStateGoal goal)
+        {
+            CreateStagePath(goal, "생명 다리", new Vector2(0f, -2.45f), new Vector2(5.8f, 0.46f), new Color(0.16f, 0.52f, 0.28f), PixelSpriteKind.Rug);
+            CreateStageNode(goal, goal.position + new Vector2(0.62f, 0.12f), PixelSpriteKind.LifeRune);
+        }
+
+        private void CreateFrozenRiverReaction(WorldStateGoal goal)
+        {
+            CreateStagePath(goal, "얼음길", new Vector2(0f, -0.62f), new Vector2(5.9f, 0.50f), new Color(0.48f, 0.84f, 1f), PixelSpriteKind.FloorTile);
+            CreateStageNode(goal, goal.position + new Vector2(0.58f, 0.12f), PixelSpriteKind.WaterRune);
+        }
+
+        private void CreateEarthStairsReaction(WorldStateGoal goal)
+        {
+            for (var index = 0; index < 5; index++)
+            {
+                var step = CreateWorldSprite(
+                    $"Earth Step {index + 1}",
+                    new Vector2(-1.0f + index * 0.52f, 0.86f + index * 0.10f),
+                    Vector3.one,
+                    new Color(0.58f, 0.42f, 0.24f),
+                    Color.Lerp(goal.color, Color.white, 0.35f),
+                    PixelSpriteKind.WallTrim,
+                    -2,
+                    true,
+                    new Vector2(0.72f, 0.22f));
+                floorObjects.Add(step);
+            }
+
+            CreateStageNode(goal, goal.position + new Vector2(0.48f, 0.1f), PixelSpriteKind.EarthRune);
+        }
+
+        private void CreateWindPlatformReaction(WorldStateGoal goal)
+        {
+            CreateStagePath(goal, "바람 발판", new Vector2(0f, 2.78f), new Vector2(3.8f, 0.38f), new Color(0.54f, 0.80f, 0.92f), PixelSpriteKind.Rug);
+            CreateStageNode(goal, goal.position + new Vector2(0.50f, 0.08f), PixelSpriteKind.WindRune);
+        }
+
+        private void CreateStagePath(WorldStateGoal goal, string title, Vector2 position, Vector2 size, Color color, PixelSpriteKind kind)
+        {
+            var path = CreateWorldSprite(
+                title,
+                position,
+                Vector3.one,
+                color,
+                Color.Lerp(color, Color.white, 0.42f),
+                kind,
+                -1,
+                true,
+                size);
+            floorObjects.Add(path);
+            pulses.Add(new ParticlePulse(position, goal.color, scaleMultiplier: 1.4f, durationSeconds: 1.1f, sortingOrder: 8));
+        }
+
+        private void CreateStageNode(WorldStateGoal goal, Vector2 position, PixelSpriteKind kind)
+        {
+            var node = CreateWorldSprite(
+                $"Stage Node {goal.id}",
+                position,
+                Vector3.one * 0.52f,
+                goal.color,
+                Color.white,
+                kind,
+                6);
+            floorObjects.Add(node);
+        }
+
+        private void CreateCombatHitReaction(WorldStateGoal goal)
+        {
+            var impact = goal.requiredCustomSpell.HasValue
+                ? CustomSpellEffectCatalog.For(goal.requiredCustomSpell.Value).impact
+                : 20;
+            var label = impact > 0 ? $"-{impact}" : "효과";
+            ShowDamagePopup(goal.position + new Vector2(0f, 0.56f), label, goal.color);
+            pulses.Add(new ParticlePulse(goal.position, goal.color, scaleMultiplier: 0.9f, durationSeconds: 0.55f, sortingOrder: 20));
         }
 
         private void EvaluateFloorCompletion()
@@ -1649,6 +1972,48 @@ namespace MagicExamHall
             velocity = Vector2.Lerp(velocity, input * 4.2f, Time.deltaTime * 12f);
             player.position += (Vector3)(velocity * Time.deltaTime);
             player.position = new Vector3(Mathf.Clamp(player.position.x, -7.35f, 7.35f), Mathf.Clamp(player.position.y, -4.25f, 4.25f), 0f);
+        }
+
+        private void TickStageGates()
+        {
+            if (floorController.Current.number != 3 || activeStageGates.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var gate in activeStageGates)
+            {
+                var goal = activeGoals.FirstOrDefault(item => item.id == gate.requiredGoalId);
+                if (goal?.completed == true)
+                {
+                    gate.Open();
+                    continue;
+                }
+
+                if (!gate.Contains(player.position))
+                {
+                    continue;
+                }
+
+                player.position = gate.resetPosition;
+                velocity = Vector2.zero;
+                magicNote.Show(gate.lockedNote);
+                pulses.Add(new ParticlePulse(gate.center, new Color(0.72f, 0.88f, 1f), weak: true));
+                return;
+            }
+        }
+
+        private void TickDamagePopups()
+        {
+            for (var index = damagePopups.Count - 1; index >= 0; index--)
+            {
+                var popup = damagePopups[index];
+                if (!popup.Tick(Time.deltaTime))
+                {
+                    popup.Destroy();
+                    damagePopups.RemoveAt(index);
+                }
+            }
         }
 
         private void TickHazards()
@@ -2064,10 +2429,24 @@ namespace MagicExamHall
                 barrier.Destroy();
             }
             defaultBarriers.Clear();
+            foreach (var popup in damagePopups)
+            {
+                popup.Destroy();
+            }
+            damagePopups.Clear();
+            activeStageGates.Clear();
             CustomShapeEventObjectCountForTests = 0;
+            LastDamagePopupTextForTests = "";
             LastCustomShapeEventKindForTests = "";
             LastCustomShapeEventLabelForTests = "";
             LastCustomShapeEventDirectionForTests = Vector2.right;
+        }
+
+        private void ShowDamagePopup(Vector2 position, string text, Color color)
+        {
+            var popup = new DamagePopupView(position, text, color, uiFont);
+            damagePopups.Add(popup);
+            LastDamagePopupTextForTests = text;
         }
 
         private GameObject CreateWorldSprite(string name, Vector2 position, Vector3 scale, Color primary, Color secondary, PixelSpriteKind kind, int sortingOrder, bool tiled = false, Vector2 tiledSize = default, Transform parent = null)
@@ -2411,6 +2790,111 @@ namespace MagicExamHall
                 this.scaleMultiplier = scaleMultiplier;
                 this.durationSeconds = durationSeconds;
                 this.sortingOrder = sortingOrder;
+            }
+        }
+
+        private sealed class StageGate
+        {
+            private readonly Vector2 halfSize;
+            private bool opened;
+
+            public StageGate(string requiredGoalId, Vector2 center, Vector2 size, Vector2 resetPosition, string lockedNote, GameObject body)
+            {
+                this.requiredGoalId = requiredGoalId;
+                this.center = center;
+                this.resetPosition = resetPosition;
+                this.lockedNote = lockedNote;
+                this.body = body;
+                halfSize = size * 0.5f;
+            }
+
+            public readonly string requiredGoalId;
+            public readonly Vector2 center;
+            public readonly Vector2 resetPosition;
+            public readonly string lockedNote;
+            public readonly GameObject body;
+
+            public bool Contains(Vector2 position)
+            {
+                return Mathf.Abs(position.x - center.x) <= halfSize.x &&
+                       Mathf.Abs(position.y - center.y) <= halfSize.y;
+            }
+
+            public void Open()
+            {
+                if (opened || body == null)
+                {
+                    return;
+                }
+
+                opened = true;
+                var renderer = body.GetComponent<SpriteRenderer>();
+                if (renderer != null)
+                {
+                    renderer.color = new Color(1f, 1f, 1f, 0.36f);
+                }
+            }
+        }
+
+        private sealed class DamagePopupView
+        {
+            private readonly Text text;
+            private readonly Color color;
+            private float age;
+
+            public DamagePopupView(Vector2 position, string value, Color color, Font font)
+            {
+                this.color = color;
+                root = new GameObject("Damage Popup");
+                root.transform.position = position;
+                var canvas = root.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.WorldSpace;
+                canvas.overrideSorting = true;
+                canvas.sortingOrder = 64;
+                var rect = root.GetComponent<RectTransform>() ?? root.AddComponent<RectTransform>();
+                rect.sizeDelta = new Vector2(96f, 42f);
+                root.transform.localScale = Vector3.one * 0.017f;
+
+                var textObject = new GameObject("Damage Popup Text");
+                textObject.transform.SetParent(root.transform, false);
+                var textRect = textObject.AddComponent<RectTransform>();
+                textRect.anchorMin = Vector2.zero;
+                textRect.anchorMax = Vector2.one;
+                textRect.offsetMin = Vector2.zero;
+                textRect.offsetMax = Vector2.zero;
+                text = textObject.AddComponent<Text>();
+                text.font = font;
+                text.fontSize = 28;
+                text.fontStyle = FontStyle.Bold;
+                text.alignment = TextAnchor.MiddleCenter;
+                text.color = Color.Lerp(color, Color.white, 0.18f);
+                text.text = value;
+                text.raycastTarget = false;
+            }
+
+            public readonly GameObject root;
+
+            public bool Tick(float deltaTime)
+            {
+                if (root == null)
+                {
+                    return false;
+                }
+
+                age += deltaTime;
+                var t = Mathf.Clamp01(age / 0.95f);
+                root.transform.position += Vector3.up * (deltaTime * 0.62f);
+                root.transform.localScale = Vector3.one * Mathf.Lerp(0.017f, 0.022f, t);
+                text.color = new Color(color.r, color.g, color.b, Mathf.Lerp(1f, 0f, t));
+                return t < 1f;
+            }
+
+            public void Destroy()
+            {
+                if (root != null)
+                {
+                    UnityEngine.Object.Destroy(root);
+                }
             }
         }
 
@@ -2827,41 +3311,35 @@ namespace MagicExamHall
                 new()
                 {
                     number = 3,
-                    title = "흐름층",
-                    objective = "base + overlay 조합으로 끊어진 공중 다리의 네 흐름 경로를 연결하세요.",
-                    entryNote = "노트: 길은 하나가 아니다. 조합이 맞으면 흐름이 다리처럼 이어진다.",
-                    completeNote = "네 흐름 경로가 이어져 발밑에 공중 다리가 생겼습니다.",
+                    title = "건널목층",
+                    objective = "기본 문양 위에 커스텀 도형을 얹어 네 구간의 길을 직접 만드세요.",
+                    entryNote = "노트: 먼저 기본 문양을 만들고, 그 빛나는 원 안에 필요한 도형을 얹으면 길이 생긴다.",
+                    completeNote = "네 구간의 길이 모두 열렸습니다.",
                     accentColor = new Color(0.48f, 0.8f, 0.92f),
                     rugColor = new Color(0.12f, 0.34f, 0.42f),
                     goals =
                     {
-                        WorldStateGoal.Combo("brace_bridge", "보강 지지대", SpellFamily.Earth, OverlayOperator.SteelBrace, new Vector2(-4.6f, 1.8f), new Color(0.74f, 0.55f, 0.32f), "땅과 보강이 공중 다리의 첫 흐름을 받쳐 줍니다.").WithReaction(WorldReactionKind.BridgeFlow),
-                        WorldStateGoal.Combo("axis_bridge", "축 정렬 발판", SpellFamily.Wind, OverlayOperator.MartialAxis, new Vector2(4.6f, 1.8f), new Color(0.74f, 0.86f, 0.92f), "바람과 축이 공중 다리의 방향을 맞추며 경로를 엽니다.").WithReaction(WorldReactionKind.BridgeFlow),
-                        WorldStateGoal.Combo("vine_bridge", "덩굴 고리", SpellFamily.Life, OverlayOperator.SoulDot, new Vector2(-3.2f, -2.3f), new Color(0.35f, 0.86f, 0.42f), "생명과 집중이 다리 아래를 묶는 흐름 고리를 만듭니다.").WithReaction(WorldReactionKind.BridgeFlow),
-                        WorldStateGoal.Combo("ice_bridge", "얼음 다리", SpellFamily.Water, OverlayOperator.IceBar, new Vector2(3.2f, -2.3f), new Color(0.48f, 0.84f, 1f), "물과 얼음이 빛나는 발판을 굳혀 공중 다리를 완성합니다.").WithReaction(WorldReactionKind.BridgeFlow)
+                        WorldStateGoal.CustomSpell("living_bridge", "낭떠러지 다리", SpellFamily.Life, CustomSpellEffectKind.LivingBridge, new Vector2(2.85f, -3.02f), new Color(0.35f, 0.86f, 0.42f), "생명 사출 발판이 낭떠러지를 이어 줍니다.").WithReaction(WorldReactionKind.LivingBridge),
+                        WorldStateGoal.CustomSpell("frozen_river", "강 얼리기", SpellFamily.Water, CustomSpellEffectKind.Ice, new Vector2(-1.75f, -1.18f), new Color(0.48f, 0.84f, 1f), "강물이 얼어 안전한 얼음길이 됩니다.").WithReaction(WorldReactionKind.FreezeRiver),
+                        WorldStateGoal.CustomSpell("earth_stairs", "계단 만들기", SpellFamily.Earth, CustomSpellEffectKind.Stability, new Vector2(1.75f, 0.42f), new Color(0.74f, 0.55f, 0.32f), "대지 구조물이 가파른 길 위에 계단처럼 쌓입니다.").WithReaction(WorldReactionKind.EarthStairs),
+                        WorldStateGoal.CustomSpell("wind_platform", "바람 발판", SpellFamily.Wind, CustomSpellEffectKind.WindPlatform, new Vector2(4.65f, 2.15f), new Color(0.74f, 0.86f, 0.92f), "바람이 사각 발판을 띄워 마지막 빈 공간을 건널 수 있게 합니다.").WithReaction(WorldReactionKind.WindPlatform)
                     }
                 },
                 new()
                 {
                     number = 4,
-                    title = "균열층",
-                    objective = "위험한 균열을 피해 폭주 지점을 하나씩 고정하고 안전 지점을 늘리세요.",
-                    entryNote = "노트: 같은 조합도 여기서는 길을 잇지 않고 균열을 붙잡는다.",
-                    completeNote = "균열의 박동이 잦아들고 안전 지점들이 통로를 붙잡습니다.",
+                    title = "타격층",
+                    objective = "훈련 표적에 기본 문양과 커스텀 도형 조합을 사용해 반응과 피해 표시를 확인하세요.",
+                    entryNote = "노트: 표적은 어려운 말을 쓰지 않는다. 필요한 조합을 만들면 바로 반응과 숫자로 보여 준다.",
+                    completeNote = "네 표적이 모두 반응했습니다.",
                     accentColor = new Color(1f, 0.42f, 0.28f),
                     rugColor = new Color(0.42f, 0.10f, 0.16f),
                     goals =
                     {
-                        WorldStateGoal.Combo("earth_stable", "흔들림 고정", SpellFamily.Earth, OverlayOperator.SteelBrace, new Vector2(-5.2f, 2.4f), new Color(0.74f, 0.55f, 0.32f), "땅과 보강이 이번에는 공중 다리가 아니라 균열 가장자리를 고정합니다. 새 안전 지점이 생깁니다.").WithReaction(WorldReactionKind.HazardStabilizer),
-                        WorldStateGoal.Overlay("ice_still", "냉각 정지", OverlayOperator.IceBar, new Vector2(-1.7f, 2.9f), new Color(0.48f, 0.84f, 1f), "얼음 막대가 폭주의 열을 낮추고 가까운 균열 반경을 줄입니다.").WithReaction(WorldReactionKind.HazardStabilizer),
-                        WorldStateGoal.Overlay("void_split", "오염 분리", OverlayOperator.VoidCut, new Vector2(1.8f, 2.9f), new Color(0.58f, 0.42f, 0.92f), "절단이 위험한 흐름을 끊어 내며 재시작 위치를 앞으로 당깁니다.").WithReaction(WorldReactionKind.HazardStabilizer),
-                        WorldStateGoal.Overlay("fork_ground", "전도 분산", OverlayOperator.ElectricFork, new Vector2(5.2f, 2.4f), new Color(1f, 0.9f, 0.22f), "번개 갈래가 남은 전하를 흩고 균열의 위협을 더 작게 만듭니다.").WithReaction(WorldReactionKind.HazardStabilizer)
-                    },
-                    hazards =
-                    {
-                        new HazardZone("Crack West", new Vector2(-3.1f, -0.4f), 1.1f, new Color(1f, 0.18f, 0.15f)),
-                        new HazardZone("Crack Center", new Vector2(0.3f, -0.1f), 1.25f, new Color(1f, 0.18f, 0.15f)),
-                        new HazardZone("Crack East", new Vector2(3.7f, -0.55f), 1.05f, new Color(1f, 0.18f, 0.15f))
+                        WorldStateGoal.CustomSpell("ice_training", "얼음 제압", SpellFamily.Water, CustomSpellEffectKind.Ice, new Vector2(-4.8f, 1.55f), new Color(0.48f, 0.84f, 1f), "얼음 반응이 표적의 움직임을 늦춥니다.").WithReaction(WorldReactionKind.CombatHit),
+                        WorldStateGoal.CustomSpell("electric_training", "전기 타격", SpellFamily.Fire, CustomSpellEffectKind.Electric, new Vector2(-1.6f, 2.15f), new Color(1f, 0.9f, 0.22f), "직선 전류가 표적을 빠르게 때립니다.").WithReaction(WorldReactionKind.CombatHit),
+                        WorldStateGoal.CustomSpell("cleanse_training", "정화 해제", SpellFamily.Water, CustomSpellEffectKind.Cleanse, new Vector2(1.6f, 2.15f), new Color(0.24f, 0.48f, 0.86f), "둥근 물막이 표적의 오염 효과를 씻어 냅니다.").WithReaction(WorldReactionKind.CombatHit),
+                        WorldStateGoal.CustomSpell("stable_training", "방벽 시험", SpellFamily.Earth, CustomSpellEffectKind.Stability, new Vector2(4.8f, 1.55f), new Color(0.74f, 0.55f, 0.32f), "사각 구조물이 표적 앞에 엄폐물을 세웁니다.").WithReaction(WorldReactionKind.CombatHit)
                     }
                 },
                 new()
@@ -2901,6 +3379,7 @@ namespace MagicExamHall
         public OverlayOperator? requiredOverlay;
         public SpellFamily? comboBase;
         public OverlayOperator? comboOverlay;
+        public CustomSpellEffectKind? requiredCustomSpell;
         public string discoveryNote;
         public WorldReactionKind reactionKind;
         public bool requiresCustomShape;
@@ -2934,6 +3413,14 @@ namespace MagicExamHall
         {
             var goal = Base(id, title, family, position, color, note);
             goal.requiresCustomShape = true;
+            goal.visualScale = 0.92f;
+            return goal;
+        }
+
+        public static WorldStateGoal CustomSpell(string id, string title, SpellFamily family, CustomSpellEffectKind effect, Vector2 position, Color color, string note)
+        {
+            var goal = Base(id, title, family, position, color, note);
+            goal.requiredCustomSpell = effect;
             goal.visualScale = 0.92f;
             return goal;
         }
@@ -2983,6 +3470,11 @@ namespace MagicExamHall
 
                 if (requiredBase.HasValue)
                 {
+                    if (requiredCustomSpell.HasValue)
+                    {
+                        return CustomSpellEffectCatalog.RequirementLabel(requiredCustomSpell.Value);
+                    }
+
                     return requiresCustomShape
                         ? $"커스텀 {SpellLabels.Korean(requiredBase.Value)}"
                         : SpellLabels.Korean(requiredBase.Value);
@@ -3039,6 +3531,7 @@ namespace MagicExamHall
                 requiredOverlay = requiredOverlay,
                 comboBase = comboBase,
                 comboOverlay = comboOverlay,
+                requiredCustomSpell = requiredCustomSpell,
                 reactionKind = reactionKind,
                 requiresCustomShape = requiresCustomShape,
                 radius = radius,
@@ -3051,7 +3544,12 @@ namespace MagicExamHall
     {
         None,
         BridgeFlow,
-        HazardStabilizer
+        HazardStabilizer,
+        LivingBridge,
+        FreezeRiver,
+        EarthStairs,
+        WindPlatform,
+        CombatHit
     }
 
     public sealed class HazardZone

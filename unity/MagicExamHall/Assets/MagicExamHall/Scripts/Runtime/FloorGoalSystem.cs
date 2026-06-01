@@ -9,6 +9,7 @@ namespace MagicExamHall
         Completed,
         BaseOffTarget,
         CustomRequired,
+        CustomEffectRequired,
         SealOnly,
         OverlayStackOnly
     }
@@ -25,7 +26,12 @@ namespace MagicExamHall
 
     public sealed class FloorGoalSystem
     {
-        public GoalResolution ResolveBase(IReadOnlyList<WorldStateGoal> activeGoals, SpellFamily family, Vector2 center, bool isCustomShape = false)
+        public GoalResolution ResolveBase(
+            IReadOnlyList<WorldStateGoal> activeGoals,
+            SpellFamily family,
+            Vector2 center,
+            bool isCustomShape = false,
+            CustomSpellEffectKind customEffect = CustomSpellEffectKind.None)
         {
             foreach (var goal in activeGoals.Where(goal => !goal.completed))
             {
@@ -38,6 +44,18 @@ namespace MagicExamHall
                             kind = GoalResolutionKind.CustomRequired,
                             targetGoal = goal,
                             worldEffect = "custom_required",
+                            distance = Vector2.Distance(center, goal.position),
+                            radius = goal.radius
+                        };
+                    }
+
+                    if (goal.requiredCustomSpell.HasValue && goal.requiredCustomSpell.Value != customEffect)
+                    {
+                        return new GoalResolution
+                        {
+                            kind = GoalResolutionKind.CustomEffectRequired,
+                            targetGoal = goal,
+                            worldEffect = "custom_effect_required",
                             distance = Vector2.Distance(center, goal.position),
                             radius = goal.radius
                         };

@@ -28,6 +28,18 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void CustomSpellEffectsResolveFromBaseAndIncludedShape()
+        {
+            AssertEffect(SpellFamily.Water, "hexagon", CustomShapeEventKind.Stun, CustomSpellEffectKind.Ice);
+            AssertEffect(SpellFamily.Fire, "line", CustomShapeEventKind.SlashDamage, CustomSpellEffectKind.Electric);
+            AssertEffect(SpellFamily.Water, "ellipse", CustomShapeEventKind.Barrier, CustomSpellEffectKind.Cleanse);
+            AssertEffect(SpellFamily.Fire, "star", CustomShapeEventKind.MagicAmplify, CustomSpellEffectKind.Focus);
+            AssertEffect(SpellFamily.Wind, "wave", CustomShapeEventKind.MoveSpeedBuff, CustomSpellEffectKind.Flow);
+            AssertEffect(SpellFamily.Life, "brace", CustomShapeEventKind.AttackBuff, CustomSpellEffectKind.Connection);
+            AssertEffect(SpellFamily.Earth, "rect", CustomShapeEventKind.WallEntity, CustomSpellEffectKind.Stability);
+        }
+
+        [Test]
         public void ArrowOperatorOnlyUsesEndpointDirectionAsAttributeLaser()
         {
             var strokes = LineStrokes(Vector2.zero, new Vector2(2f, 0f));
@@ -293,6 +305,26 @@ namespace MagicExamHall.Tests
         {
             path = Path.Combine(Path.GetTempPath(), $"magic-custom-shapes-{Guid.NewGuid():N}.json");
             return new CustomShapeProfileStore(path);
+        }
+
+        private static void AssertEffect(
+            SpellFamily baseFamily,
+            string token,
+            CustomShapeEventKind eventKind,
+            CustomSpellEffectKind expected)
+        {
+            var spell = new SpellResult
+            {
+                isCustomShape = true,
+                customShapeToken = token,
+                customEventId = $"{token}_{eventKind.ToString().ToLowerInvariant()}",
+                customEventKind = eventKind.ToString()
+            };
+
+            var effect = CustomSpellEffectCatalog.Resolve(baseFamily, spell);
+
+            Assert.That(effect.kind, Is.EqualTo(expected));
+            Assert.That(effect.requirementLabel, Is.Not.Empty);
         }
 
         private static IReadOnlyList<IReadOnlyList<StrokeSample>> Samples(SpellFamily family)

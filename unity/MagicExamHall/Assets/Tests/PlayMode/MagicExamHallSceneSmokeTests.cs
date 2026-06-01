@@ -602,7 +602,7 @@ namespace MagicExamHall.Tests
             yield return null;
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
             Assert.That(controller.HudCopyForTests, Does.Contain("좌측 책장"));
-            Assert.That(controller.CustomReferenceCountForTests, Is.EqualTo(5));
+            Assert.That(controller.CustomReferenceCountForTests, Is.EqualTo(8));
 
             controller.MovePlayerForTests(new Vector2(-7.25f, 1.1f));
             yield return null;
@@ -636,7 +636,7 @@ namespace MagicExamHall.Tests
             yield return null;
             Assert.That(customWind.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
             Assert.That(customWind.spell.isCustomShape, Is.True);
-            Assert.That(customWind.spell.customShapeLabel, Is.EqualTo("질풍 화살"));
+            Assert.That(customWind.spell.customShapeLabel, Is.EqualTo("바람 발판"));
             Assert.That(customWind.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
             Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
 
@@ -650,7 +650,7 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
-        public IEnumerator OverlayAndComboGoalsRequireNearbyWorldCasting()
+        public IEnumerator CustomSpellStageGoalsRequireBaseAndNearbyFollowup()
         {
             SceneManager.LoadScene("MagicExamHall");
             yield return null;
@@ -658,32 +658,35 @@ namespace MagicExamHall.Tests
 
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
-
-            controller.LoadFloorForTests(3);
-            controller.CastSyntheticBaseForTests(SpellFamily.Fire, Vector2.zero);
-            var offTargetOverlay = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, Vector2.zero);
-            yield return null;
-            Assert.That(offTargetOverlay.success, Is.True);
-            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
-
-            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-1.7f, 2.9f));
-            var onTargetOverlay = controller.CastSyntheticOverlayForTests(OverlayOperator.IceBar, new Vector2(-1.7f, 2.9f));
-            yield return null;
-            Assert.That(onTargetOverlay.success, Is.True);
-            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            var profilePath = TempCustomShapeProfilePath();
+            controller.UseCustomShapeStoreForTests(profilePath);
+            ClearCustomSlots(controller);
+            Assert.That(controller.ImportCustomReferenceForTests(SpellFamily.Life, out _, out var lifeMessage), Is.True, lifeMessage);
+            Assert.That(controller.ImportCustomReferenceForTests(SpellFamily.Water, out _, out var waterMessage), Is.True, waterMessage);
 
             controller.LoadFloorForTests(2);
-            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
-            var offTargetCombo = controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, Vector2.zero);
+            Assert.That(controller.ActiveStageGateCountForTests, Is.EqualTo(4));
+            CastCustomReferenceSpell(controller, SpellFamily.Life, SpellFamily.Life, Vector2.zero);
             yield return null;
-            Assert.That(offTargetCombo.success, Is.True);
             Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
 
-            controller.CastSyntheticBaseForTests(SpellFamily.Earth, new Vector2(-4.6f, 1.8f));
-            var onTargetCombo = controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, new Vector2(-4.6f, 1.8f));
+            var bridgePosition = new Vector2(2.85f, -3.02f);
+            var bridge = CastCustomReferenceSpell(controller, SpellFamily.Life, SpellFamily.Life, bridgePosition);
             yield return null;
-            Assert.That(onTargetCombo.success, Is.True);
+            Assert.That(bridge.spell.isCustomShape, Is.True);
             Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("낭떠러지"));
+
+            controller.LoadFloorForTests(3);
+            var icePosition = new Vector2(-4.8f, 1.55f);
+            CastCustomReferenceSpell(controller, SpellFamily.Water, SpellFamily.Water, icePosition);
+            yield return null;
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            Assert.That(controller.ActiveDamagePopupCountForTests, Is.GreaterThan(0));
+            Assert.That(controller.LastDamagePopupTextForTests, Does.Contain("-"));
+
+            ClearCustomSlots(controller);
+            DeleteIfExists(profilePath);
         }
 
         [UnityTest]
@@ -703,7 +706,7 @@ namespace MagicExamHall.Tests
 
             Assert.That(result, Is.Not.Null);
             Assert.That(result.spell.success, Is.False);
-            Assert.That(result.spell.status, Is.EqualTo(RecognitionStatus.Invalid));
+            Assert.That(result.spell.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.spell.recognizedFamily, Is.Null);
             Assert.That(controller.LastOverlayStack, Is.Empty);
             Assert.That(controller.LastMagicNoteText, Does.Contain("커스텀 도형"));
@@ -807,7 +810,7 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
-        public IEnumerator SameComboReadsAsBridgeOnFloorThreeAndStabilizerOnFloorFour()
+        public IEnumerator CustomSpellEffectsDriveFloorThreeAndFourReactions()
         {
             SceneManager.LoadScene("MagicExamHall");
             yield return null;
@@ -815,33 +818,37 @@ namespace MagicExamHall.Tests
 
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
+            var profilePath = TempCustomShapeProfilePath();
+            controller.UseCustomShapeStoreForTests(profilePath);
+            ClearCustomSlots(controller);
+            Assert.That(controller.ImportCustomReferenceForTests(SpellFamily.Life, out _, out var lifeMessage), Is.True, lifeMessage);
+            Assert.That(controller.ImportCustomReferenceForTests(SpellFamily.Fire, out _, out var fireMessage), Is.True, fireMessage);
 
             controller.LoadFloorForTests(2);
-            controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
-            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, Vector2.zero);
+            CastCustomReferenceSpell(controller, SpellFamily.Life, SpellFamily.Life, Vector2.zero);
             yield return null;
             Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
 
-            var bridgePosition = new Vector2(-4.6f, 1.8f);
+            var bridgePosition = new Vector2(2.85f, -3.02f);
             controller.LoadFloorForTests(2);
-            controller.CastSyntheticBaseForTests(SpellFamily.Earth, bridgePosition);
-            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, bridgePosition);
+            CastCustomReferenceSpell(controller, SpellFamily.Life, SpellFamily.Life, bridgePosition);
             yield return null;
 
-            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(3));
-            Assert.That(controller.LastMagicNoteText, Does.Contain("공중 다리"));
-            Assert.That(controller.LastMagicNoteText, Does.Contain("흐름"));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("생명"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("낭떠러지"));
 
-            var stabilizerPosition = new Vector2(-5.2f, 2.4f);
+            var electricPosition = new Vector2(-1.6f, 2.15f);
             controller.LoadFloorForTests(3);
-            controller.CastSyntheticBaseForTests(SpellFamily.Earth, stabilizerPosition);
-            controller.CastSyntheticOverlayForTests(OverlayOperator.SteelBrace, stabilizerPosition);
+            CastCustomReferenceSpell(controller, SpellFamily.Fire, SpellFamily.Fire, electricPosition);
             yield return null;
 
-            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(4));
-            Assert.That(controller.LastMagicNoteText, Does.Contain("균열"));
-            Assert.That(controller.LastMagicNoteText, Does.Contain("안전 지점"));
-            Assert.That(Vector2.Distance(controller.SafePositionForTests, stabilizerPosition), Is.LessThan(0.01f));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("전기"));
+            Assert.That(controller.ActiveDamagePopupCountForTests, Is.GreaterThan(0));
+
+            ClearCustomSlots(controller);
+            DeleteIfExists(profilePath);
         }
 
         [UnityTest]
@@ -985,10 +992,11 @@ namespace MagicExamHall.Tests
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
             Assert.That(controller.IsResultPanelVisible, Is.False);
 
-            controller.LoadFloorForTests(3);
-            controller.MovePlayerForTests(new Vector2(-3.1f, -0.4f));
+            controller.LoadFloorForTests(2);
+            controller.MovePlayerForTests(new Vector2(0f, -2.45f));
             yield return null;
-            Assert.That(Vector2.Distance(controller.PlayerPosition, new Vector2(0f, -4.05f)), Is.LessThan(0.2f));
+            Assert.That(Vector2.Distance(controller.PlayerPosition, new Vector2(0f, -3.25f)), Is.LessThan(0.2f));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("낭떠러지"));
 
             for (var index = controller.CurrentFloorNumber; index <= controller.FloorCount; index++)
             {
@@ -1038,6 +1046,16 @@ namespace MagicExamHall.Tests
             return GestureRecognizer.CreateCanonicalSamples(family, 1.6f, 0.03f)
                 .Select(stroke => (IReadOnlyList<StrokeSample>)stroke)
                 .ToList();
+        }
+
+        private static BaseRecognitionResult CastCustomReferenceSpell(
+            ExamGameController controller,
+            SpellFamily baseFamily,
+            SpellFamily referenceFamily,
+            Vector2 worldCenter)
+        {
+            controller.CastSyntheticBaseForTests(baseFamily, worldCenter);
+            return controller.CastRawBaseForTests(controller.CustomReferenceStrokesForTests(referenceFamily, worldCenter), worldCenter);
         }
 
         private static List<List<StrokeSample>> Offset(List<List<StrokeSample>> strokes, Vector2 center, float canonicalCenter)

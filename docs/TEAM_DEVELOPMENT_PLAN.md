@@ -185,6 +185,17 @@ RecognitionFeedbackPresenter
 
 ## 3. 3인 역할 분담
 
+### 담당자 매핑
+
+| 역할 | 담당자 | 비고 |
+| --- | --- | --- |
+| 역할 A. 입력/인식 | sw1029 | `IStrokeRecognitionService`·quality·profile |
+| 역할 B. 게임 런타임 | SilverSupplier | `SpellCastingService`·floor goal·ending |
+| 역할 C. 튜토리얼/콘텐츠/피드백 | TBD | Magic Note·HUD·hint escalator |
+| Art / Visual 트랙 | SilverSupplier (잠정) | [docs/ART_OVERHAUL_PLAN.md](ART_OVERHAUL_PLAN.md) Phase 0~6. 별도 담당 합류 시 이관 |
+
+owner는 [docs/30_tasks/](30_tasks/) 각 task 파일 frontmatter의 `owner` 필드와 동기화한다. 담당자가 바뀌면 본 표와 task frontmatter를 같은 PR에서 갱신한다.
+
 ### 역할 A. 입력/인식 담당
 
 이 담당자는 "플레이어가 그린 것을 게임이 이해할 수 있는 결과로 바꾸는 일"을 맡는다.

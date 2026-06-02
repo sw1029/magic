@@ -1,5 +1,6 @@
 - id: T30-00
-- status: ready
+- status: done
+- owner: SilverSupplier
 - depends_on: -
 - blocks: T30-01, T30-02, T30-03, T30-04, T30-05, T30-06
 

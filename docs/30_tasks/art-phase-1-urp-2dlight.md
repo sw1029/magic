@@ -1,15 +1,7 @@
----
-id: art-phase-1-urp-2dlight
-status: pending
-depends_on:
-  - art-phase-0-style-bible
-blocks:
-  - art-phase-2-player-png-anim
-  - art-phase-3-autotile
-  - art-phase-4-prop-variants
-  - art-phase-5-rune-handdrawn
-  - art-phase-6-postfx
----
+- id: T30-01
+- status: blocked
+- depends_on: T30-00
+- blocks: T30-02, T30-03, T30-04, T30-05, T30-06
 
 # Phase 1 — URP + 2D Light + Pixel Perfect Camera 도입
 

@@ -1,10 +1,7 @@
----
-id: art-phase-5-rune-handdrawn
-status: pending
-depends_on:
-  - art-phase-1-urp-2dlight
-blocks: []
----
+- id: T30-05
+- status: blocked
+- depends_on: T30-01
+- blocks: -
 
 # Phase 5 — Rune 손그림 PNG 교체
 

@@ -1,10 +1,7 @@
----
-id: art-phase-4-prop-variants
-status: pending
-depends_on:
-  - art-phase-1-urp-2dlight
-blocks: []
----
+- id: T30-04
+- status: blocked
+- depends_on: T30-01
+- blocks: -
 
 # Phase 4 — Prop 베리에이션 추가
 

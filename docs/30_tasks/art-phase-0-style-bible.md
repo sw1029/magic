@@ -1,15 +1,7 @@
----
-id: art-phase-0-style-bible
-status: in_review
-depends_on: []
-blocks:
-  - art-phase-1-urp-2dlight
-  - art-phase-2-player-png-anim
-  - art-phase-3-autotile
-  - art-phase-4-prop-variants
-  - art-phase-5-rune-handdrawn
-  - art-phase-6-postfx
----
+- id: T30-00
+- status: ready
+- depends_on: -
+- blocks: T30-01, T30-02, T30-03, T30-04, T30-05, T30-06
 
 # Phase 0 — Art Style Bible Lock
 

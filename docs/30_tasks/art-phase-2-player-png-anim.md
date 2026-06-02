@@ -1,10 +1,7 @@
----
-id: art-phase-2-player-png-anim
-status: pending
-depends_on:
-  - art-phase-1-urp-2dlight
-blocks: []
----
+- id: T30-02
+- status: blocked
+- depends_on: T30-01
+- blocks: -
 
 # Phase 2 — Player PNG + 4방향 + idle/walk/cast 애니메이션
 

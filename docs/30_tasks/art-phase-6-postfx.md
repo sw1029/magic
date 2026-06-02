@@ -1,10 +1,7 @@
----
-id: art-phase-6-postfx
-status: pending
-depends_on:
-  - art-phase-1-urp-2dlight
-blocks: []
----
+- id: T30-06
+- status: blocked
+- depends_on: T30-01
+- blocks: -
 
 # Phase 6 — Post FX (Bloom / Vignette / 선택적 CA)
 

@@ -1,10 +1,7 @@
----
-id: art-phase-3-autotile
-status: pending
-depends_on:
-  - art-phase-1-urp-2dlight
-blocks: []
----
+- id: T30-03
+- status: blocked
+- depends_on: T30-01
+- blocks: -
 
 # Phase 3 — Autotile 시스템 도입
 

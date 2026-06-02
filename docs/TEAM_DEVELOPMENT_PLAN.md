@@ -196,6 +196,20 @@ RecognitionFeedbackPresenter
 
 owner는 [docs/30_tasks/](30_tasks/) 각 task 파일 frontmatter의 `owner` 필드와 동기화한다. 담당자가 바뀌면 본 표와 task frontmatter를 같은 PR에서 갱신한다.
 
+### 층별 콘텐츠 분담
+
+게임 런타임의 기반 구조(`SpellCastingService`·`FloorGoalSystem`·ending 처리 등)는 역할 B(SilverSupplier)가 만든다. 그 위에 올라가는 **각 층의 구체 콘텐츠**(목표 배치·세계 효과·층별 메커닉·난이도 곡선)는 다음과 같이 나눈다.
+
+| 층 | 담당자 | 메커닉 핵심 |
+| --- | --- | --- |
+| 1층 base 입문 | sw1029 | family 5종 base 인식·목표 근접 |
+| 2층 overlay | sw1029 | overlay operator 6종·seal stack |
+| 3층 조합 | sw1029 | base + overlay 조합 목표 |
+| 4층 hazard | SilverSupplier | hazard stabilizer·균열·안전 지점 이동 |
+| 5층 final seal | SilverSupplier | 5/6 통과 엔딩, 6/6 진엔딩 업그레이드 |
+
+층 경계에서 협업이 필요한 경우(예: 4층 진입 조건, 5층 final seal 인식 보강)는 PR 본문에 영향 범위를 명시하고 사전 협의한다. 1~3층과 4~5층은 같은 `FloorGoalSystem` 위에서 동작하므로 base 인터페이스 변경은 두 담당자가 모두 리뷰한다.
+
 ### 역할 A. 입력/인식 담당
 
 이 담당자는 "플레이어가 그린 것을 게임이 이해할 수 있는 결과로 바꾸는 일"을 맡는다.

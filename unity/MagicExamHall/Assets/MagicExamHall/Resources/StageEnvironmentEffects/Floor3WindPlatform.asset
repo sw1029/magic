@@ -15,15 +15,15 @@ MonoBehaviour:
   effectId: floor3_wind_platform
   baseFamily: 0
   customEffect: 9
-  displayName: 諛붾엺 諛쒗뙋
-  requirementLabel: 諛붾엺 + 諛쒗뙋
-  note: 諛붾엺???ш컖 諛쒗뙋???꾩썙 留덉?留?鍮?怨듦컙??嫄대꼸 ???덇쾶 ?⑸땲??
+  displayName: 바람 발판
+  requirementLabel: 바람 + 발판
+  note: 바람이 사각 발판을 띄워 마지막 빈 공간을 건널 수 있게 합니다.
   requiredShapeTokens:
   - rect
   acceptedEventKinds:
   - 3
   entity:
-    entityName: 諛붾엺 諛쒗뙋
+    entityName: 바람 발판
     spriteKind: 19
     spriteOverride: {fileID: 0}
     primaryColor: {r: 0.54, g: 0.80, b: 0.92, a: 1}

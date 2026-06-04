@@ -15,15 +15,16 @@ MonoBehaviour:
   effectId: floor3_living_bridge
   baseFamily: 4
   customEffect: 8
-  displayName: ?⑷뎬 ?ㅻ━
-  requirementLabel: ?앸챸 + ?붿궡??+ ?ш컖??  note: ?⑷뎬 ?ㅻ━媛 ??뼚?ъ?瑜??댁뼱 ?щ씪?????덈뒗 湲몄씠 ?⑸땲??
+  displayName: 덩굴 다리
+  requirementLabel: 생명 + 화살표 + 사각형
+  note: 덩굴 다리가 낭떠러지를 이어 올라설 수 있는 길을 만듭니다.
   requiredShapeTokens:
   - arrow
   - rect
   acceptedEventKinds:
   - 2
   entity:
-    entityName: ?⑷뎬 ?ㅻ━
+    entityName: 덩굴 다리
     spriteKind: 17
     spriteOverride: {fileID: 0}
     primaryColor: {r: 0.16, g: 0.52, b: 0.28, a: 1}

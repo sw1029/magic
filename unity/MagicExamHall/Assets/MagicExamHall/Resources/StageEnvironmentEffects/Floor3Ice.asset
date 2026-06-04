@@ -15,14 +15,16 @@ MonoBehaviour:
   effectId: floor3_ice
   baseFamily: 3
   customEffect: 1
-  displayName: ?쇱쓬 寃곗젙
-  requirementLabel: 臾?+ ?↔컖??  note: 臾쇱씠 ?쇱쓬 寃곗젙?쇰줈 援녹뼱 ?щ씪?????덈뒗 ?쇱쓬 ??쇱씠 ?⑸땲??
+  displayName: 얼음길
+  requirementLabel: 물 + 육각형
+  note: 물을 얼려 위에 올라설 수 있는 얼음길로 바꿉니다.
   requiredShapeTokens:
   - hexagon
   acceptedEventKinds:
   - 6
   entity:
-    entityName: ?쇱쓬湲?    spriteKind: 16
+    entityName: 얼음길
+    spriteKind: 16
     spriteOverride: {fileID: 0}
     primaryColor: {r: 0.48, g: 0.84, b: 1, a: 1}
     secondaryColor: {r: 1, g: 1, b: 1, a: 1}

@@ -15,13 +15,16 @@ MonoBehaviour:
   effectId: floor3_earth_stairs
   baseFamily: 1
   customEffect: 7
-  displayName: 援щ찉 硫붿슦湲?  requirementLabel: ??+ 硫붿???  note: 援щ찉 硫붿??먯씠 源⑥쭊 諛붾떏 援щ찉???붾컲?쇰줈 梨꾩썙 吏?섍컝 湲몄쓣 留뚮벊?덈떎.
+  displayName: 구멍 메우기
+  requirementLabel: 땅 + 메움판
+  note: 구멍 메움판이 깨진 바닥을 채워 지나갈 길을 만듭니다.
   requiredShapeTokens:
   - rect
   acceptedEventKinds:
   - 3
   entity:
-    entityName: 援щ찉 硫붿???    spriteKind: 18
+    entityName: 구멍 메움판
+    spriteKind: 18
     spriteOverride: {fileID: 0}
     primaryColor: {r: 0.58, g: 0.42, b: 0.24, a: 1}
     secondaryColor: {r: 0.78, g: 0.60, b: 0.34, a: 1}

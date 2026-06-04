@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4d1a9ecf0754e4a9aef8e2379c7b5b1, type: 3}
+  m_Name: Floor3EarthStairs
+  m_EditorClassIdentifier:
+  effectId: floor3_earth_stairs
+  baseFamily: 1
+  customEffect: 7
+  displayName: 援щ찉 硫붿슦湲?  requirementLabel: ??+ 硫붿???  note: 援щ찉 硫붿??먯씠 源⑥쭊 諛붾떏 援щ찉???붾컲?쇰줈 梨꾩썙 吏?섍컝 湲몄쓣 留뚮벊?덈떎.
+  requiredShapeTokens:
+  - rect
+  acceptedEventKinds:
+  - 3
+  entity:
+    entityName: 援щ찉 硫붿???    spriteKind: 18
+    spriteOverride: {fileID: 0}
+    primaryColor: {r: 0.58, g: 0.42, b: 0.24, a: 1}
+    secondaryColor: {r: 0.78, g: 0.60, b: 0.34, a: 1}
+    offset: {x: 0, y: 0}
+    size: {x: 2.35, y: 0.34}
+    tiled: 1
+    sortingOrder: -1
+    hasCollider: 1
+    createsSteps: 0
+    stepCount: 1
+    stepStartOffset: {x: 0, y: 0}
+    stepSpacing: {x: 0.48, y: 0.32}
+    stepSize: {x: 0.82, y: 0.28}

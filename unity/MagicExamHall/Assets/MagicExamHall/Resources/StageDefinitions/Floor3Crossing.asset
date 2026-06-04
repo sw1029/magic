@@ -1,0 +1,175 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9a612d2d66c4e058f1a9038ba582c62, type: 3}
+  m_Name: Floor3Crossing
+  m_EditorClassIdentifier:
+  floorNumber: 3
+  playerStart: {x: -7.2, y: -2.58}
+  stageMin: {x: -8.5, y: -4.4}
+  stageMax: {x: 21, y: 4.4}
+  cameraXRange: {x: -2.8, y: 15.4}
+  cameraY: -0.2
+  killY: -5.2
+  customReferencePosition: {x: -7.25, y: 1.1}
+  props:
+  - title: Start Stone Walkway
+    position: {x: -6.4, y: -3.35}
+    size: {x: 4.4, y: 0.5}
+    primaryColor: {r: 0.22, g: 0.20, b: 0.19, a: 1}
+    secondaryColor: {r: 0.44, g: 0.38, b: 0.30, a: 1}
+    spriteKind: 4
+    spriteOverride: {fileID: 0}
+    sortingOrder: -4
+    tiled: 1
+    hasCollider: 1
+  - title: River Water
+    position: {x: -2.55, y: -3.34}
+    size: {x: 2.85, y: 1.05}
+    primaryColor: {r: 0.05, g: 0.23, b: 0.38, a: 1}
+    secondaryColor: {r: 0.24, g: 0.48, b: 0.86, a: 1}
+    spriteKind: 15
+    spriteOverride: {fileID: 0}
+    sortingOrder: -5
+    tiled: 1
+    hasCollider: 0
+  - title: River Bank
+    position: {x: 0.2, y: -3.35}
+    size: {x: 2.7, y: 0.5}
+    primaryColor: {r: 0.22, g: 0.20, b: 0.19, a: 1}
+    secondaryColor: {r: 0.44, g: 0.38, b: 0.30, a: 1}
+    spriteKind: 4
+    spriteOverride: {fileID: 0}
+    sortingOrder: -4
+    tiled: 1
+    hasCollider: 1
+  - title: Broken Ground Gap
+    position: {x: 3.25, y: -3.34}
+    size: {x: 2.35, y: 1.05}
+    primaryColor: {r: 0.025, g: 0.018, b: 0.014, a: 1}
+    secondaryColor: {r: 0.82, g: 0.62, b: 0.34, a: 1}
+    spriteKind: 22
+    spriteOverride: {fileID: 0}
+    sortingOrder: -5
+    tiled: 1
+    hasCollider: 0
+  - title: Gap Far Stone Walkway
+    position: {x: 5.5, y: -3.35}
+    size: {x: 4.2, y: 0.5}
+    primaryColor: {r: 0.22, g: 0.20, b: 0.19, a: 1}
+    secondaryColor: {r: 0.44, g: 0.38, b: 0.30, a: 1}
+    spriteKind: 4
+    spriteOverride: {fileID: 0}
+    sortingOrder: -4
+    tiled: 1
+    hasCollider: 1
+  - title: Deep Chasm
+    position: {x: 8.9, y: -3.55}
+    size: {x: 3.25, y: 2}
+    primaryColor: {r: 0.025, g: 0.03, b: 0.045, a: 1}
+    secondaryColor: {r: 0.09, g: 0.10, b: 0.14, a: 1}
+    spriteKind: 22
+    spriteOverride: {fileID: 0}
+    sortingOrder: -6
+    tiled: 1
+    hasCollider: 0
+  - title: Vine Landing
+    position: {x: 12.2, y: -3.35}
+    size: {x: 3.1, y: 0.5}
+    primaryColor: {r: 0.22, g: 0.20, b: 0.19, a: 1}
+    secondaryColor: {r: 0.44, g: 0.38, b: 0.30, a: 1}
+    spriteKind: 4
+    spriteOverride: {fileID: 0}
+    sortingOrder: -4
+    tiled: 1
+    hasCollider: 1
+  - title: Wind Gap Shadow
+    position: {x: 15.35, y: -3.34}
+    size: {x: 2.65, y: 1.05}
+    primaryColor: {r: 0.04, g: 0.08, b: 0.10, a: 1}
+    secondaryColor: {r: 0.20, g: 0.28, b: 0.34, a: 1}
+    spriteKind: 22
+    spriteOverride: {fileID: 0}
+    sortingOrder: -6
+    tiled: 1
+    hasCollider: 0
+  - title: Exit Ledge
+    position: {x: 18.8, y: -3.35}
+    size: {x: 4.0, y: 0.5}
+    primaryColor: {r: 0.22, g: 0.20, b: 0.19, a: 1}
+    secondaryColor: {r: 0.44, g: 0.38, b: 0.30, a: 1}
+    spriteKind: 4
+    spriteOverride: {fileID: 0}
+    sortingOrder: -4
+    tiled: 1
+    hasCollider: 1
+  obstacles:
+  - requiredGoalId: frozen_river
+    requiredEffect: 1
+    title: 媛뺣Ъ
+    center: {x: -2.55, y: -3.15}
+    size: {x: 2.85, y: 1.05}
+    resetPosition: {x: -5.0, y: -2.58}
+    safePositionAfterSolved: {x: 0.2, y: -2.58}
+    goalPosition: {x: -2.55, y: -1.88}
+    goalRadius: 2.15
+    solutionPosition: {x: -2.55, y: -3.16}
+    solutionSize: {x: 2.85, y: 0.34}
+    lockedColor: {r: 0.05, g: 0.23, b: 0.38, a: 1}
+    lockedSpriteKind: 15
+    lockedNote: 媛뺣Ъ? ?쇰┛ ??吏?섍컝 ???덉뒿?덈떎. 臾?臾몄뼇 ?꾩뿉 ?↔컖???꾪삎???뱀쑝?몄슂.
+  - requiredGoalId: earth_stairs
+    requiredEffect: 7
+    title: 源⑥쭊 援щ찉
+    center: {x: 3.25, y: -3.15}
+    size: {x: 2.35, y: 1.05}
+    resetPosition: {x: 0.8, y: -2.58}
+    safePositionAfterSolved: {x: 5.2, y: -2.58}
+    goalPosition: {x: 3.25, y: -1.88}
+    goalRadius: 2.15
+    solutionPosition: {x: 3.25, y: -3.16}
+    solutionSize: {x: 2.35, y: 0.34}
+    lockedColor: {r: 0.06, g: 0.038, b: 0.025, a: 1}
+    lockedSpriteKind: 22
+    lockedNote: 諛붾떏??源⑥졇 援щ찉???ル젮 ?덉뒿?덈떎. ??臾몄뼇 ?꾩뿉 ?ш컖 硫붿??먯쓣 ?뱀뼱 鍮?怨듦컙??硫붿슦?몄슂.
+  - requiredGoalId: living_bridge
+    requiredEffect: 8
+    title: ??뼚?ъ?
+    center: {x: 8.9, y: -3.15}
+    size: {x: 3.25, y: 1.2}
+    resetPosition: {x: 6.2, y: -2.58}
+    safePositionAfterSolved: {x: 11.0, y: -2.58}
+    goalPosition: {x: 8.85, y: -1.88}
+    goalRadius: 2.15
+    solutionPosition: {x: 8.9, y: -3.16}
+    solutionSize: {x: 3.25, y: 0.34}
+    lockedColor: {r: 0.025, g: 0.03, b: 0.045, a: 1}
+    lockedSpriteKind: 22
+    lockedNote: ?욎쓽 ??뼚?ъ???諛쒗뙋 ?놁씠??嫄대꼸 ???놁뒿?덈떎. ?앸챸 臾몄뼇 ?꾩뿉 ?붿궡?쒖? ?ш컖 諛쒗뙋 ?꾪삎???뱀쑝?몄슂.
+  - requiredGoalId: wind_platform
+    requiredEffect: 9
+    title: 鍮?怨듦컙
+    center: {x: 15.35, y: -3.15}
+    size: {x: 2.65, y: 1.15}
+    resetPosition: {x: 13.1, y: -2.58}
+    safePositionAfterSolved: {x: 17.3, y: -2.58}
+    goalPosition: {x: 15.35, y: -1.88}
+    goalRadius: 2.15
+    solutionPosition: {x: 15.35, y: -3.16}
+    solutionSize: {x: 2.65, y: 0.34}
+    lockedColor: {r: 0.06, g: 0.12, b: 0.16, a: 1}
+    lockedSpriteKind: 19
+    lockedNote: 留덉?留?鍮?怨듦컙? ???덈뒗 諛쒗뙋?쇰줈 嫄대꽇?덈떎. 諛붾엺 臾몄뼇 ?꾩뿉 ?ш컖???꾪삎???뱀쑝?몄슂.
+  environmentEffects:
+  - {fileID: 11400000, guid: 13a7550f56a84fe4b9a85932a2fce8e1, type: 2}
+  - {fileID: 11400000, guid: 24b807c390f34e27822229e86d016c3c, type: 2}
+  - {fileID: 11400000, guid: 3b7d18a53a5845be976056f05d580fb3, type: 2}
+  - {fileID: 11400000, guid: 45559e34dfb94ff7a24d0e12a8f21bf1, type: 2}

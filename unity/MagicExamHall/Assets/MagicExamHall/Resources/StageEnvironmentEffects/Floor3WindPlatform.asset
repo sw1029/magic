@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4d1a9ecf0754e4a9aef8e2379c7b5b1, type: 3}
+  m_Name: Floor3WindPlatform
+  m_EditorClassIdentifier:
+  effectId: floor3_wind_platform
+  baseFamily: 0
+  customEffect: 9
+  displayName: 諛붾엺 諛쒗뙋
+  requirementLabel: 諛붾엺 + 諛쒗뙋
+  note: 諛붾엺???ш컖 諛쒗뙋???꾩썙 留덉?留?鍮?怨듦컙??嫄대꼸 ???덇쾶 ?⑸땲??
+  requiredShapeTokens:
+  - rect
+  acceptedEventKinds:
+  - 3
+  entity:
+    entityName: 諛붾엺 諛쒗뙋
+    spriteKind: 19
+    spriteOverride: {fileID: 0}
+    primaryColor: {r: 0.54, g: 0.80, b: 0.92, a: 1}
+    secondaryColor: {r: 0.92, g: 1, b: 1, a: 1}
+    offset: {x: 0, y: 0}
+    size: {x: 2.65, y: 0.34}
+    tiled: 1
+    sortingOrder: -1
+    hasCollider: 1
+    createsSteps: 0
+    stepCount: 1
+    stepStartOffset: {x: 0, y: 0}
+    stepSpacing: {x: 1, y: 0}
+    stepSize: {x: 1, y: 1}

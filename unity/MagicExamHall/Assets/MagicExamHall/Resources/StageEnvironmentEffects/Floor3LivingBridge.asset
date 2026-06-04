@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a4d1a9ecf0754e4a9aef8e2379c7b5b1, type: 3}
+  m_Name: Floor3LivingBridge
+  m_EditorClassIdentifier:
+  effectId: floor3_living_bridge
+  baseFamily: 4
+  customEffect: 8
+  displayName: ?⑷뎬 ?ㅻ━
+  requirementLabel: ?앸챸 + ?붿궡??+ ?ш컖??  note: ?⑷뎬 ?ㅻ━媛 ??뼚?ъ?瑜??댁뼱 ?щ씪?????덈뒗 湲몄씠 ?⑸땲??
+  requiredShapeTokens:
+  - arrow
+  - rect
+  acceptedEventKinds:
+  - 2
+  entity:
+    entityName: ?⑷뎬 ?ㅻ━
+    spriteKind: 17
+    spriteOverride: {fileID: 0}
+    primaryColor: {r: 0.16, g: 0.52, b: 0.28, a: 1}
+    secondaryColor: {r: 0.58, g: 0.88, b: 0.42, a: 1}
+    offset: {x: 0, y: 0}
+    size: {x: 3.25, y: 0.34}
+    tiled: 1
+    sortingOrder: -1
+    hasCollider: 1
+    createsSteps: 0
+    stepCount: 1
+    stepStartOffset: {x: 0, y: 0}
+    stepSpacing: {x: 1, y: 0}
+    stepSize: {x: 1, y: 1}

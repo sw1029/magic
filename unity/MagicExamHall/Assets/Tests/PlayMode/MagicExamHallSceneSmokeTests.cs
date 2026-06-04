@@ -381,6 +381,9 @@ namespace MagicExamHall.Tests
 
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
+            var profilePath = TempCustomShapeProfilePath();
+            controller.UseCustomShapeStoreForTests(profilePath);
+            ClearCustomSlots(controller);
 
             var windGoal = controller.StageGoalPositionForTests("vane");
             var drawCenter = Vector2.zero;
@@ -403,6 +406,8 @@ namespace MagicExamHall.Tests
             yield return null;
             controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
+            controller.UseCustomShapeStoreForTests(profilePath);
+            ClearCustomSlots(controller);
 
             var goalStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, 1.6f, 0.03f), windGoal, 0.8f);
             controller.MovePlayerForTests(drawCenter);
@@ -412,6 +417,9 @@ namespace MagicExamHall.Tests
             Assert.That(offTarget.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
             Assert.That(offTarget.spell.intentGoalId, Is.Empty);
             Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
+
+            ClearCustomSlots(controller);
+            DeleteIfExists(profilePath);
         }
 
         [UnityTest]
@@ -579,6 +587,9 @@ namespace MagicExamHall.Tests
 
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
+            var profilePath = TempCustomShapeProfilePath();
+            controller.UseCustomShapeStoreForTests(profilePath);
+            ClearCustomSlots(controller);
 
             controller.CastSyntheticBaseForTests(SpellFamily.Earth, Vector2.zero);
             yield return null;
@@ -593,6 +604,9 @@ namespace MagicExamHall.Tests
             Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
             Assert.That(controller.LastOverlayStack, Is.Empty);
             Assert.That(controller.LastMagicNoteText, Does.Contain("커스텀 도형"));
+
+            ClearCustomSlots(controller);
+            DeleteIfExists(profilePath);
         }
 
         [UnityTest]

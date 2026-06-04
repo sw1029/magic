@@ -17,22 +17,49 @@ namespace MagicExamHall
         public const float FinalFloorCompleteReportDelaySeconds = 1.9f;
         public const float DefaultSealFallbackDelaySeconds = 1.35f;
         public const string BuildVersion = "Magic Exam Hall 0.6.0-dev";
+        private const string FloorThreeStageResourcePath = "StageDefinitions/Floor3Crossing";
         private const int ResultPanelCompactScreenWidth = 1100;
         private const float GoalIntentRadiusMultiplier = 1.35f;
         private const float GoalIntentRadiusPadding = 0.35f;
+        private const float StageGatePlayerCenterVerticalPadding = 1.05f;
         private const int CustomReferenceFloorNumber = 2;
         private const float CustomReferenceShelfRadius = 1.85f;
+        private const int MaxPlayerHealthHalfUnits = 6;
+        private const float PlayerDamageInvulnerabilitySeconds = 1.05f;
+        private const float PlayerDamageBlinkSeconds = 0.9f;
+        private const string FirstFloorLetterBody =
+            "수험생에게, 첫 번째 시험의 목표를 남깁니다.\n" +
+            "1. 눈앞의 다섯 표식을 차례로 살피세요.\n" +
+            "2. 표식 아래 이름과 가까운 위치를 확인하세요.\n" +
+            "3. 바닥에 직접 기본 문양을 천천히 그리세요.\n" +
+            "4. 불꽃은 뾰족한 삼각형으로 시작합니다.\n" +
+            "5. 물은 둥근 원형 흐름으로 안정시킵니다.\n" +
+            "6. 바람은 같은 방향의 세 줄로 읽힙니다.\n" +
+            "7. 땅은 단단한 사각형으로 고정됩니다.\n" +
+            "8. 생명은 부드럽게 갈라지는 줄기로 이어집니다.\n" +
+            "9. 다섯 표식이 밝아지면 다음 층으로 오르세요.";
         private static readonly Vector2 WestBookcasePosition = new(-7.25f, 1.1f);
-        private static readonly IReadOnlyList<CustomShapeReferenceDefinition> CustomShapeReferences = new List<CustomShapeReferenceDefinition>
+        private static readonly IReadOnlyList<CustomShapeReferenceDefinition> FloorTwoCustomShapeReferences = new List<CustomShapeReferenceDefinition>
         {
-            new(SpellFamily.Life, "생명 다리", "rect", new[] { "arrow", "rect" }, "화살표 방향으로 발판을 뻗어 낭떠러지를 잇습니다."),
-            new(SpellFamily.Water, "얼음 결정", "hexagon", new[] { "hexagon" }, "육각 결정으로 물을 얼려 지나갈 수 있게 합니다."),
-            new(SpellFamily.Earth, "대지 계단", "rect", new[] { "rect" }, "사각 구조물을 쌓아 경사를 오를 계단을 만듭니다."),
-            new(SpellFamily.Wind, "바람 발판", "rect", new[] { "rect" }, "사각 발판을 바람으로 띄워 건너갈 길을 만듭니다."),
-            new(SpellFamily.Fire, "전기 직선", "line", new[] { "line" }, "직선 경로로 전류 타격을 만듭니다."),
-            new(SpellFamily.Water, "정화 원", "ellipse", new[] { "ellipse" }, "둥근 물막으로 오염을 씻어 냅니다."),
-            new(SpellFamily.Fire, "집중 별", "star", new[] { "star" }, "별 모양 초점으로 타격을 한곳에 모읍니다."),
-            new(SpellFamily.Life, "연결 가새", "brace", new[] { "brace" }, "떨어진 대상을 생명력으로 묶어 연결합니다.")
+            new(SpellFamily.Fire, "불꽃 직선", "line", new[] { "line" }, "직선으로 뻗는 불꽃 반응을 만듭니다."),
+            new(SpellFamily.Water, "물 보호막", "ellipse", new[] { "ellipse" }, "둥근 물막으로 보호 반응을 펼칩니다."),
+            new(SpellFamily.Wind, "바람 화살표", "arrow", new[] { "arrow" }, "끝점 방향으로 바람을 날려 보내는 화살표 도형입니다."),
+            new(SpellFamily.Earth, "사각 방벽", "rect", new[] { "rect" }, "사각 판으로 땅의 구조물 반응을 고정합니다."),
+            new(SpellFamily.Life, "생명 연결선", "brace", new[] { "brace" }, "생명력을 묶어 이어 주는 반응을 만듭니다.")
+        };
+        private static readonly IReadOnlyList<CustomShapeReferenceDefinition> FloorThreeCustomShapeReferences = new List<CustomShapeReferenceDefinition>
+        {
+            new(SpellFamily.Water, "얼음 결정", "hexagon", new[] { "hexagon" }, "강물을 얼음 타일로 굳혀 올라탈 수 있게 합니다."),
+            new(SpellFamily.Earth, "구멍 메움판", "rect", new[] { "rect" }, "깨진 바닥 구멍을 암반 판으로 메웁니다."),
+            new(SpellFamily.Life, "덩굴 다리", "rect", new[] { "arrow", "rect" }, "화살 방향으로 덩굴 다리를 뻗어 낭떠러지를 잇습니다."),
+            new(SpellFamily.Wind, "바람 발판", "rect", new[] { "rect" }, "바람으로 사각 발판을 띄워 빈 공간을 건넙니다.")
+        };
+        private static readonly IReadOnlyList<CustomShapeReferenceDefinition> FloorFourCustomShapeReferences = new List<CustomShapeReferenceDefinition>
+        {
+            new(SpellFamily.Water, "얼음 결정", "hexagon", new[] { "hexagon" }, "표적의 움직임을 늦추는 얼음 결정을 만듭니다."),
+            new(SpellFamily.Fire, "번개 직선", "line", new[] { "line" }, "직선 경로로 번개 타격을 뻗습니다."),
+            new(SpellFamily.Water, "정화 물막", "ellipse", new[] { "ellipse" }, "둥근 물막으로 오염을 씻어 냅니다."),
+            new(SpellFamily.Earth, "사각 방벽", "rect", new[] { "rect" }, "표적 앞에 암반 방벽을 세웁니다.")
         };
 
         [Header("Scene References")]
@@ -44,11 +71,22 @@ namespace MagicExamHall
         private readonly List<ParticlePulse> pulses = new();
         private readonly List<CharacterBarrierView> defaultBarriers = new();
         private readonly List<DamagePopupView> damagePopups = new();
+        private readonly List<BuffQueueView> buffQueues = new();
+        private readonly List<ElementalEntity> elementalEntities = new();
+        private readonly List<HeartHealthGraphic> healthHearts = new();
+        private readonly List<SpriteRenderer> playerBlinkRenderers = new();
+        private readonly List<FloatingGuideArrow> shelfGuideArrows = new();
         private readonly List<StageGate> activeStageGates = new();
+        private readonly List<GameObject> stageEntityObjects = new();
+        private readonly List<GameObject> stageEffectObjects = new();
         private readonly List<GameObject> floorObjects = new();
+        private readonly List<GameObject> customReferenceCards = new();
+        private readonly List<QuestChecklistItemView> questChecklistViews = new();
         private readonly List<WorldStateGoal> activeGoals = new();
         private readonly List<HazardZone> activeHazards = new();
         private readonly Dictionary<SpellFamily, int> baseFailureCounts = new();
+        private readonly Dictionary<int, QuestChecklistSnapshot> questChecklistSnapshots = new();
+        private readonly HashSet<string> questImportedReferenceIdsThisFloor = new();
 
         private ExamLogger logger = null!;
         private WorldDrawingController worldDrawing = null!;
@@ -60,12 +98,18 @@ namespace MagicExamHall
         private CustomShapeProfileStore customShapeStore = null!;
         private CustomShapeBookController customShapeBook = null!;
         private FloorGoalSystem floorGoals = null!;
+        private FloorStageDefinition activeStageDefinition = null!;
+        private Rigidbody2D playerBody = null!;
+        private CapsuleCollider2D playerCollider = null!;
         private RectTransform hudPanel = null!;
+        private RectTransform healthPanel = null!;
         private RectTransform notePanel = null!;
         private RectTransform resultPanel = null!;
         private RectTransform reportPanel = null!;
+        private RectTransform firstFloorLetterOverlay = null!;
         private RectTransform customReferenceBubble = null!;
         private RectTransform customReferencePanel = null!;
+        private RectTransform questScrollPanel = null!;
         private Text customReferenceStatus = null!;
         private Button floorSkipButton = null!;
         private Text hudTitle = null!;
@@ -74,17 +118,30 @@ namespace MagicExamHall
         private Text noteText = null!;
         private Text resultText = null!;
         private Text reportText = null!;
+        private Text firstFloorLetterText = null!;
+        private Text questTitleText = null!;
+        private Text questScoreText = null!;
+        private Text questStatusText = null!;
+        private Text questProgressText = null!;
+        private Button firstFloorLetterCloseButton = null!;
         private Text versionText = null!;
         private Font uiFont = null!;
+        private QuestChecklistState currentQuestChecklist = null!;
         private string sessionId = "";
         private int trialCounter;
+        private int playerHealthHalfUnits = MaxPlayerHealthHalfUnits;
         private float floorStartedAt;
         private float pendingAdvanceAt = -1f;
+        private float playerDamageInvulnerableUntil = -1f;
+        private float playerBlinkUntil = -1f;
         private Vector2 velocity;
         private Vector2 safePosition;
         private bool finalCompletionCelebrated;
         private bool finalTrueEnding;
         private bool resultPanelCompact;
+        private bool platformMotionActive;
+        private bool firstFloorLetterShownThisSession;
+        private bool questReferencePanelOpenedThisFloor;
         private string customReferenceLastStatus = "";
 
         public int CurrentFloorNumber => floorController?.CurrentFloorNumber ?? 1;
@@ -97,11 +154,14 @@ namespace MagicExamHall
         public bool HasEndingReport => reportPanel != null && reportPanel.gameObject.activeSelf;
         public bool IsDrawingPanelVisible => false;
         public bool IsResultPanelVisible => resultPanel != null && resultPanel.gameObject.activeSelf;
+        public bool IsFirstFloorLetterVisibleForTests => firstFloorLetterOverlay != null && firstFloorLetterOverlay.gameObject.activeSelf;
+        public Color FirstFloorLetterCloseButtonColorForTests => firstFloorLetterCloseButton?.targetGraphic is Graphic graphic ? graphic.color : Color.clear;
         public int CurrentAssistLevel { get; private set; }
         public string LastHintText { get; private set; } = "";
         public string LastMagicNoteText => magicNote?.Text ?? "";
         public string LastResultPanelTextForTests => resultText == null ? "" : resultText.text;
         public string HudCopyForTests => hudCopy == null ? "" : hudCopy.text;
+        public string FirstFloorLetterTextForTests => firstFloorLetterText == null ? "" : firstFloorLetterText.text;
         public string FloorProgressForTests => floorProgress == null ? "" : floorProgress.text;
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
         public int TrialCountForTests => trialCounter;
@@ -110,14 +170,32 @@ namespace MagicExamHall
         public int ActiveDefaultBarrierCountForTests => defaultBarriers.Count;
         public Color LastDefaultBarrierColorForTests => defaultBarriers.Count == 0 ? Color.clear : defaultBarriers[^1].Color;
         public int ActiveStageGateCountForTests => activeStageGates.Count;
+        public int ActiveStageInteractionCountForTests => activeStageGates.Count;
+        public int ActiveStageEntityCountForTests => stageEntityObjects.Count;
+        public int ActiveStageEffectVisualCountForTests => stageEffectObjects.Count;
         public int ActiveDamagePopupCountForTests => damagePopups.Count;
         public string LastDamagePopupTextForTests { get; private set; } = "";
+        public int CurrentHealthHalfUnitsForTests => playerHealthHalfUnits;
+        public int HealthHeartCountForTests => healthHearts.Count;
+        public int LastHealthHeartStateForTests => healthHearts.Count == 0 ? -1 : healthHearts[^1].State;
+        public bool IsPlayerBlinkingForTests => Time.time < playerBlinkUntil;
+        public Color PlayerBlinkTintForTests => playerBlinkRenderers.Count == 0 ? Color.clear : playerBlinkRenderers[0].color;
+        public int ActiveBuffQueueCountForTests => buffQueues.Count(queue => queue.IsActive);
+        public int ActiveBuffSlotCountForTests => buffQueues.Sum(queue => queue.ActiveBuffCount);
+        public int ActivePlayerBuffSlotCountForTests => buffQueues.Where(queue => queue.OwnerKind == BuffOwnerKind.Player).Sum(queue => queue.ActiveBuffCount);
+        public int ActiveTargetBuffSlotCountForTests => buffQueues.Where(queue => queue.OwnerKind == BuffOwnerKind.Target).Sum(queue => queue.ActiveBuffCount);
+        public int ActiveElementalEntityCountForTests => elementalEntities.Count(entity => entity != null);
+        public int LastElementalReactionCountForTests { get; private set; }
+        public string LastElementalReactionSummaryForTests { get; private set; } = "";
+        public string LastBuffLabelForTests { get; private set; } = "";
+        public float FirstBuffCooldownFillForTests => buffQueues.FirstOrDefault(queue => queue.ActiveBuffCount > 0)?.FirstFillAmount ?? 0f;
         public string LastCustomShapeEventKindForTests { get; private set; } = "";
         public string LastCustomShapeEventLabelForTests { get; private set; } = "";
         public Vector2 LastCustomShapeEventDirectionForTests { get; private set; } = Vector2.right;
         public int CustomShapeEventObjectCountForTests { get; private set; }
         public int VisibleGoalLabelCountForTests => activeGoals.Count(goal => goal.label != null);
         public int VisibleOverlayGuideCountForTests => seals.Count(seal => seal.HasAttachGuide);
+        public int ActiveShelfGuideArrowCountForTests => shelfGuideArrows.Count(arrow => arrow.IsActive);
         public bool IsFloorSkipButtonVisibleForTests => floorSkipButton != null && floorSkipButton.gameObject.activeInHierarchy;
         public string OutputDirectory => logger?.OutputDirectory ?? "";
         public float PendingAdvanceSecondsForTests => pendingAdvanceAt < 0f ? -1f : pendingAdvanceAt - Time.time;
@@ -131,9 +209,34 @@ namespace MagicExamHall
         public bool IsCustomShapeEditorOpenForTests => customShapeBook?.IsEditorOpen ?? false;
         public bool IsCustomReferenceBubbleVisibleForTests => customReferenceBubble != null && customReferenceBubble.gameObject.activeInHierarchy;
         public bool IsCustomReferencePanelOpenForTests => customReferencePanel != null && customReferencePanel.gameObject.activeInHierarchy;
-        public int CustomReferenceCountForTests => CustomShapeReferences.Count;
+        public int CustomReferenceCountForTests => CurrentCustomShapeReferences().Count;
         public string CustomReferenceStatusForTests => customReferenceLastStatus;
+        public bool IsPlatformMotionActiveForTests => platformMotionActive;
+        public Vector2 CurrentStageSafePositionForTests => safePosition;
+        public Vector2 CustomReferenceShelfPositionForTests => CurrentCustomReferencePosition();
+        public bool IsQuestScrollVisibleForTests => questScrollPanel != null && questScrollPanel.gameObject.activeInHierarchy;
+        public int QuestChecklistCompletedForTests => currentQuestChecklist?.CompletedCount ?? 0;
+        public int QuestChecklistTotalForTests => currentQuestChecklist?.TotalCount ?? 0;
+        public int QuestChecklistGlobalCompletedForTests => QuestChecklistGlobalCompleted(includeCurrent: true);
+        public int QuestChecklistGlobalTotalForTests => QuestChecklistGlobalTotal(includeCurrent: true);
+        public int QuestChecklistSavedCompletedForTests => QuestChecklistGlobalCompleted(includeCurrent: false);
+        public int QuestChecklistSavedTotalForTests => QuestChecklistGlobalTotal(includeCurrent: false);
+        public string QuestChecklistTitleForTests => questTitleText == null ? "" : questTitleText.text;
+        public string QuestChecklistScoreForTests => questScoreText == null ? "" : questScoreText.text;
+        public string QuestStatusForTests => questStatusText == null ? "" : questStatusText.text;
+        public string QuestProgressForTests => questProgressText == null ? "" : questProgressText.text;
+        public string QuestChecklistSnapshotSummaryForTests => BuildQuestChecklistSnapshotSummary();
         public TutorialPersonalizationSummary LastPersonalizationSummaryForTests { get; private set; } = TutorialPersonalizationSummary.Empty;
+        public static Vector2 BuildMovementInputForTests(
+            float horizontalAxis,
+            float verticalAxis,
+            bool leftHeld,
+            bool rightHeld,
+            bool downHeld,
+            bool upHeld)
+        {
+            return BuildMovementInput(horizontalAxis, verticalAxis, leftHeld, rightHeld, downHeld, upHeld);
+        }
         private bool IsFinalFloor => floorController.CurrentFloorIndex >= floorController.FloorCount - 1;
 
         private void Awake()
@@ -149,6 +252,7 @@ namespace MagicExamHall
             recognitionService = new HeuristicStrokeRecognitionService(null, customShapeStore);
             floorGoals = new FloorGoalSystem();
             ResolveSceneReferences();
+            RefreshPlayerBlinkRenderers();
             BuildUi();
             customShapeBook = new CustomShapeBookController();
             customShapeBook.Initialize(canvas, mainCamera, player, uiFont, customShapeStore);
@@ -160,9 +264,13 @@ namespace MagicExamHall
         {
             customShapeBook?.Tick();
             TickCustomReferenceShelf();
-            if (customShapeBook?.BlocksGameplayInput == true || IsCustomReferencePanelOpenForTests)
+            if (IsFirstFloorLetterVisibleForTests || customShapeBook?.BlocksGameplayInput == true || IsCustomReferencePanelOpenForTests)
             {
                 velocity = Vector2.zero;
+                if (platformMotionActive && playerBody != null)
+                {
+                    playerBody.linearVelocity = new Vector2(0f, playerBody.linearVelocity.y);
+                }
             }
             else
             {
@@ -173,10 +281,15 @@ namespace MagicExamHall
 
             TickSeals();
             TickPulses();
+            TickShelfGuideArrows();
             TickDefaultBarriers();
             TickDamagePopups();
+            TickBuffQueues();
             TickHazards();
+            TickHostileEntityContacts();
+            TickPlayerBlink();
             TickFloorAdvance();
+            TickQuestChecklist();
             magicNote.Tick(Time.deltaTime);
             UpdateHud();
         }
@@ -189,15 +302,25 @@ namespace MagicExamHall
             }
         }
 
-        public BaseRecognitionResult CastSyntheticBaseForTests(SpellFamily family, Vector2 worldCenter)
+        public BaseRecognitionResult CastSyntheticBaseForTests(SpellFamily family, Vector2 worldCenter, bool movePlayerToReference = true)
         {
+            if (movePlayerToReference)
+            {
+                MovePlayerForTests(worldCenter);
+            }
+
             var strokes = Offset(GestureRecognizer.CreateCanonicalSamples(family, 1.6f, 0.03f), worldCenter, 0.8f);
             var result = SpellRuntime.RecognizeBase(strokes);
-            return SubmitBaseRecognitionResult(result, worldCenter, strokes.Count);
+            return SubmitBaseRecognitionResult(result, CurrentMagicCastOrigin(worldCenter), strokes.Count);
         }
 
-        public BaseRecognitionResult CastRawBaseForTests(List<List<StrokeSample>> strokes, Vector2 worldCenter)
+        public BaseRecognitionResult CastRawBaseForTests(List<List<StrokeSample>> strokes, Vector2 worldCenter, bool movePlayerToReference = true)
         {
+            if (movePlayerToReference)
+            {
+                MovePlayerForTests(worldCenter);
+            }
+
             return ProcessSpellGroup(strokes, worldCenter, strokes.Count).baseResult;
         }
 
@@ -250,6 +373,11 @@ namespace MagicExamHall
             }
         }
 
+        public void CloseFirstFloorLetterForTests()
+        {
+            CloseFirstFloorLetter();
+        }
+
         public void LoadFloorForTests(int index)
         {
             LoadFloor(index);
@@ -258,6 +386,31 @@ namespace MagicExamHall
         public void MovePlayerForTests(Vector2 worldPosition)
         {
             player.position = worldPosition;
+            if (playerBody != null)
+            {
+                playerBody.position = worldPosition;
+                playerBody.linearVelocity = Vector2.zero;
+            }
+        }
+
+        private Vector2 CurrentMagicCastOrigin(Vector2 fallback)
+        {
+            return player == null ? fallback : (Vector2)player.position;
+        }
+
+        public Vector2 StageGoalPositionForTests(string goalId)
+        {
+            return activeGoals.FirstOrDefault(goal => string.Equals(goal.id, goalId, StringComparison.OrdinalIgnoreCase))?.position ?? Vector2.zero;
+        }
+
+        public Vector2 StageObstacleCenterForTests(string goalId)
+        {
+            return activeStageDefinition?.FindObstacle(goalId)?.center ?? Vector2.zero;
+        }
+
+        public Vector2 StageObstacleResetPositionForTests(string goalId)
+        {
+            return activeStageDefinition?.FindObstacle(goalId)?.resetPosition ?? Vector2.zero;
         }
 
         public IReadOnlyList<SpellSealSnapshot> GetActiveSealSnapshots()
@@ -281,7 +434,8 @@ namespace MagicExamHall
                 return result;
             }
 
-            return ApplySubmittedSpellOutcome(spellCasting.ProcessBaseResult(result, worldCenter, strokeCount, Time.time)).baseResult;
+            var castCenter = CurrentMagicCastOrigin(worldCenter);
+            return ApplySubmittedSpellOutcome(spellCasting.ProcessBaseResult(result, castCenter, strokeCount, Time.time)).baseResult;
         }
 
         public OverlayRecognitionResult SubmitOverlayRecognitionResult(OverlayRecognitionResult result, string sealId, Vector2 worldCenter, int strokeCount)
@@ -408,7 +562,8 @@ namespace MagicExamHall
 
         public bool ImportCustomReferenceForTests(SpellFamily family, out int slotIndex, out string message)
         {
-            var reference = CustomShapeReferences.FirstOrDefault(item => item.family == family);
+            var references = CurrentCustomShapeReferences();
+            var reference = references.FirstOrDefault(item => item.family == family);
             if (reference == null)
             {
                 slotIndex = -1;
@@ -421,7 +576,13 @@ namespace MagicExamHall
 
         public List<List<StrokeSample>> CustomReferenceStrokesForTests(SpellFamily family, Vector2 worldCenter)
         {
-            var reference = CustomShapeReferences.FirstOrDefault(item => item.family == family) ?? CustomShapeReferences[0];
+            var references = CurrentCustomShapeReferences();
+            var reference = references.FirstOrDefault(item => item.family == family) ?? references.FirstOrDefault();
+            if (reference == null)
+            {
+                return BuildReferenceStrokes("line", worldCenter, 1.6f);
+            }
+
             return BuildReferenceStrokes(reference.shapeToken, worldCenter, 1.6f);
         }
 
@@ -459,6 +620,7 @@ namespace MagicExamHall
                 sprite.sortingOrder = 30;
                 player = playerObject.transform;
             }
+            EnsurePlayerPhysics();
 
             if (canvas == null)
             {
@@ -504,6 +666,8 @@ namespace MagicExamHall
             hudTitle = CreateText("HUD Title", hudPanel, "Magic Exam Hall", 24, FontStyle.Bold, new Vector2(16, -12), new Vector2(520, 28), Anchor.TopLeft);
             hudCopy = CreateText("HUD Copy", hudPanel, "", 15, FontStyle.Normal, new Vector2(16, -46), new Vector2(520, 60), Anchor.TopLeft);
             floorProgress = CreateText("Floor Progress", hudPanel, "", 15, FontStyle.Bold, new Vector2(16, 12), new Vector2(520, 24), Anchor.BottomLeft);
+            hudPanel.gameObject.SetActive(false);
+            BuildHealthUi();
 
             notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(560, 112), Anchor.BottomLeft, new Color(0.04f, 0.055f, 0.075f, 0.84f));
             noteText = CreateText("Note Text", notePanel, "", 14, FontStyle.Normal, new Vector2(14, -12), new Vector2(530, 88), Anchor.TopLeft);
@@ -512,6 +676,8 @@ namespace MagicExamHall
             resultText = CreateText("Result Text", resultPanel, "", 13, FontStyle.Normal, new Vector2(14, -12), new Vector2(402, 152), Anchor.TopLeft);
             UpdateResultPanelLayout();
             resultPanel.gameObject.SetActive(false);
+            BuildQuestScrollUi();
+            UpdateResultPanelLayout();
 
             reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(760, 520), Anchor.Center, new Color(0.035f, 0.045f, 0.065f, 0.96f));
             reportText = CreateText("Report Text", reportPanel, "", 17, FontStyle.Normal, new Vector2(28, -28), new Vector2(704, 464), Anchor.TopLeft);
@@ -534,6 +700,135 @@ namespace MagicExamHall
                 SkipCurrentFloorForDebug);
 
             BuildCustomReferenceUi();
+            BuildFirstFloorLetterUi();
+        }
+
+        private void BuildHealthUi()
+        {
+            healthPanel = CreatePanel("Health Bar", canvas.transform, new Vector2(20f, -20f), new Vector2(158f, 48f), Anchor.TopLeft, new Color(0.035f, 0.025f, 0.030f, 0.72f));
+            AddPanelBorder(healthPanel, new Color(0.18f, 0.06f, 0.055f, 0.95f), 1.6f);
+            healthHearts.Clear();
+            for (var index = 0; index < 3; index++)
+            {
+                var heartObject = new GameObject($"Health Heart {index + 1}");
+                heartObject.transform.SetParent(healthPanel, false);
+                var rect = heartObject.AddComponent<RectTransform>();
+                ApplyAnchor(rect, Anchor.TopLeft);
+                rect.anchoredPosition = new Vector2(11f + index * 47f, -5f);
+                rect.sizeDelta = new Vector2(38f, 36f);
+                var heart = heartObject.AddComponent<HeartHealthGraphic>();
+                heart.color = new Color(0.92f, 0.035f, 0.045f, 1f);
+                heart.raycastTarget = false;
+                healthHearts.Add(heart);
+            }
+
+            RefreshHealthUi();
+        }
+
+        private void BuildQuestScrollUi()
+        {
+            questScrollPanel = CreatePanel("Quest Scroll Panel", canvas.transform, new Vector2(-18f, -18f), new Vector2(360f, 332f), Anchor.TopRight, new Color(0.80f, 0.64f, 0.42f, 0.97f));
+            AddPanelBorder(questScrollPanel, new Color(0.42f, 0.24f, 0.10f, 0.96f), 2.5f);
+            CreateImage("Quest Scroll Top Roll", questScrollPanel, new Vector2(22f, -12f), new Vector2(316f, 26f), Anchor.TopLeft, new Color(0.94f, 0.76f, 0.46f, 0.98f)).raycastTarget = false;
+            CreateImage("Quest Scroll Bottom Roll", questScrollPanel, new Vector2(22f, 12f), new Vector2(316f, 26f), Anchor.BottomLeft, new Color(0.55f, 0.34f, 0.16f, 0.96f)).raycastTarget = false;
+            CreateImage("Quest Scroll Left Cap", questScrollPanel, new Vector2(10f, -12f), new Vector2(24f, 26f), Anchor.TopLeft, new Color(0.64f, 0.39f, 0.18f, 0.98f)).raycastTarget = false;
+            CreateImage("Quest Scroll Right Cap", questScrollPanel, new Vector2(-10f, -12f), new Vector2(24f, 26f), Anchor.TopRight, new Color(0.64f, 0.39f, 0.18f, 0.98f)).raycastTarget = false;
+
+            questTitleText = CreateText("Quest Scroll Title", questScrollPanel, "퀘스트", 17, FontStyle.Bold, new Vector2(22f, -39f), new Vector2(210f, 28f), Anchor.TopLeft);
+            questTitleText.color = new Color(0.20f, 0.10f, 0.04f, 1f);
+            questTitleText.alignment = TextAnchor.MiddleLeft;
+            questTitleText.raycastTarget = false;
+
+            questScoreText = CreateText("Quest Scroll Score", questScrollPanel, "", 12, FontStyle.Bold, new Vector2(-22f, -42f), new Vector2(100f, 24f), Anchor.TopRight);
+            questScoreText.color = new Color(0.27f, 0.13f, 0.05f, 0.9f);
+            questScoreText.alignment = TextAnchor.MiddleRight;
+            questScoreText.raycastTarget = false;
+
+            CreateImage("Quest Log Divider", questScrollPanel, new Vector2(22f, -232f), new Vector2(316f, 2f), Anchor.TopLeft, new Color(0.38f, 0.20f, 0.08f, 0.46f)).raycastTarget = false;
+            questStatusText = CreateText("Quest Status Text", questScrollPanel, "", 11, FontStyle.Bold, new Vector2(22f, -240f), new Vector2(316f, 42f), Anchor.TopLeft);
+            questStatusText.color = new Color(0.18f, 0.09f, 0.035f, 0.95f);
+            questStatusText.alignment = TextAnchor.UpperLeft;
+            questStatusText.verticalOverflow = VerticalWrapMode.Truncate;
+            questStatusText.raycastTarget = false;
+
+            questProgressText = CreateText("Quest Progress Text", questScrollPanel, "", 11, FontStyle.Bold, new Vector2(22f, -286f), new Vector2(316f, 24f), Anchor.TopLeft);
+            questProgressText.color = new Color(0.27f, 0.13f, 0.05f, 0.92f);
+            questProgressText.alignment = TextAnchor.MiddleLeft;
+            questProgressText.raycastTarget = false;
+        }
+
+        private void BuildFirstFloorLetterUi()
+        {
+            var overlayImage = CreateImage("First Floor Letter Overlay", canvas.transform, Vector2.zero, Vector2.zero, Anchor.Center, new Color(0.004f, 0.004f, 0.006f, 0.82f));
+            overlayImage.raycastTarget = true;
+            firstFloorLetterOverlay = overlayImage.rectTransform;
+            firstFloorLetterOverlay.anchorMin = Vector2.zero;
+            firstFloorLetterOverlay.anchorMax = Vector2.one;
+            firstFloorLetterOverlay.pivot = new Vector2(0.5f, 0.5f);
+            firstFloorLetterOverlay.offsetMin = Vector2.zero;
+            firstFloorLetterOverlay.offsetMax = Vector2.zero;
+            firstFloorLetterOverlay.anchoredPosition = Vector2.zero;
+            firstFloorLetterOverlay.sizeDelta = Vector2.zero;
+
+            var parchment = CreatePanel("First Floor Letter Scroll", firstFloorLetterOverlay, Vector2.zero, new Vector2(760f, 540f), Anchor.Center, new Color(0.78f, 0.64f, 0.43f, 0.98f));
+            AddPanelBorder(parchment, new Color(0.40f, 0.23f, 0.10f, 0.94f), 3f);
+            CreateImage("First Floor Letter Top Roll", parchment, new Vector2(32f, -22f), new Vector2(696f, 34f), Anchor.TopLeft, new Color(0.92f, 0.76f, 0.48f, 0.98f));
+            CreateImage("First Floor Letter Bottom Roll", parchment, new Vector2(32f, 22f), new Vector2(696f, 34f), Anchor.BottomLeft, new Color(0.58f, 0.39f, 0.20f, 0.96f));
+            CreateImage("First Floor Letter Wax Seal", parchment, new Vector2(-72f, 72f), new Vector2(54f, 54f), Anchor.BottomRight, new Color(0.56f, 0.05f, 0.04f, 0.96f));
+
+            var title = CreateText("First Floor Letter Title", parchment, "입학 안내 편지", 29, FontStyle.Bold, new Vector2(48f, -58f), new Vector2(560f, 40f), Anchor.TopLeft);
+            title.color = new Color(0.21f, 0.11f, 0.04f, 1f);
+            title.alignment = TextAnchor.MiddleLeft;
+            title.raycastTarget = false;
+
+            firstFloorLetterText = CreateText("First Floor Letter Text", parchment, FirstFloorLetterBody, 18, FontStyle.Normal, new Vector2(52f, -112f), new Vector2(650f, 332f), Anchor.TopLeft);
+            firstFloorLetterText.color = new Color(0.18f, 0.10f, 0.045f, 1f);
+            firstFloorLetterText.lineSpacing = 1.12f;
+            firstFloorLetterText.raycastTarget = false;
+
+            var signature = CreateText("First Floor Letter Signature", parchment, "마법 시험관의 인장", 16, FontStyle.Italic, new Vector2(-244f, 58f), new Vector2(170f, 28f), Anchor.BottomRight);
+            signature.color = new Color(0.28f, 0.12f, 0.05f, 0.88f);
+            signature.alignment = TextAnchor.MiddleRight;
+            signature.raycastTarget = false;
+
+            firstFloorLetterCloseButton = CreateButton(
+                "First Floor Letter Close Button",
+                parchment,
+                "X",
+                20,
+                FontStyle.Bold,
+                new Vector2(-18f, -18f),
+                new Vector2(42f, 42f),
+                Anchor.TopRight,
+                new Color(0.78f, 0.03f, 0.02f, 0.98f),
+                CloseFirstFloorLetter);
+
+            firstFloorLetterOverlay.gameObject.SetActive(false);
+        }
+
+        private void ShowFirstFloorLetter()
+        {
+            if (firstFloorLetterOverlay == null)
+            {
+                return;
+            }
+
+            firstFloorLetterShownThisSession = true;
+            firstFloorLetterOverlay.SetAsLastSibling();
+            firstFloorLetterOverlay.gameObject.SetActive(true);
+        }
+
+        private void CloseFirstFloorLetter()
+        {
+            HideFirstFloorLetter();
+        }
+
+        private void HideFirstFloorLetter()
+        {
+            if (firstFloorLetterOverlay != null)
+            {
+                firstFloorLetterOverlay.gameObject.SetActive(false);
+            }
         }
 
         private void BuildCustomReferenceUi()
@@ -587,11 +882,6 @@ namespace MagicExamHall
                 new Color(0.10f, 0.18f, 0.30f, 0.96f),
                 CloseCustomReferencePanel);
 
-            for (var index = 0; index < CustomShapeReferences.Count; index++)
-            {
-                CreateCustomReferenceCard(CustomShapeReferences[index], index);
-            }
-
             customReferenceStatus = CreateText(
                 "Custom Reference Status",
                 customReferencePanel,
@@ -615,6 +905,7 @@ namespace MagicExamHall
                 new Vector2(712f, 52f),
                 Anchor.TopLeft,
                 new Color(0.045f, 0.065f, 0.095f, 0.96f));
+            customReferenceCards.Add(card.gameObject);
             AddPanelBorder(card, new Color(1f, 1f, 1f, 0.12f), 1f);
             var familyColor = FamilyColor(reference.family);
             var swatch = CreateImage($"Custom Reference Swatch {reference.family}", card, new Vector2(10f, -9f), new Vector2(40f, 40f), Anchor.TopLeft, new Color(familyColor.r, familyColor.g, familyColor.b, 0.70f));
@@ -623,7 +914,7 @@ namespace MagicExamHall
             var label = CreateText(
                 $"Custom Reference Label {reference.family}",
                 card,
-                $"{SpellLabels.Korean(reference.family)}: {reference.label}",
+                ReferenceShapeTitle(reference),
                 15,
                 FontStyle.Bold,
                 new Vector2(62f, -8f),
@@ -633,7 +924,7 @@ namespace MagicExamHall
             var summary = CreateText(
                 $"Custom Reference Summary {reference.family}",
                 card,
-                reference.summary,
+                ReferenceShapeSummary(reference),
                 12,
                 FontStyle.Normal,
                 new Vector2(62f, -31f),
@@ -657,26 +948,414 @@ namespace MagicExamHall
                 });
         }
 
-        private void LoadFloor(int index)
+        private static string ReferenceShapeTitle(CustomShapeReferenceDefinition reference)
         {
+            return ShapeTokenTitle(reference?.shapeToken);
+        }
+
+        private static string ReferenceShapeSummary(CustomShapeReferenceDefinition reference)
+        {
+            return ShapeTokenSummary(reference?.shapeToken);
+        }
+
+        private static string ShapeTokenTitle(string token)
+        {
+            return NormalizeShapeToken(token) switch
+            {
+                "line" => "직선",
+                "ellipse" => "타원",
+                "arrow" => "화살표",
+                "rect" => "사각형",
+                "brace" => "꺾쇠",
+                "hexagon" => "육각형",
+                "star" => "별",
+                "wave" => "물결",
+                _ => "자유 도형"
+            };
+        }
+
+        private static string ShapeTokenSummary(string token)
+        {
+            return NormalizeShapeToken(token) switch
+            {
+                "line" => "시작점에서 끝점까지 한 획으로 곧게 긋습니다.",
+                "ellipse" => "둥근 고리를 한 바퀴 닫아 그립니다.",
+                "arrow" => "몸통 선을 긋고 끝에 화살촉을 붙입니다.",
+                "rect" => "네 변을 이어 닫힌 사각형을 만듭니다.",
+                "brace" => "양끝이 벌어진 꺾쇠 모양으로 휘어 그립니다.",
+                "hexagon" => "여섯 변을 이어 닫힌 결정형을 만듭니다.",
+                "star" => "뾰족한 꼭짓점을 반복해 별 모양을 만듭니다.",
+                "wave" => "좌우로 흐르는 물결선을 한 획으로 그립니다.",
+                _ => "예시와 같은 외곽선을 천천히 따라 그립니다."
+            };
+        }
+
+        private static string NormalizeShapeToken(string token)
+        {
+            return string.IsNullOrWhiteSpace(token) ? "line" : token.ToLowerInvariant();
+        }
+
+        private void BeginQuestChecklistForCurrentFloor()
+        {
+            var floor = floorController.Current;
+            currentQuestChecklist = new QuestChecklistState(
+                floor.number,
+                floor.title,
+                BuildQuestChecklistDefinitions(floor).ToList());
+            RebuildQuestChecklistRows();
+            TickQuestChecklist(forceRefresh: true);
+        }
+
+        private IEnumerable<QuestChecklistItemDefinition> BuildQuestChecklistDefinitions(FloorDefinition floor)
+        {
+            return floor.number switch
+            {
+                1 => new[]
+                {
+                    QuestChecklistItemDefinition.GoalsAtLeast("floor1_first", "첫 표식 하나 깨우기", 1),
+                    QuestChecklistItemDefinition.GoalsAtLeast("floor1_three", "서로 다른 기본 문양 세 개 성공", 3),
+                    QuestChecklistItemDefinition.AllGoals("floor1_all", "다섯 기본 표식 모두 깨우기")
+                },
+                2 => new[]
+                {
+                    QuestChecklistItemDefinition.ReferencePanel("floor2_shelf", "책장 프리셋 창 열기"),
+                    QuestChecklistItemDefinition.ReferenceImports("floor2_import", "책장에서 도형 하나 가져오기", 1),
+                    QuestChecklistItemDefinition.GoalsAtLeast("floor2_three", "커스텀 표식 세 개 깨우기", 3),
+                    QuestChecklistItemDefinition.AllGoals("floor2_all", "다섯 커스텀 표식 모두 깨우기")
+                },
+                3 => new[]
+                {
+                    QuestChecklistItemDefinition.ReferenceImports("floor3_import", "3층 책장 도형 하나 가져오기", 1),
+                    QuestChecklistItemDefinition.Goal("floor3_river", "강물을 얼음길로 바꾸기", "frozen_river"),
+                    QuestChecklistItemDefinition.Goal("floor3_hole", "바닥 구멍 메우기", "earth_stairs"),
+                    QuestChecklistItemDefinition.Goal("floor3_cliff", "낭떠러지를 다리로 잇기", "living_bridge"),
+                    QuestChecklistItemDefinition.Goal("floor3_gap", "바람 발판으로 마지막 빈 공간 건너기", "wind_platform")
+                },
+                4 => new[]
+                {
+                    QuestChecklistItemDefinition.ReferenceImports("floor4_import", "전투 도형 하나 가져오기", 1),
+                    QuestChecklistItemDefinition.GoalsAtLeast("floor4_two", "훈련 표적 둘 반응시키기", 2),
+                    QuestChecklistItemDefinition.AllGoals("floor4_all", "네 표적 모두 반응시키기")
+                },
+                _ => new[]
+                {
+                    QuestChecklistItemDefinition.GoalsAtLeast("floor5_three", "마지막 마법진 요구 세 개 채우기", 3),
+                    QuestChecklistItemDefinition.GoalsAtLeast("floor5_pass", "통과 기준 다섯 요구 채우기", FinalFloorPassingGoalCount),
+                    QuestChecklistItemDefinition.AllGoals("floor5_all", "여섯 요구 모두 채우기")
+                }
+            };
+        }
+
+        private void RebuildQuestChecklistRows()
+        {
+            foreach (var view in questChecklistViews)
+            {
+                view.Destroy();
+            }
+            questChecklistViews.Clear();
+
+            if (questScrollPanel == null || currentQuestChecklist == null)
+            {
+                return;
+            }
+
+            questTitleText.text = $"층 {currentQuestChecklist.floorNumber} 퀘스트";
+            var y = -74f;
+            for (var index = 0; index < currentQuestChecklist.entries.Count; index++)
+            {
+                questChecklistViews.Add(CreateQuestChecklistRow(currentQuestChecklist.entries[index], index, y));
+                y -= 31f;
+            }
+        }
+
+        private QuestChecklistItemView CreateQuestChecklistRow(QuestChecklistEntry entry, int index, float y)
+        {
+            var row = CreatePanel(
+                $"Quest Checklist Row {index + 1}",
+                questScrollPanel,
+                new Vector2(22f, y),
+                new Vector2(316f, 28f),
+                Anchor.TopLeft,
+                new Color(0.74f, 0.55f, 0.32f, 0.18f));
+            row.GetComponent<Image>().raycastTarget = false;
+
+            var box = CreateImage(
+                $"Quest Checkbox {index + 1}",
+                row,
+                new Vector2(4f, -4f),
+                new Vector2(20f, 20f),
+                Anchor.TopLeft,
+                new Color(0.92f, 0.78f, 0.52f, 0.55f));
+            box.raycastTarget = false;
+            AddPanelBorder(box.rectTransform, new Color(0.32f, 0.17f, 0.07f, 0.9f), 1.4f);
+
+            var checkObject = new GameObject($"Quest Checkmark {index + 1}");
+            checkObject.transform.SetParent(box.transform, false);
+            var checkRect = checkObject.AddComponent<RectTransform>();
+            checkRect.anchorMin = Vector2.zero;
+            checkRect.anchorMax = Vector2.one;
+            checkRect.pivot = new Vector2(0.5f, 0.5f);
+            checkRect.offsetMin = new Vector2(1.5f, 1.5f);
+            checkRect.offsetMax = new Vector2(-1.5f, -1.5f);
+            var check = checkObject.AddComponent<QuestCheckMarkGraphic>();
+            check.color = new Color(0.82f, 0.04f, 0.035f, 0.98f);
+            check.raycastTarget = false;
+            checkObject.SetActive(false);
+
+            var label = CreateText(
+                $"Quest Checklist Label {index + 1}",
+                row,
+                entry.definition.label,
+                12,
+                FontStyle.Bold,
+                new Vector2(33f, -2f),
+                new Vector2(274f, 24f),
+                Anchor.TopLeft);
+            label.color = new Color(0.18f, 0.09f, 0.035f, 0.96f);
+            label.alignment = TextAnchor.MiddleLeft;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+            label.raycastTarget = false;
+
+            return new QuestChecklistItemView(row.gameObject, box, check, label);
+        }
+
+        private void TickQuestChecklist(bool forceRefresh = false)
+        {
+            if (currentQuestChecklist == null)
+            {
+                return;
+            }
+
+            var changed = false;
+            foreach (var entry in currentQuestChecklist.entries)
+            {
+                var completed = EvaluateQuestChecklistEntry(entry.definition);
+                if (entry.completed == completed)
+                {
+                    continue;
+                }
+
+                entry.completed = completed;
+                changed = true;
+            }
+
+            if (changed || forceRefresh)
+            {
+                RefreshQuestChecklistView();
+            }
+        }
+
+        private bool EvaluateQuestChecklistEntry(QuestChecklistItemDefinition definition)
+        {
+            return definition.kind switch
+            {
+                QuestChecklistConditionKind.GoalCompleted => activeGoals.Any(goal =>
+                    goal.completed && string.Equals(goal.id, definition.goalId, StringComparison.OrdinalIgnoreCase)),
+                QuestChecklistConditionKind.GoalsCompletedAtLeast => activeGoals.Count(goal => goal.completed) >= definition.threshold,
+                QuestChecklistConditionKind.AllGoalsCompleted => activeGoals.Count > 0 && activeGoals.All(goal => goal.completed),
+                QuestChecklistConditionKind.ReferencePanelOpened => questReferencePanelOpenedThisFloor,
+                QuestChecklistConditionKind.ReferenceImportsAtLeast => questImportedReferenceIdsThisFloor.Count >= definition.threshold,
+                _ => false
+            };
+        }
+
+        private void RefreshQuestChecklistView()
+        {
+            if (currentQuestChecklist == null)
+            {
+                return;
+            }
+
+            questTitleText.text = $"층 {currentQuestChecklist.floorNumber} 퀘스트";
+            questScoreText.text = $"{QuestChecklistGlobalCompleted(includeCurrent: true)}/{QuestChecklistGlobalTotal(includeCurrent: true)}";
+            for (var index = 0; index < currentQuestChecklist.entries.Count && index < questChecklistViews.Count; index++)
+            {
+                questChecklistViews[index].Refresh(currentQuestChecklist.entries[index].completed);
+            }
+        }
+
+        private void SaveCurrentQuestChecklistScore(string reason)
+        {
+            if (currentQuestChecklist == null || currentQuestChecklist.entries.Count == 0)
+            {
+                return;
+            }
+
+            TickQuestChecklist(forceRefresh: true);
+            var snapshot = CaptureCurrentQuestChecklistSnapshot(reason);
+            var shouldLog = !questChecklistSnapshots.TryGetValue(snapshot.floorNumber, out var previous) ||
+                            previous.completedCount != snapshot.completedCount ||
+                            previous.totalCount != snapshot.totalCount ||
+                            !string.Equals(previous.reason, snapshot.reason, StringComparison.Ordinal);
+            questChecklistSnapshots[snapshot.floorNumber] = snapshot;
+            endingReport.RecordQuestChecklist(
+                BuildQuestChecklistSnapshotSummary(),
+                QuestChecklistGlobalCompleted(includeCurrent: false),
+                QuestChecklistGlobalTotal(includeCurrent: false));
+            if (shouldLog)
+            {
+                logger.LogQuestChecklist(new QuestChecklistLog
+                {
+                    sessionId = sessionId,
+                    floorId = snapshot.floorNumber.ToString(CultureInfo.InvariantCulture),
+                    floorTitle = snapshot.floorTitle,
+                    reason = snapshot.reason,
+                    completed = snapshot.completedCount,
+                    total = snapshot.totalCount,
+                    globalCompleted = QuestChecklistGlobalCompleted(includeCurrent: false),
+                    globalTotal = QuestChecklistGlobalTotal(includeCurrent: false),
+                    elapsedMs = snapshot.elapsedMs,
+                    items = snapshot.items
+                });
+            }
+        }
+
+        private QuestChecklistSnapshot CaptureCurrentQuestChecklistSnapshot(string reason)
+        {
+            return new QuestChecklistSnapshot
+            {
+                floorNumber = currentQuestChecklist.floorNumber,
+                floorTitle = currentQuestChecklist.floorTitle,
+                completedCount = currentQuestChecklist.CompletedCount,
+                totalCount = currentQuestChecklist.TotalCount,
+                reason = reason,
+                elapsedMs = Mathf.RoundToInt((Time.time - floorStartedAt) * 1000f),
+                items = string.Join(" | ", currentQuestChecklist.entries.Select(entry =>
+                    $"{entry.definition.id}:{(entry.completed ? "done" : "open")}"))
+            };
+        }
+
+        private int QuestChecklistGlobalCompleted(bool includeCurrent)
+        {
+            var total = questChecklistSnapshots.Values
+                .Where(snapshot => !includeCurrent || currentQuestChecklist == null || snapshot.floorNumber != currentQuestChecklist.floorNumber)
+                .Sum(snapshot => snapshot.completedCount);
+            if (includeCurrent && currentQuestChecklist != null)
+            {
+                total += currentQuestChecklist.CompletedCount;
+            }
+
+            return total;
+        }
+
+        private int QuestChecklistGlobalTotal(bool includeCurrent)
+        {
+            var total = questChecklistSnapshots.Values
+                .Where(snapshot => !includeCurrent || currentQuestChecklist == null || snapshot.floorNumber != currentQuestChecklist.floorNumber)
+                .Sum(snapshot => snapshot.totalCount);
+            if (includeCurrent && currentQuestChecklist != null)
+            {
+                total += currentQuestChecklist.TotalCount;
+            }
+
+            return total;
+        }
+
+        private string BuildQuestChecklistSnapshotSummary()
+        {
+            if (questChecklistSnapshots.Count == 0)
+            {
+                return "아직 저장된 퀘스트 점수가 없습니다.";
+            }
+
+            return string.Join(
+                "\n",
+                questChecklistSnapshots.Values
+                    .OrderBy(snapshot => snapshot.floorNumber)
+                    .Select(snapshot => $"{snapshot.floorNumber}층 {snapshot.completedCount}/{snapshot.totalCount} - {snapshot.reason}"));
+        }
+
+        private void LoadFloor(int index, bool saveCurrentQuestScore = true)
+        {
+            if (saveCurrentQuestScore)
+            {
+                SaveCurrentQuestChecklistScore("floor_change");
+            }
+
             pendingAdvanceAt = -1f;
             finalCompletionCelebrated = false;
             finalTrueEnding = false;
             reportPanel.gameObject.SetActive(false);
             resultPanel.gameObject.SetActive(false);
             floorSkipButton.gameObject.SetActive(true);
+            questScrollPanel.gameObject.SetActive(true);
             CloseCustomReferenceUi();
             ClearFloorObjects();
             floorController.Load(index);
-            safePosition = new Vector2(0f, -4.05f);
-            player.position = safePosition;
+            questReferencePanelOpenedThisFloor = false;
+            questImportedReferenceIdsThisFloor.Clear();
+            activeStageDefinition = LoadStageDefinitionForFloor(floorController.Current.number);
+            ConfigurePlatformMotion(activeStageDefinition != null);
+            safePosition = activeStageDefinition == null ? new Vector2(0f, -4.05f) : activeStageDefinition.playerStart;
+            MovePlayerTo(safePosition);
             floorStartedAt = Time.time;
             activeGoals.Clear();
             activeGoals.AddRange(floorController.Current.goals.Select(goal => goal.Clone()));
+            ApplyStageGoalOverrides();
             activeHazards.Clear();
             activeHazards.AddRange(floorController.Current.hazards.Select(hazard => hazard.Clone()));
             BuildFloorArt(floorController.Current);
+            BeginQuestChecklistForCurrentFloor();
             magicNote.Show(BuildFloorEntryNote(floorController.Current));
+            if (floorController.Current.number == 1 && !firstFloorLetterShownThisSession)
+            {
+                ShowFirstFloorLetter();
+            }
+            else
+            {
+                HideFirstFloorLetter();
+            }
+        }
+
+        private static FloorStageDefinition LoadStageDefinitionForFloor(int floorNumber)
+        {
+            if (floorNumber != 3)
+            {
+                return null;
+            }
+
+            return Resources.Load<FloorStageDefinition>(FloorThreeStageResourcePath) ??
+                   FloorStageDefinition.CreateFallbackFloorThree();
+        }
+
+        private void ApplyStageGoalOverrides()
+        {
+            if (activeStageDefinition?.obstacles == null)
+            {
+                return;
+            }
+
+            foreach (var goal in activeGoals)
+            {
+                var obstacle = activeStageDefinition.FindObstacle(goal.id);
+                if (obstacle == null)
+                {
+                    continue;
+                }
+
+                goal.position = obstacle.goalPosition;
+                goal.radius = obstacle.goalRadius <= 0f ? goal.radius : obstacle.goalRadius;
+            }
+        }
+
+        private void ConfigurePlatformMotion(bool enabled)
+        {
+            platformMotionActive = enabled;
+            EnsurePlayerPhysics();
+            if (playerBody == null || playerCollider == null)
+            {
+                return;
+            }
+
+            playerBody.simulated = enabled;
+            playerCollider.enabled = enabled;
+            playerBody.linearVelocity = Vector2.zero;
+            velocity = Vector2.zero;
+            if (!enabled && mainCamera != null)
+            {
+                mainCamera.transform.position = new Vector3(0f, 0f, -10f);
+                mainCamera.orthographicSize = GameplayCameraOrthographicSize;
+            }
         }
 
         private void SkipCurrentFloorForDebug()
@@ -688,9 +1367,10 @@ namespace MagicExamHall
 
             pendingAdvanceAt = -1f;
             resultPanel.gameObject.SetActive(false);
+            SaveCurrentQuestChecklistScore("skip");
             if (floorController.CurrentFloorIndex < floorController.FloorCount - 1)
             {
-                LoadFloor(floorController.CurrentFloorIndex + 1);
+                LoadFloor(floorController.CurrentFloorIndex + 1, saveCurrentQuestScore: false);
                 return;
             }
 
@@ -704,8 +1384,9 @@ namespace MagicExamHall
                 return;
             }
 
-            var onReferenceFloor = floorController.Current.number >= CustomReferenceFloorNumber && floorController.Current.number <= 4;
-            var closeToShelf = onReferenceFloor && Vector2.Distance(player.position, WestBookcasePosition) <= CustomReferenceShelfRadius;
+            var shelfPosition = CurrentCustomReferencePosition();
+            var hasReferences = CurrentCustomShapeReferences().Count > 0;
+            var closeToShelf = hasReferences && Vector2.Distance(player.position, shelfPosition) <= CustomReferenceShelfRadius;
             var shouldShowBubble = closeToShelf &&
                                    !IsCustomReferencePanelOpenForTests &&
                                    customShapeBook?.BlocksGameplayInput != true &&
@@ -716,7 +1397,23 @@ namespace MagicExamHall
                 return;
             }
 
-            customReferenceBubble.anchoredPosition = WorldToCanvasPosition(WestBookcasePosition + new Vector2(0.88f, 1.22f));
+            customReferenceBubble.anchoredPosition = WorldToCanvasPosition(shelfPosition + new Vector2(0.88f, 1.22f));
+        }
+
+        private Vector2 CurrentCustomReferencePosition()
+        {
+            return activeStageDefinition == null ? WestBookcasePosition : activeStageDefinition.customReferencePosition;
+        }
+
+        private IReadOnlyList<CustomShapeReferenceDefinition> CurrentCustomShapeReferences()
+        {
+            return floorController?.Current.number switch
+            {
+                2 => FloorTwoCustomShapeReferences,
+                3 => FloorThreeCustomShapeReferences,
+                4 => FloorFourCustomShapeReferences,
+                _ => Array.Empty<CustomShapeReferenceDefinition>()
+            };
         }
 
         private void OpenCustomReferencePanel()
@@ -726,13 +1423,17 @@ namespace MagicExamHall
                 return;
             }
 
+            RebuildCustomReferenceCards();
             customReferencePanel.gameObject.SetActive(true);
+            questReferencePanelOpenedThisFloor = true;
+            TickQuestChecklist(forceRefresh: true);
             if (customReferenceBubble != null)
             {
                 customReferenceBubble.gameObject.SetActive(false);
             }
 
-            SetCustomReferenceStatus("각 base 레퍼런스를 빈 커스텀 슬롯으로 들여올 수 있습니다.");
+            var floorNumber = floorController?.Current.number ?? 0;
+            SetCustomReferenceStatus($"{floorNumber}층 책장의 프리셋만 표시됩니다. 필요한 도형을 빈 슬롯으로 들여오세요.");
         }
 
         private void CloseCustomReferencePanel()
@@ -741,6 +1442,66 @@ namespace MagicExamHall
             {
                 customReferencePanel.gameObject.SetActive(false);
             }
+        }
+
+        private void RebuildCustomReferenceCards()
+        {
+            foreach (var card in customReferenceCards)
+            {
+                if (card != null)
+                {
+                    card.SetActive(false);
+                    if (Application.isPlaying)
+                    {
+                        Destroy(card);
+                    }
+                    else
+                    {
+                        DestroyImmediate(card);
+                    }
+                }
+            }
+
+            customReferenceCards.Clear();
+            var references = CurrentCustomShapeReferences();
+            for (var index = 0; index < references.Count; index++)
+            {
+                CreateCustomReferenceCard(references[index], index);
+            }
+
+            if (customReferenceStatus != null)
+            {
+                customReferenceStatus.transform.SetAsLastSibling();
+            }
+        }
+
+        private void EnsurePlayerPhysics()
+        {
+            if (player == null)
+            {
+                return;
+            }
+
+            playerBody = player.GetComponent<Rigidbody2D>();
+            if (playerBody == null)
+            {
+                playerBody = player.gameObject.AddComponent<Rigidbody2D>();
+            }
+            playerBody.bodyType = RigidbodyType2D.Dynamic;
+            playerBody.gravityScale = 3.25f;
+            playerBody.freezeRotation = true;
+            playerBody.interpolation = RigidbodyInterpolation2D.Interpolate;
+            playerBody.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            playerBody.simulated = platformMotionActive;
+
+            playerCollider = player.GetComponent<CapsuleCollider2D>();
+            if (playerCollider == null)
+            {
+                playerCollider = player.gameObject.AddComponent<CapsuleCollider2D>();
+            }
+            playerCollider.size = new Vector2(0.55f, 0.82f);
+            playerCollider.offset = new Vector2(0f, -0.05f);
+            playerCollider.enabled = platformMotionActive;
         }
 
         private void CloseCustomReferenceUi()
@@ -764,12 +1525,33 @@ namespace MagicExamHall
                 return false;
             }
 
+            var replacingExistingFamilySlot = false;
             for (var index = 0; index < CustomShapeProfileStore.SlotCount; index++)
             {
                 if (!customShapeStore.IsSlotOccupied(index))
                 {
-                    slotIndex = index;
-                    break;
+                    continue;
+                }
+
+                if (customShapeStore.GetSlot(index).mappedFamily != reference.family)
+                {
+                    continue;
+                }
+
+                slotIndex = index;
+                replacingExistingFamilySlot = true;
+                break;
+            }
+
+            if (slotIndex < 0)
+            {
+                for (var index = 0; index < CustomShapeProfileStore.SlotCount; index++)
+                {
+                    if (!customShapeStore.IsSlotOccupied(index))
+                    {
+                        slotIndex = index;
+                        break;
+                    }
                 }
             }
 
@@ -794,7 +1576,11 @@ namespace MagicExamHall
             if (saved)
             {
                 customShapeBook?.RefreshFromStoreForExternalChange();
-                message = $"{reference.label} 도형을 슬롯 {slotIndex + 1:00}에 들여왔습니다.";
+                questImportedReferenceIdsThisFloor.Add($"{floorController.Current.number}:{reference.family}:{reference.shapeToken}");
+                TickQuestChecklist(forceRefresh: true);
+                message = replacingExistingFamilySlot
+                    ? $"{ReferenceShapeTitle(reference)} 도형으로 슬롯 {slotIndex + 1:00}을 갱신했습니다."
+                    : $"{ReferenceShapeTitle(reference)} 도형을 슬롯 {slotIndex + 1:00}에 가져왔습니다.";
             }
 
             SetCustomReferenceStatus(message);
@@ -851,6 +1637,11 @@ namespace MagicExamHall
             CreateWorldSprite("Center Runner", new Vector2(0f, 0.12f), Vector3.one, floor.rugColor, floor.accentColor, PixelSpriteKind.Rug, -5, true, new Vector2(2.2f, 7.6f), floorRoot.transform);
             CreateWorldSprite("West Bookcase", WestBookcasePosition, Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
             CreateWorldSprite("East Bookcase", new Vector2(7.25f, 1.1f), Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
+            if (floor.number <= CustomReferenceFloorNumber)
+            {
+                CreateBookcaseGuideArrow("West Bookcase Guide Arrow", WestBookcasePosition, floor.accentColor, emphasized: true, floorRoot.transform);
+                CreateBookcaseGuideArrow("East Bookcase Guide Arrow", new Vector2(7.25f, 1.1f), floor.accentColor, emphasized: floor.number == 1, floorRoot.transform);
+            }
             CreateWorldSprite("Northwest Candle", new Vector2(-6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
             CreateWorldSprite("Northeast Candle", new Vector2(6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
 
@@ -880,46 +1671,117 @@ namespace MagicExamHall
                 var body = CreateWorldSprite(hazard.title, hazard.position, Vector3.one * hazard.radius, hazard.color, new Color(1f, 1f, 1f, 0.6f), PixelSpriteKind.Pulse, 1, false, Vector2.one, floorRoot.transform);
                 hazard.body = body;
             }
+
+            RegisterExistingElementalSprites();
         }
 
         private void BuildFloorThreeStageArt(Transform parent)
         {
-            AddStageGate(
-                "living_bridge",
-                "낭떠러지",
-                new Vector2(0f, -2.45f),
-                new Vector2(15.0f, 0.72f),
-                new Vector2(0f, -3.25f),
-                new Color(0.025f, 0.030f, 0.045f, 1f),
-                "앞의 낭떠러지는 발판 없이는 건널 수 없습니다. 생명 문양 위에 화살표와 사각 발판 도형을 얹으세요.",
+            var definition = activeStageDefinition ?? FloorStageDefinition.CreateFallbackFloorThree();
+            CreateStageBackdrop(definition, parent);
+            foreach (var prop in definition.props ?? Array.Empty<StagePropDefinition>())
+            {
+                var body = CreateStageProp(prop, parent);
+                if (prop.hasCollider)
+                {
+                    AddPlatformCollider(body, prop.size);
+                }
+            }
+
+            foreach (var obstacle in definition.obstacles ?? Array.Empty<StageObstacleDefinition>())
+            {
+                AddStageGate(obstacle, parent);
+            }
+
+            CreateWorldSprite(
+                "Stage Exit Portal",
+                new Vector2(definition.stageMax.x - 1.35f, 0.1f),
+                Vector3.one * 1.2f,
+                new Color(0.95f, 0.92f, 0.38f),
+                floorController.Current.accentColor,
+                PixelSpriteKind.Portal,
+                3,
+                false,
+                Vector2.one,
                 parent);
-            AddStageGate(
-                "frozen_river",
-                "강",
-                new Vector2(0f, -0.62f),
-                new Vector2(15.0f, 0.64f),
-                new Vector2(0f, -1.34f),
-                new Color(0.05f, 0.23f, 0.38f, 1f),
-                "강물은 얼린 뒤 지나갈 수 있습니다. 물 문양 위에 육각형 도형을 얹으세요.",
+        }
+
+        private void CreateBookcaseGuideArrow(string name, Vector2 bookcasePosition, Color accentColor, bool emphasized, Transform parent)
+        {
+            var anchor = bookcasePosition + new Vector2(-0.38f, 1.52f);
+            var scale = emphasized ? 0.78f : 0.64f;
+            var alpha = emphasized ? 1f : 0.68f;
+            var primary = emphasized
+                ? new Color(1f, 0.78f, 0.20f, 1f)
+                : new Color(0.78f, 0.64f, 0.34f, 1f);
+            var secondary = Color.Lerp(accentColor, Color.white, emphasized ? 0.54f : 0.34f);
+            var body = CreateWorldSprite(name, anchor, Vector3.one * scale, primary, secondary, PixelSpriteKind.GuideArrow, 9, false, Vector2.one, parent);
+            var phase = shelfGuideArrows.Count * 0.61f;
+            shelfGuideArrows.Add(new FloatingGuideArrow(body, anchor, phase, scale, alpha));
+        }
+
+        private void TickShelfGuideArrows()
+        {
+            for (var index = shelfGuideArrows.Count - 1; index >= 0; index--)
+            {
+                var arrow = shelfGuideArrows[index];
+                if (!arrow.IsActive)
+                {
+                    shelfGuideArrows.RemoveAt(index);
+                    continue;
+                }
+
+                arrow.Tick(Time.time, Time.deltaTime);
+            }
+        }
+
+        private void CreateStageBackdrop(FloorStageDefinition definition, Transform parent)
+        {
+            var center = (definition.stageMin + definition.stageMax) * 0.5f;
+            var size = definition.stageMax - definition.stageMin;
+            CreateWorldSprite("Crossing Dungeon Backdrop", center, Vector3.one, new Color(0.045f, 0.052f, 0.067f), new Color(0.035f, 0.04f, 0.052f), PixelSpriteKind.FloorTile, -10, true, new Vector2(size.x, size.y), parent);
+            CreateWorldSprite("Crossing Lower Abyss Wash", new Vector2(center.x, definition.stageMin.y + 0.82f), Vector3.one, new Color(0.020f, 0.024f, 0.035f, 1f), new Color(0.06f, 0.07f, 0.10f, 1f), PixelSpriteKind.Rubble, -9, true, new Vector2(size.x, 1.65f), parent);
+            CreateWorldSprite("Crossing Distant Upper Ledge", new Vector2(center.x, 2.52f), Vector3.one, new Color(0.12f, 0.115f, 0.14f, 1f), new Color(0.30f, 0.25f, 0.22f, 1f), PixelSpriteKind.WallTrim, -8, true, new Vector2(size.x, 0.42f), parent);
+            CreateWorldSprite("Crossing Distant Cliff Face", new Vector2(center.x, 1.75f), Vector3.one, new Color(0.070f, 0.066f, 0.082f, 1f), new Color(0.18f, 0.16f, 0.18f, 1f), PixelSpriteKind.CliffFace, -9, true, new Vector2(size.x, 1.20f), parent);
+            CreateWorldSprite("Crossing North Wall", new Vector2(center.x, definition.stageMax.y - 0.55f), Vector3.one, new Color(0.20f, 0.19f, 0.23f), floorController.Current.accentColor, PixelSpriteKind.WallTrim, -5, true, new Vector2(size.x, 1.1f), parent);
+            CreateWorldSprite("Crossing South Trim", new Vector2(center.x, definition.stageMin.y + 0.22f), Vector3.one, new Color(0.16f, 0.14f, 0.13f), new Color(0.45f, 0.36f, 0.22f), PixelSpriteKind.WallTrim, -2, true, new Vector2(size.x, 0.42f), parent);
+            CreateWorldSprite("Crossing Reference Bookcase", definition.customReferencePosition, Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floorController.Current.accentColor, PixelSpriteKind.Bookshelf, 2, false, Vector2.one, parent);
+            CreateBookcaseGuideArrow("Crossing Reference Bookcase Guide Arrow", definition.customReferencePosition, floorController.Current.accentColor, emphasized: true, parent);
+            CreateWorldSprite("Crossing West Torch", definition.customReferencePosition + new Vector2(1.6f, 1.1f), Vector3.one * 0.78f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 4, false, Vector2.one, parent);
+        }
+
+        private GameObject CreateStageProp(StagePropDefinition prop, Transform parent)
+        {
+            var body = CreateWorldSprite(
+                string.IsNullOrWhiteSpace(prop.title) ? "Stage Prop" : prop.title,
+                prop.position,
+                Vector3.one,
+                prop.primaryColor,
+                prop.secondaryColor,
+                prop.spriteKind,
+                prop.sortingOrder,
+                prop.tiled,
+                prop.size,
                 parent);
-            AddStageGate(
-                "earth_stairs",
-                "가파른 길",
-                new Vector2(0f, 1.08f),
-                new Vector2(15.0f, 0.72f),
-                new Vector2(0f, 0.30f),
-                new Color(0.27f, 0.17f, 0.11f, 1f),
-                "가파른 길에는 계단이 필요합니다. 땅 문양 위에 사각형 도형을 얹으세요.",
-                parent);
-            AddStageGate(
-                "wind_platform",
-                "먼 발판",
-                new Vector2(0f, 2.78f),
-                new Vector2(15.0f, 0.64f),
-                new Vector2(0f, 2.05f),
-                new Color(0.06f, 0.12f, 0.16f, 1f),
-                "마지막 빈 공간은 떠 있는 발판으로 건넙니다. 바람 문양 위에 사각형 도형을 얹으세요.",
-                parent);
+            ApplySpriteOverride(body, prop.spriteOverride);
+            CreateRaisedPlatformDepth(prop, parent);
+            return body;
+        }
+
+        private void CreateRaisedPlatformDepth(StagePropDefinition prop, Transform parent)
+        {
+            if (prop == null || !prop.hasCollider || prop.spriteKind != PixelSpriteKind.FloorTile)
+            {
+                return;
+            }
+
+            var topY = prop.position.y + prop.size.y * 0.5f;
+            var bottomY = prop.position.y - prop.size.y * 0.5f;
+            CreateWorldSprite($"{prop.title} Top Highlight", new Vector2(prop.position.x, topY + 0.035f), Vector3.one, new Color(0.62f, 0.54f, 0.42f, 1f), new Color(0.92f, 0.78f, 0.52f, 1f), PixelSpriteKind.WallTrim, -1, true, new Vector2(prop.size.x + 0.14f, 0.08f), parent);
+            CreateWorldSprite($"{prop.title} Underside", new Vector2(prop.position.x, bottomY - 0.35f), Vector3.one, new Color(0.085f, 0.074f, 0.070f, 1f), new Color(0.24f, 0.20f, 0.17f, 1f), PixelSpriteKind.CliffFace, -7, true, new Vector2(prop.size.x + 0.18f, 0.70f), parent);
+            CreateWorldSprite($"{prop.title} Bottom Shadow", new Vector2(prop.position.x, bottomY - 0.74f), Vector3.one, new Color(0.025f, 0.026f, 0.034f, 1f), new Color(0.08f, 0.07f, 0.07f, 1f), PixelSpriteKind.WallTrim, -8, true, new Vector2(prop.size.x + 0.20f, 0.16f), parent);
+            CreateWorldSprite($"{prop.title} Left Broken Edge", new Vector2(prop.position.x - prop.size.x * 0.5f - 0.05f, prop.position.y - 0.08f), Vector3.one, new Color(0.11f, 0.09f, 0.08f, 1f), new Color(0.42f, 0.32f, 0.22f, 1f), PixelSpriteKind.Rubble, -1, false, Vector2.one, parent);
+            CreateWorldSprite($"{prop.title} Right Broken Edge", new Vector2(prop.position.x + prop.size.x * 0.5f + 0.05f, prop.position.y - 0.10f), Vector3.one, new Color(0.12f, 0.095f, 0.08f, 1f), new Color(0.46f, 0.34f, 0.24f, 1f), PixelSpriteKind.Rubble, -1, false, Vector2.one, parent);
         }
 
         private void AddStageGate(
@@ -946,6 +1808,137 @@ namespace MagicExamHall
             activeStageGates.Add(new StageGate(requiredGoalId, center, size, resetPosition, lockedNote, body));
         }
 
+        private void AddStageGate(StageObstacleDefinition obstacle, Transform parent)
+        {
+            CreateStageHazardVisualCues(obstacle, parent);
+            var body = CreateWorldSprite(
+                $"Stage Gate {obstacle.title}",
+                obstacle.center,
+                Vector3.one,
+                obstacle.lockedColor,
+                Color.Lerp(obstacle.lockedColor, Color.white, 0.22f),
+                LockedSpriteKindForObstacle(obstacle),
+                -3,
+                true,
+                obstacle.size,
+                parent);
+            activeStageGates.Add(new StageGate(obstacle.requiredGoalId, obstacle.center, obstacle.size, obstacle.resetPosition, obstacle.lockedNote, body));
+        }
+
+        private static PixelSpriteKind LockedSpriteKindForObstacle(StageObstacleDefinition obstacle)
+        {
+            return obstacle?.requiredGoalId switch
+            {
+                "frozen_river" => PixelSpriteKind.WaterHazard,
+                "earth_stairs" => PixelSpriteKind.CliffFace,
+                "living_bridge" => PixelSpriteKind.CliffFace,
+                "wind_platform" => PixelSpriteKind.CliffFace,
+                _ => obstacle == null ? PixelSpriteKind.FloorTile : obstacle.lockedSpriteKind
+            };
+        }
+
+        private void CreateStageHazardVisualCues(StageObstacleDefinition obstacle, Transform parent)
+        {
+            if (obstacle == null)
+            {
+                return;
+            }
+
+            var id = obstacle.requiredGoalId ?? "";
+            if (id == "frozen_river")
+            {
+                CreateVerticalObstacleCutaway("River Vertical Channel", obstacle, parent, PixelSpriteKind.WaterHazard, new Color(0.012f, 0.070f, 0.120f, 1f), new Color(0.18f, 0.36f, 0.66f, 1f), new Color(0.060f, 0.064f, 0.075f, 1f), new Color(0.22f, 0.19f, 0.15f, 1f), new Color(0.56f, 0.86f, 1f, 1f));
+                CreateWorldSprite("River Lower Drop Shadow", obstacle.center + new Vector2(0f, -0.58f), Vector3.one, new Color(0.004f, 0.018f, 0.034f, 1f), new Color(0.035f, 0.11f, 0.20f, 1f), PixelSpriteKind.CliffFace, -8, true, obstacle.size + new Vector2(0.42f, 0.82f), parent);
+                CreateWorldSprite("River Deep Center", obstacle.center + new Vector2(0f, -0.10f), Vector3.one, new Color(0.02f, 0.12f, 0.22f, 1f), new Color(0.20f, 0.44f, 0.82f, 1f), PixelSpriteKind.WaterHazard, -4, true, obstacle.size + new Vector2(0.20f, 0.20f), parent);
+                CreateWorldSprite("River Bank Left Cliff Face", obstacle.center + new Vector2(-obstacle.size.x * 0.52f, -0.20f), Vector3.one, new Color(0.075f, 0.070f, 0.080f, 1f), new Color(0.22f, 0.19f, 0.15f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.26f, obstacle.size.y + 0.56f), parent);
+                CreateWorldSprite("River Bank Right Cliff Face", obstacle.center + new Vector2(obstacle.size.x * 0.52f, -0.20f), Vector3.one, new Color(0.075f, 0.070f, 0.080f, 1f), new Color(0.22f, 0.19f, 0.15f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.26f, obstacle.size.y + 0.56f), parent);
+                CreateWorldSprite("River Whitewater Edge North", obstacle.center + new Vector2(0f, obstacle.size.y * 0.42f), Vector3.one, new Color(0.72f, 0.92f, 1f, 1f), new Color(0.24f, 0.48f, 0.86f, 1f), PixelSpriteKind.WallTrim, -1, true, new Vector2(obstacle.size.x + 0.28f, 0.12f), parent);
+                CreateWorldSprite("River Whitewater Edge South", obstacle.center + new Vector2(0f, -obstacle.size.y * 0.42f), Vector3.one, new Color(0.42f, 0.74f, 1f, 1f), new Color(0.08f, 0.25f, 0.46f, 1f), PixelSpriteKind.WallTrim, -1, true, new Vector2(obstacle.size.x + 0.18f, 0.10f), parent);
+                CreateWorldSprite("River Flow Streak A", obstacle.center + new Vector2(-0.42f, 0.10f), Vector3.one, new Color(0.50f, 0.82f, 1f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.70f, 0.10f), parent);
+                CreateWorldSprite("River Flow Streak B", obstacle.center + new Vector2(0.38f, -0.28f), Vector3.one, new Color(0.34f, 0.62f, 0.92f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.56f, 0.08f), parent);
+                CreateStageRim("River Bank Warning", obstacle.center, obstacle.size + new Vector2(0.18f, 0.10f), new Color(0.56f, 0.86f, 1f, 1f), parent);
+                return;
+            }
+
+            if (id == "earth_stairs")
+            {
+                CreateVerticalObstacleCutaway("Broken Floor Vertical Rupture", obstacle, parent, PixelSpriteKind.CliffFace, new Color(0.010f, 0.007f, 0.005f, 1f), new Color(0.090f, 0.055f, 0.032f, 1f), new Color(0.135f, 0.095f, 0.065f, 1f), new Color(0.70f, 0.48f, 0.26f, 1f), new Color(0.86f, 0.58f, 0.28f, 1f));
+                CreateWorldSprite("Broken Floor Lower Void", obstacle.center + new Vector2(0f, -0.58f), Vector3.one, new Color(0.006f, 0.004f, 0.004f, 1f), new Color(0.050f, 0.032f, 0.022f, 1f), PixelSpriteKind.CliffFace, -8, true, obstacle.size + new Vector2(0.58f, 0.90f), parent);
+                CreateWorldSprite("Broken Floor Pit Shadow", obstacle.center + new Vector2(0f, -0.15f), Vector3.one, new Color(0.025f, 0.018f, 0.014f, 1f), new Color(0.11f, 0.075f, 0.05f, 1f), PixelSpriteKind.Rubble, -5, true, obstacle.size + new Vector2(0.36f, 0.22f), parent);
+                CreateWorldSprite("Broken Floor Inner Void", obstacle.center + new Vector2(0f, -0.02f), Vector3.one, new Color(0.012f, 0.008f, 0.006f, 1f), new Color(0.09f, 0.055f, 0.032f, 1f), PixelSpriteKind.CliffFace, -3, true, obstacle.size + new Vector2(-0.18f, -0.12f), parent);
+                CreateWorldSprite("Broken Floor Fill Silhouette", obstacle.solutionPosition, Vector3.one, new Color(0.10f, 0.065f, 0.040f, 1f), new Color(0.82f, 0.62f, 0.34f, 1f), PixelSpriteKind.EarthStep, -2, true, obstacle.solutionSize + new Vector2(0.35f, 0.18f), parent);
+                CreateStageRim("Broken Floor Warning", obstacle.center, obstacle.size + new Vector2(0.26f, 0.16f), new Color(0.86f, 0.58f, 0.28f, 1f), parent);
+                CreateWorldSprite("Broken Floor North Jagged Lip", obstacle.center + new Vector2(0f, obstacle.size.y * 0.50f), Vector3.one, new Color(0.24f, 0.18f, 0.12f, 1f), new Color(0.88f, 0.66f, 0.36f, 1f), PixelSpriteKind.CliffFace, -1, true, new Vector2(obstacle.size.x + 0.30f, 0.20f), parent);
+                CreateWorldSprite("Broken Floor South Jagged Lip", obstacle.center + new Vector2(0f, -obstacle.size.y * 0.47f), Vector3.one, new Color(0.16f, 0.105f, 0.065f, 1f), new Color(0.66f, 0.44f, 0.24f, 1f), PixelSpriteKind.CliffFace, -1, true, new Vector2(obstacle.size.x + 0.22f, 0.18f), parent);
+                CreateWorldSprite("Broken Floor Rubble Left", obstacle.center + new Vector2(-obstacle.size.x * 0.42f, obstacle.size.y * 0.30f), Vector3.one * 0.44f, new Color(0.50f, 0.36f, 0.22f, 1f), new Color(0.86f, 0.66f, 0.38f, 1f), PixelSpriteKind.Rubble, -1, false, Vector2.one, parent);
+                CreateWorldSprite("Broken Floor Rubble Right", obstacle.center + new Vector2(obstacle.size.x * 0.38f, -obstacle.size.y * 0.24f), Vector3.one * 0.36f, new Color(0.45f, 0.30f, 0.18f, 1f), new Color(0.78f, 0.56f, 0.32f, 1f), PixelSpriteKind.Rubble, -1, false, Vector2.one, parent);
+                return;
+            }
+
+            if (id == "living_bridge")
+            {
+                CreateVerticalObstacleCutaway("Chasm Vertical Shaft", obstacle, parent, PixelSpriteKind.CliffFace, new Color(0.004f, 0.005f, 0.012f, 1f), new Color(0.050f, 0.052f, 0.075f, 1f), new Color(0.090f, 0.070f, 0.095f, 1f), new Color(0.36f, 0.27f, 0.44f, 1f), new Color(0.64f, 0.34f, 0.95f, 1f));
+                CreateWorldSprite("Chasm Far Abyss", obstacle.center + new Vector2(0f, -0.88f), Vector3.one, new Color(0.002f, 0.003f, 0.008f, 1f), new Color(0.025f, 0.026f, 0.040f, 1f), PixelSpriteKind.CliffFace, -9, true, obstacle.size + new Vector2(0.90f, 1.95f), parent);
+                CreateWorldSprite("Chasm Depth", obstacle.center + new Vector2(0f, -0.45f), Vector3.one, new Color(0.010f, 0.012f, 0.020f, 1f), new Color(0.06f, 0.07f, 0.11f, 1f), PixelSpriteKind.Rubble, -7, true, obstacle.size + new Vector2(0.50f, 1.25f), parent);
+                CreateWorldSprite("Chasm Left Cliff Wall", obstacle.center + new Vector2(-obstacle.size.x * 0.54f, -0.36f), Vector3.one, new Color(0.075f, 0.060f, 0.078f, 1f), new Color(0.36f, 0.27f, 0.44f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.34f, obstacle.size.y + 1.02f), parent);
+                CreateWorldSprite("Chasm Right Cliff Wall", obstacle.center + new Vector2(obstacle.size.x * 0.54f, -0.36f), Vector3.one, new Color(0.075f, 0.060f, 0.078f, 1f), new Color(0.36f, 0.27f, 0.44f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.34f, obstacle.size.y + 1.02f), parent);
+                CreateStageRim("Chasm Warning", obstacle.center, obstacle.size + new Vector2(0.34f, 0.22f), new Color(0.64f, 0.34f, 0.95f, 1f), parent);
+                CreateWorldSprite("Chasm North Broken Lip", obstacle.center + new Vector2(0f, obstacle.size.y * 0.52f), Vector3.one, new Color(0.16f, 0.12f, 0.14f, 1f), new Color(0.50f, 0.36f, 0.55f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(obstacle.size.x + 0.55f, 0.28f), parent);
+                CreateWorldSprite("Chasm South Broken Lip", obstacle.center + new Vector2(0f, -obstacle.size.y * 0.52f), Vector3.one, new Color(0.10f, 0.08f, 0.10f, 1f), new Color(0.42f, 0.30f, 0.48f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(obstacle.size.x + 0.55f, 0.24f), parent);
+                CreateWorldSprite("Chasm Bottom Mist", obstacle.center + new Vector2(0.18f, -obstacle.size.y * 0.62f), Vector3.one, new Color(0.12f, 0.14f, 0.20f, 1f), new Color(0.32f, 0.30f, 0.44f, 1f), PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.78f, 0.10f), parent);
+                return;
+            }
+
+            if (id == "wind_platform")
+            {
+                CreateVerticalObstacleCutaway("Wind Gap Vertical Shaft", obstacle, parent, PixelSpriteKind.CliffFace, new Color(0.006f, 0.018f, 0.024f, 1f), new Color(0.070f, 0.145f, 0.175f, 1f), new Color(0.055f, 0.074f, 0.080f, 1f), new Color(0.24f, 0.36f, 0.40f, 1f), new Color(0.76f, 0.94f, 1f, 1f));
+                CreateWorldSprite("Wind Gap Lower Depth", obstacle.center + new Vector2(0f, -0.62f), Vector3.one, new Color(0.006f, 0.014f, 0.018f, 1f), new Color(0.052f, 0.12f, 0.14f, 1f), PixelSpriteKind.CliffFace, -9, true, obstacle.size + new Vector2(0.55f, 1.10f), parent);
+                CreateWorldSprite("Wind Gap Void", obstacle.center + new Vector2(0f, -0.16f), Vector3.one, new Color(0.018f, 0.032f, 0.038f, 1f), new Color(0.11f, 0.22f, 0.27f, 1f), PixelSpriteKind.Rubble, -7, true, obstacle.size + new Vector2(0.28f, 0.42f), parent);
+                CreateWorldSprite("Wind Gap Left Drop Face", obstacle.center + new Vector2(-obstacle.size.x * 0.52f, -0.20f), Vector3.one, new Color(0.055f, 0.074f, 0.080f, 1f), new Color(0.24f, 0.36f, 0.40f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.26f, obstacle.size.y + 0.62f), parent);
+                CreateWorldSprite("Wind Gap Right Drop Face", obstacle.center + new Vector2(obstacle.size.x * 0.52f, -0.20f), Vector3.one, new Color(0.055f, 0.074f, 0.080f, 1f), new Color(0.24f, 0.36f, 0.40f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.26f, obstacle.size.y + 0.62f), parent);
+                CreateStageRim("Wind Gap Warning", obstacle.center, obstacle.size + new Vector2(0.22f, 0.18f), new Color(0.76f, 0.94f, 1f, 1f), parent);
+                CreateWorldSprite("Wind Guide Upper", obstacle.center + new Vector2(-0.15f, obstacle.size.y * 0.30f), Vector3.one, new Color(0.54f, 0.80f, 0.92f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.88f, 0.18f), parent);
+                CreateWorldSprite("Wind Guide Lower", obstacle.center + new Vector2(0.22f, -obstacle.size.y * 0.24f), Vector3.one, new Color(0.38f, 0.62f, 0.74f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.70f, 0.14f), parent);
+                CreateWorldSprite("Wind Gap Mist", obstacle.center + new Vector2(0.06f, -obstacle.size.y * 0.55f), Vector3.one, new Color(0.33f, 0.58f, 0.68f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.82f, 0.10f), parent);
+            }
+        }
+
+        private void CreateVerticalObstacleCutaway(
+            string name,
+            StageObstacleDefinition obstacle,
+            Transform parent,
+            PixelSpriteKind coreKind,
+            Color corePrimary,
+            Color coreSecondary,
+            Color wallPrimary,
+            Color wallSecondary,
+            Color rimColor)
+        {
+            var stage = activeStageDefinition ?? FloorStageDefinition.CreateFallbackFloorThree();
+            var topY = Mathf.Min(stage.stageMax.y - 1.15f, obstacle.center.y + 3.10f);
+            var bottomY = Mathf.Max(stage.stageMin.y + 0.35f, obstacle.center.y - obstacle.size.y * 0.72f);
+            var height = Mathf.Max(obstacle.size.y + 1.85f, topY - bottomY);
+            var centerY = (topY + bottomY) * 0.5f;
+            var width = obstacle.size.x + 0.62f;
+            var center = new Vector2(obstacle.center.x, centerY);
+
+            CreateWorldSprite($"{name} Core", center, Vector3.one, corePrimary, coreSecondary, coreKind, -8, true, new Vector2(width, height), parent);
+            CreateWorldSprite($"{name} Left Wall", center + new Vector2(-width * 0.5f, 0f), Vector3.one, wallPrimary, wallSecondary, PixelSpriteKind.CliffFace, -6, true, new Vector2(0.30f, height + 0.36f), parent);
+            CreateWorldSprite($"{name} Right Wall", center + new Vector2(width * 0.5f, 0f), Vector3.one, wallPrimary, wallSecondary, PixelSpriteKind.CliffFace, -6, true, new Vector2(0.30f, height + 0.36f), parent);
+            CreateWorldSprite($"{name} Upper Break", new Vector2(obstacle.center.x, topY), Vector3.one, wallSecondary, rimColor, PixelSpriteKind.WallTrim, -5, true, new Vector2(width + 0.45f, 0.22f), parent);
+            CreateWorldSprite($"{name} Lower Break", new Vector2(obstacle.center.x, bottomY), Vector3.one, wallPrimary, rimColor, PixelSpriteKind.WallTrim, -5, true, new Vector2(width + 0.35f, 0.18f), parent);
+        }
+
+        private void CreateStageRim(string name, Vector2 center, Vector2 size, Color color, Transform parent)
+        {
+            var rimColor = new Color(color.r, color.g, color.b, 0.95f);
+            var glowColor = Color.Lerp(color, Color.white, 0.40f);
+            CreateWorldSprite($"{name} North", center + new Vector2(0f, size.y * 0.5f), Vector3.one, rimColor, glowColor, PixelSpriteKind.WallTrim, -1, true, new Vector2(size.x, 0.10f), parent);
+            CreateWorldSprite($"{name} South", center + new Vector2(0f, -size.y * 0.5f), Vector3.one, rimColor, glowColor, PixelSpriteKind.WallTrim, -1, true, new Vector2(size.x, 0.10f), parent);
+            CreateWorldSprite($"{name} West", center + new Vector2(-size.x * 0.5f, 0f), Vector3.one, rimColor, glowColor, PixelSpriteKind.WallTrim, -1, true, new Vector2(0.10f, size.y), parent);
+            CreateWorldSprite($"{name} East", center + new Vector2(size.x * 0.5f, 0f), Vector3.one, rimColor, glowColor, PixelSpriteKind.WallTrim, -1, true, new Vector2(0.10f, size.y), parent);
+        }
+
         private void BuildFloorFourCombatArt(Transform parent)
         {
             foreach (var goal in activeGoals)
@@ -963,6 +1956,7 @@ namespace MagicExamHall
                     parent);
                 var renderer = dummy.GetComponent<SpriteRenderer>();
                 renderer.color = Color.Lerp(goal.color, Color.white, 0.34f);
+                goal.entityBody = dummy;
             }
         }
 
@@ -1012,16 +2006,21 @@ namespace MagicExamHall
                 MarkPostSealInputSeen(now);
             }
 
-            var baseIntent = ResolveBaseIntent(session.GetWorldCenter());
+            var castCenter = CurrentMagicCastOrigin(session.GetWorldCenter());
+            var baseIntent = ResolveBaseIntent(castCenter);
             var recognition = recognitionService.Recognize(session, new RecognitionContext
             {
                 activeSeals = seals.Select(view => view.seal).ToList(),
                 baseIntent = baseIntent,
                 customShapesOnlyWhenSealActive = true,
+                hasCastCenter = true,
+                castCenter = castCenter,
                 now = now
             });
             LastPersonalizationSummaryForTests = recognition.personalization ?? TutorialPersonalizationSummary.Empty;
-            if (hadActiveSeal && TryApplyCustomShapeFollowup(recognition, out var customFollowup))
+            if (hadActiveSeal &&
+                !IsCustomShapeBaseGoalInput(recognition) &&
+                TryApplyCustomShapeFollowup(recognition, out var customFollowup))
             {
                 if (recognition.baseResult?.spell?.success == true)
                 {
@@ -1041,6 +2040,24 @@ namespace MagicExamHall
             return processed;
         }
 
+        private bool IsCustomShapeBaseGoalInput(StrokeRecognitionResult recognition)
+        {
+            if (recognition.kind != StrokeRecognitionKind.Base ||
+                recognition.baseResult?.spell?.isCustomShape != true)
+            {
+                return false;
+            }
+
+            var spell = recognition.baseResult.spell;
+            var family = spell.recognizedFamily ?? spell.mappedFamily ?? spell.targetFamily;
+            var castCenter = CurrentMagicCastOrigin(recognition.center);
+            return activeGoals.Any(goal =>
+                !goal.completed &&
+                goal.requiresCustomShape &&
+                !goal.requiredCustomSpell.HasValue &&
+                goal.MatchesBase(family, castCenter));
+        }
+
         private bool TryApplyCustomShapeFollowup(StrokeRecognitionResult recognition, out ProcessedSpell processed)
         {
             processed = null;
@@ -1050,7 +2067,8 @@ namespace MagicExamHall
                 return false;
             }
 
-            var sealView = FindAttachableSeal(recognition.center);
+            var castCenter = CurrentMagicCastOrigin(recognition.center);
+            var sealView = FindAttachableSeal(castCenter);
             if (sealView == null)
             {
                 CurrentAssistLevel = 1;
@@ -1063,14 +2081,14 @@ namespace MagicExamHall
                 return true;
             }
 
-            processed = ApplyCustomShapeFollowup(sealView, recognition.baseResult, recognition.center);
+            processed = ApplyCustomShapeFollowup(sealView, recognition.baseResult, castCenter);
             return true;
         }
 
         private ProcessedSpell ApplyCustomShapeFollowup(SealView sealView, BaseRecognitionResult result, Vector2 center)
         {
             var seal = sealView.seal;
-            var customEffect = CustomSpellEffectCatalog.Resolve(seal.baseFamily, result.spell);
+            var customEffect = ResolveCustomSpellEffect(seal.baseFamily, result.spell);
             if (!customEffect.IsValid)
             {
                 CurrentAssistLevel = 1;
@@ -1085,8 +2103,9 @@ namespace MagicExamHall
                 return new ProcessedSpell { baseResult = result };
             }
 
-            var goalEffect = ApplyCustomSpellToGoals(seal, customEffect, center);
+            var goalEffect = ApplyCustomSpellToGoals(seal, customEffect, center, result.spell);
             var eventNote = ApplyCustomShapeEvent(result, seal, center);
+            var elementalNote = ApplyElementalInteractions(seal.baseFamily, result.spell, center, result.spell.customEventDirection, customEffect.displayName);
             var note = $"{SpellLabels.Korean(seal.baseFamily)} 문양에 {result.spell.customShapeLabel}을 얹었습니다.\n{customEffect.note}";
             if (!string.IsNullOrWhiteSpace(goalEffect.note))
             {
@@ -1098,6 +2117,11 @@ namespace MagicExamHall
                 note += $"\n{eventNote}";
             }
 
+            if (!string.IsNullOrWhiteSpace(elementalNote))
+            {
+                note += $"\n{elementalNote}";
+            }
+
             CurrentAssistLevel = 0;
             LastHintText = "";
             magicNote.Show(note);
@@ -1107,6 +2131,17 @@ namespace MagicExamHall
             EvaluateFloorCompletion();
             ConsumeSeal(sealView);
             return new ProcessedSpell { baseResult = result };
+        }
+
+        private CustomSpellEffectDefinition ResolveCustomSpellEffect(SpellFamily baseFamily, SpellResult spell)
+        {
+            if (activeStageDefinition != null &&
+                activeStageDefinition.TryResolveEffect(baseFamily, spell, out var stageEffect))
+            {
+                return stageEffect.ToRuntimeDefinition();
+            }
+
+            return CustomSpellEffectCatalog.Resolve(baseFamily, spell);
         }
 
         private bool HasActiveSeal(float now)
@@ -1219,9 +2254,14 @@ namespace MagicExamHall
             endingReport.RecordBase(seal.baseFamily, seal.quality, success: true, successHintState);
             var effect = ApplyBaseToGoals(baseResult, seal.baseFamily, outcome.center);
             var customEventNote = ApplyCustomShapeEvent(baseResult, seal, outcome.center);
+            var elementalNote = ApplyElementalInteractions(seal.baseFamily, baseResult.spell, outcome.center, baseResult.spell.customEventDirection, "base");
             var eventEffect = string.IsNullOrWhiteSpace(customEventNote)
                 ? effect
                 : new GoalEffect($"{effect.note}\n{customEventNote}", $"{effect.worldEffect}|{baseResult.spell.customEventId}");
+            if (!string.IsNullOrWhiteSpace(elementalNote))
+            {
+                eventEffect = new GoalEffect($"{eventEffect.note}\n{elementalNote}", $"{eventEffect.worldEffect}|elemental");
+            }
             magicNote.Show(BuildBaseSuccessNote(seal, eventEffect, successHintState));
             ShowBaseResultSummary(baseResult, "base 성공", resultSummary: eventEffect.note);
             pulses.Add(new ParticlePulse(outcome.center, FamilyColor(seal.baseFamily)));
@@ -1361,7 +2401,8 @@ namespace MagicExamHall
             }
 
             resultPanelCompact = Screen.width > 0 && Screen.width < ResultPanelCompactScreenWidth;
-            resultPanel.anchoredPosition = resultPanelCompact ? new Vector2(-20, -166) : new Vector2(-20, -20);
+            var questHeight = questScrollPanel == null ? 246f : questScrollPanel.sizeDelta.y;
+            resultPanel.anchoredPosition = new Vector2(-20, -(questHeight + 40f));
             resultPanel.sizeDelta = resultPanelCompact ? new Vector2(360, 188) : new Vector2(430, 206);
             resultText.fontSize = resultPanelCompact ? 12 : 13;
             resultText.rectTransform.anchoredPosition = new Vector2(14, -12);
@@ -1447,12 +2488,13 @@ namespace MagicExamHall
         private GoalEffect ApplyCustomSpellToGoals(
             CompiledSeal seal,
             CustomSpellEffectDefinition customEffect,
-            Vector2 center)
+            Vector2 center,
+            SpellResult spell)
         {
             var resolution = floorGoals.ResolveBase(activeGoals, seal.baseFamily, center, true, customEffect.kind);
             if (resolution.kind == GoalResolutionKind.Completed)
             {
-                ActivateGoal(resolution.goal, customEffect.kind.ToString().ToLowerInvariant());
+                ActivateGoal(resolution.goal, customEffect.kind.ToString().ToLowerInvariant(), spell);
                 return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id);
             }
 
@@ -1486,7 +2528,7 @@ namespace MagicExamHall
             var direction = spell.customEventDirection.sqrMagnitude > 0.0001f
                 ? spell.customEventDirection.normalized
                 : Vector2.right;
-            var origin = spell.customEventOrigin.sqrMagnitude > 0.0001f ? spell.customEventOrigin : center;
+            var origin = center;
             LastCustomShapeEventKindForTests = eventKind.ToString();
             LastCustomShapeEventLabelForTests = spell.customEventLabel ?? "";
             LastCustomShapeEventDirectionForTests = direction;
@@ -1510,6 +2552,7 @@ namespace MagicExamHall
                     if (player != null)
                     {
                         defaultBarriers.Add(new CharacterBarrierView(player, $"custom-{seal.sealId}", color, 4.5f));
+                        AddBuffToEntity(player, BuffOwnerKind.Player, "보호막", color, CustomShapeEventKind.Barrier, 5.2f);
                         CustomShapeEventObjectCountForTests++;
                     }
                     break;
@@ -1517,22 +2560,90 @@ namespace MagicExamHall
                     RegisterCustomEventObject(CreateWorldSprite("Custom Shape Trap Event", origin, Vector3.one * 0.76f, color, Color.white, PixelSpriteKind.Target, 23));
                     break;
                 case CustomShapeEventKind.Stun:
-                case CustomShapeEventKind.MagicAmplify:
+                case CustomShapeEventKind.PiercingMark:
+                    RegisterCustomEventObject(CreateWorldSprite($"Custom Shape {eventKind} Event", origin, Vector3.one * 0.62f, color, Color.white, PixelSpriteKind.Pulse, 24));
+                    break;
+                case CustomShapeEventKind.BuffDispel:
+                case CustomShapeEventKind.RandomBuffDispel:
+                    ClearBuffsForOwner(player);
+                    AddBuffToEntity(player, BuffOwnerKind.Player, "해제", color, eventKind, 2.2f);
+                    RegisterCustomEventObject(CreateWorldSprite($"Custom Shape {eventKind} Event", origin, Vector3.one * 0.62f, color, Color.white, PixelSpriteKind.Pulse, 24));
+                    break;
                 case CustomShapeEventKind.AttackBuff:
                 case CustomShapeEventKind.MoveSpeedBuff:
                 case CustomShapeEventKind.SpecialAttackBoost:
-                case CustomShapeEventKind.BuffDispel:
-                case CustomShapeEventKind.RandomBuffDispel:
-                case CustomShapeEventKind.PiercingMark:
+                case CustomShapeEventKind.MagicAmplify:
                 case CustomShapeEventKind.GuardBuff:
+                    AddBuffToEntity(player, BuffOwnerKind.Player, BuffLabelFor(eventKind), color, eventKind, BuffDurationFor(eventKind));
+                    RegisterCustomEventObject(CreateWorldSprite($"Custom Shape {eventKind} Event", origin, Vector3.one * 0.62f, color, Color.white, PixelSpriteKind.Pulse, 24));
+                    break;
                 case CustomShapeEventKind.EventBlock:
                     RegisterCustomEventObject(CreateWorldSprite($"Custom Shape {eventKind} Event", origin, Vector3.one * 0.62f, color, Color.white, PixelSpriteKind.Pulse, 24));
                     break;
             }
 
+            CreateCustomShapeEventAccent(spell, eventKind, origin, direction, color);
+
             return string.IsNullOrWhiteSpace(spell.customEventLabel)
                 ? ""
                 : $"커스텀 이벤트: {spell.customEventLabel}";
+        }
+
+        private void CreateCustomShapeEventAccent(
+            SpellResult spell,
+            CustomShapeEventKind eventKind,
+            Vector2 origin,
+            Vector2 direction,
+            Color color)
+        {
+            if (eventKind == CustomShapeEventKind.None)
+            {
+                return;
+            }
+
+            var accent = Color.Lerp(color, Color.white, 0.48f);
+            RegisterCustomEventObject(CreateWorldSprite(
+                $"Custom Shape {eventKind} Event Ring",
+                origin,
+                Vector3.one * 0.72f,
+                WithAlpha(color, 0.62f),
+                WithAlpha(accent, 0.92f),
+                PixelSpriteKind.RuneCircle,
+                25));
+
+            if (UsesDirectionalSignature(eventKind))
+            {
+                direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector2.right;
+                var trail = CreateWorldSprite(
+                    $"Custom Shape {eventKind} Event Trail",
+                    origin + direction * 0.46f,
+                    new Vector3(0.13f, eventKind == CustomShapeEventKind.AttributeLaser ? 1.45f : 1.04f, 1f),
+                    WithAlpha(color, 0.76f),
+                    WithAlpha(accent, 0.95f),
+                    PixelSpriteKind.Rug,
+                    23);
+                trail.transform.rotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.up, direction));
+                RegisterCustomEventObject(trail);
+                RegisterCustomEventObject(CreateWorldSprite(
+                    $"Custom Shape {eventKind} Event Impact",
+                    origin + direction * 0.92f,
+                    Vector3.one * 0.42f,
+                    accent,
+                    Color.white,
+                    PixelSpriteKind.Pulse,
+                    26));
+                return;
+            }
+
+            var label = string.IsNullOrWhiteSpace(spell?.customEventLabel) ? eventKind.ToString() : spell.customEventLabel;
+            RegisterCustomEventObject(CreateWorldSprite(
+                $"Custom Shape {label} Event Signature",
+                origin + new Vector2(0f, 0.38f),
+                Vector3.one * 0.48f,
+                color,
+                accent,
+                EventSignatureSpriteKind(eventKind, CustomSpellEffectKind.None),
+                26));
         }
 
         private GameObject CreateDirectionalEventSprite(string eventLabel, Vector2 origin, Vector2 direction, Color color, CustomShapeEventKind eventKind)
@@ -1562,6 +2673,63 @@ namespace MagicExamHall
 
             floorObjects.Add(body);
             CustomShapeEventObjectCountForTests++;
+        }
+
+        private string ApplyElementalInteractions(
+            SpellFamily family,
+            SpellResult spell,
+            Vector2 center,
+            Vector2 direction,
+            string sourceLabel)
+        {
+            var eventKind = TryParseCustomEventKind(spell, out var parsedEvent)
+                ? parsedEvent
+                : CustomShapeEventKind.None;
+            var customEffect = CustomSpellEffectKind.None;
+            if (spell?.isCustomShape == true)
+            {
+                var resolved = ResolveCustomSpellEffect(family, spell);
+                customEffect = resolved.IsValid ? resolved.kind : CustomSpellEffectKind.None;
+            }
+
+            var radius = ElementalInteractionSystem.SpellRadiusFor(family, customEffect, eventKind);
+            var context = new ElementalInteractionContext(
+                family,
+                customEffect,
+                eventKind,
+                center,
+                direction,
+                radius,
+                sourceLabel);
+            var reports = ElementalInteractionSystem.Apply(elementalEntities, context);
+            LastElementalReactionCountForTests = reports.Count;
+            LastElementalReactionSummaryForTests = ElementalInteractionSystem.BuildSummary(reports);
+            foreach (var report in reports.Take(8))
+            {
+                pulses.Add(new ParticlePulse(report.position, ElementalReactionColor(report.reactionKind), weak: true, scaleMultiplier: 0.72f, durationSeconds: 0.55f, sortingOrder: 35));
+            }
+
+            return string.IsNullOrWhiteSpace(LastElementalReactionSummaryForTests)
+                ? ""
+                : $"속성 반응: {LastElementalReactionSummaryForTests}";
+        }
+
+        private static Color ElementalReactionColor(ElementalReactionKind reactionKind)
+        {
+            return reactionKind switch
+            {
+                ElementalReactionKind.Ignite => new Color(1f, 0.34f, 0.08f),
+                ElementalReactionKind.Freeze => new Color(0.56f, 0.90f, 1f),
+                ElementalReactionKind.Wet => new Color(0.24f, 0.52f, 1f),
+                ElementalReactionKind.Extinguish => new Color(0.38f, 0.70f, 1f),
+                ElementalReactionKind.Melt => new Color(0.76f, 0.92f, 1f),
+                ElementalReactionKind.Steam => new Color(0.78f, 0.82f, 0.86f),
+                ElementalReactionKind.Push => new Color(0.74f, 0.86f, 0.92f),
+                ElementalReactionKind.Conduct => new Color(1f, 0.88f, 0.18f),
+                ElementalReactionKind.Grow => new Color(0.34f, 0.92f, 0.42f),
+                ElementalReactionKind.Stabilize => new Color(0.82f, 0.66f, 0.38f),
+                _ => Color.white
+            };
         }
 
         private string BuildBaseOffTargetGoalNote(SpellFamily family, WorldStateGoal target, float distance, float radius)
@@ -1668,7 +2836,7 @@ namespace MagicExamHall
             };
         }
 
-        private void ActivateGoal(WorldStateGoal goal, string effect)
+        private void ActivateGoal(WorldStateGoal goal, string effect, SpellResult spell = null)
         {
             goal.completed = true;
             if (goal.renderer != null)
@@ -1686,13 +2854,19 @@ namespace MagicExamHall
                 goal.label.color = Color.Lerp(goal.color, Color.white, 0.6f);
                 goal.label.fontStyle = FontStyle.Bold;
             }
-            ApplyGoalReaction(goal);
+            ApplyGoalReaction(goal, spell);
             endingReport.RecordDiscovery(goal.id, effect);
             pulses.Add(new ParticlePulse(goal.position, goal.color));
+            TickQuestChecklist(forceRefresh: true);
         }
 
-        private void ApplyGoalReaction(WorldStateGoal goal)
+        private void ApplyGoalReaction(WorldStateGoal goal, SpellResult spell = null)
         {
+            if (TryCreateStageEnvironmentReaction(goal, spell))
+            {
+                return;
+            }
+
             switch (goal.reactionKind)
             {
                 case WorldReactionKind.BridgeFlow:
@@ -1708,7 +2882,7 @@ namespace MagicExamHall
                     CreateFrozenRiverReaction(goal);
                     break;
                 case WorldReactionKind.EarthStairs:
-                    CreateEarthStairsReaction(goal);
+                    CreateEarthGapFillReaction(goal);
                     break;
                 case WorldReactionKind.WindPlatform:
                     CreateWindPlatformReaction(goal);
@@ -1717,6 +2891,367 @@ namespace MagicExamHall
                     CreateCombatHitReaction(goal);
                     break;
             }
+        }
+
+        private bool TryCreateStageEnvironmentReaction(WorldStateGoal goal, SpellResult spell)
+        {
+            if (activeStageDefinition == null || !goal.requiredCustomSpell.HasValue)
+            {
+                return false;
+            }
+
+            var obstacle = activeStageDefinition.FindObstacle(goal.id) ??
+                           activeStageDefinition.FindObstacleForEffect(goal.requiredCustomSpell.Value);
+            var effect = activeStageDefinition.FindEffect(goal.requiredCustomSpell.Value, goal.requiredBase);
+            if (obstacle == null || effect == null)
+            {
+                return false;
+            }
+
+            var bodies = CreateStageEntityForObstacle(goal, obstacle, effect);
+            CreateStageEffectVisuals(goal, obstacle, effect, spell, bodies);
+            if (obstacle.safePositionAfterSolved.sqrMagnitude > 0.001f)
+            {
+                safePosition = obstacle.safePositionAfterSolved;
+            }
+
+            pulses.Add(new ParticlePulse(obstacle.solutionPosition, goal.color, scaleMultiplier: 1.35f, durationSeconds: 1.1f, sortingOrder: 8));
+            return true;
+        }
+
+        private IReadOnlyList<GameObject> CreateStageEntityForObstacle(
+            WorldStateGoal goal,
+            StageObstacleDefinition obstacle,
+            StageEnvironmentEffect effect)
+        {
+            var bodies = new List<GameObject>();
+            var entity = effect.entity ?? new StageEntityDefinition();
+            if (entity.createsSteps)
+            {
+                var stepCount = Mathf.Max(1, entity.stepCount);
+                var stepSize = entity.stepSize.sqrMagnitude <= 0.001f ? obstacle.solutionSize : entity.stepSize;
+                for (var index = 0; index < stepCount; index++)
+                {
+                    var position = obstacle.solutionPosition + entity.stepStartOffset + entity.stepSpacing * index;
+                    var body = CreateStageEntityBody(
+                        string.IsNullOrWhiteSpace(entity.entityName) ? $"{effect.displayName} Step {index + 1}" : $"{entity.entityName} {index + 1}",
+                        position,
+                        stepSize,
+                        entity,
+                        goal.color);
+                    bodies.Add(body);
+                    AddPlatformCollider(body, stepSize);
+                }
+
+                CreateStageNode(goal, obstacle.goalPosition + new Vector2(0.38f, 0.16f), goal.kind);
+                return bodies;
+            }
+
+            var size = obstacle.solutionSize.sqrMagnitude <= 0.001f ? entity.size : obstacle.solutionSize;
+            var single = CreateStageEntityBody(
+                string.IsNullOrWhiteSpace(entity.entityName) ? effect.displayName : entity.entityName,
+                obstacle.solutionPosition + entity.offset,
+                size,
+                entity,
+                goal.color);
+            bodies.Add(single);
+            if (entity.hasCollider)
+            {
+                AddPlatformCollider(single, size);
+            }
+
+            CreateStageNode(goal, obstacle.goalPosition + new Vector2(0.38f, 0.16f), goal.kind);
+            return bodies;
+        }
+
+        private GameObject CreateStageEntityBody(
+            string title,
+            Vector2 position,
+            Vector2 size,
+            StageEntityDefinition entity,
+            Color fallbackColor)
+        {
+            var primary = entity.primaryColor == default ? fallbackColor : entity.primaryColor;
+            var body = CreateWorldSprite(
+                title,
+                position,
+                Vector3.one,
+                primary,
+                entity.secondaryColor,
+                entity.spriteKind,
+                entity.sortingOrder,
+                entity.tiled,
+                size);
+            ApplySpriteOverride(body, entity.spriteOverride);
+            stageEntityObjects.Add(body);
+            floorObjects.Add(body);
+            return body;
+        }
+
+        private void CreateStageEffectVisuals(
+            WorldStateGoal goal,
+            StageObstacleDefinition obstacle,
+            StageEnvironmentEffect effect,
+            SpellResult spell,
+            IReadOnlyList<GameObject> bodies)
+        {
+            var visual = effect.visual ?? new StageEffectVisualDefinition();
+            if (!visual.enabled)
+            {
+                return;
+            }
+
+            var entity = effect.entity ?? new StageEntityDefinition();
+            ResolveStageEffectSpan(obstacle, entity, out var center, out var size);
+            var primary = visual.primaryColor == default ? goal.color : visual.primaryColor;
+            var secondary = visual.secondaryColor == default ? Color.Lerp(primary, Color.white, 0.46f) : visual.secondaryColor;
+            var sortingOrder = visual.sortingOrder == 0 ? Mathf.Max(7, entity.sortingOrder + 3) : visual.sortingOrder;
+            var glowPadding = visual.glowPadding == default ? new Vector2(0.55f, 0.30f) : visual.glowPadding;
+
+            if (visual.showGroundGlow)
+            {
+                RegisterStageEffectObject(CreateWorldSprite(
+                    $"Stage Effect {goal.id} Ground Glow",
+                    center,
+                    Vector3.one,
+                    WithAlpha(primary, 0.46f),
+                    WithAlpha(secondary, 0.82f),
+                    PixelSpriteKind.Rug,
+                    sortingOrder - 3,
+                    true,
+                    size + glowPadding));
+
+                CreateStageEffectRim(
+                    $"Stage Effect {goal.id} Interaction Rim",
+                    center,
+                    size + glowPadding * 0.72f,
+                    WithAlpha(secondary, 0.90f),
+                    sortingOrder - 1);
+            }
+
+            if (visual.showEntityWake)
+            {
+                RegisterStageEffectObject(CreateWorldSprite(
+                    $"Stage Effect {goal.id} Surface Wake",
+                    center + EffectWakeOffset(effect.customEffect),
+                    Vector3.one,
+                    WithAlpha(Color.Lerp(primary, Color.white, 0.18f), 0.72f),
+                    WithAlpha(secondary, 0.96f),
+                    EffectSurfaceSpriteKind(effect.customEffect, entity.spriteKind),
+                    sortingOrder,
+                    true,
+                    new Vector2(Mathf.Max(0.38f, size.x * 0.94f), Mathf.Max(0.18f, size.y * 0.68f))));
+            }
+
+            if (visual.showAnchorGlyphs)
+            {
+                var glyphScale = visual.glyphScale <= 0.001f ? 0.46f : visual.glyphScale;
+                var anchorSprite = FamilyRuneKind(goal.requiredBase ?? effect.baseFamily);
+                var anchorYOffset = Mathf.Clamp(size.y * 0.50f + 0.16f, 0.18f, 0.72f);
+                var left = center + new Vector2(-size.x * 0.48f, anchorYOffset);
+                var right = center + new Vector2(size.x * 0.48f, anchorYOffset);
+                RegisterStageEffectObject(CreateWorldSprite($"Stage Effect {goal.id} Left Anchor", left, Vector3.one * glyphScale, primary, secondary, anchorSprite, sortingOrder + 1));
+                RegisterStageEffectObject(CreateWorldSprite($"Stage Effect {goal.id} Right Anchor", right, Vector3.one * glyphScale, primary, secondary, anchorSprite, sortingOrder + 1));
+            }
+
+            if (visual.showEventSignature)
+            {
+                CreateStageEventSignature(goal, obstacle, effect, spell, primary, secondary, sortingOrder + 2);
+            }
+
+            if (bodies != null && bodies.Count > 1)
+            {
+                for (var index = 0; index < bodies.Count; index++)
+                {
+                    var body = bodies[index];
+                    if (body == null)
+                    {
+                        continue;
+                    }
+
+                    RegisterStageEffectObject(CreateWorldSprite(
+                        $"Stage Effect {goal.id} Step Wake {index + 1}",
+                        body.transform.position + new Vector3(0f, -0.08f, 0f),
+                        Vector3.one,
+                        WithAlpha(primary, 0.50f),
+                        WithAlpha(secondary, 0.82f),
+                        PixelSpriteKind.WallTrim,
+                        sortingOrder + 1,
+                        true,
+                        new Vector2(Mathf.Max(0.46f, entity.stepSize.x * 0.92f), 0.08f)));
+                }
+            }
+        }
+
+        private void CreateStageEventSignature(
+            WorldStateGoal goal,
+            StageObstacleDefinition obstacle,
+            StageEnvironmentEffect effect,
+            SpellResult spell,
+            Color primary,
+            Color secondary,
+            int sortingOrder)
+        {
+            var eventKind = TryParseCustomEventKind(spell, out var parsed) ? parsed : CustomShapeEventKind.None;
+            var displayKind = eventKind == CustomShapeEventKind.None ? effect.customEffect.ToString() : eventKind.ToString();
+            var direction = spell != null && spell.customEventDirection.sqrMagnitude > 0.0001f
+                ? spell.customEventDirection.normalized
+                : Vector2.right;
+            var origin = obstacle.goalPosition + new Vector2(0f, 0.38f);
+            var signature = CreateWorldSprite(
+                $"Stage Effect {goal.id} {displayKind} Signature",
+                origin,
+                Vector3.one * 0.54f,
+                primary,
+                secondary,
+                EventSignatureSpriteKind(eventKind, effect.customEffect),
+                sortingOrder);
+            if (UsesDirectionalSignature(eventKind))
+            {
+                signature.transform.rotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.up, direction));
+                RegisterStageEffectObject(CreateDirectionalStageTrail(goal.id, origin, direction, primary, secondary, sortingOrder - 1));
+                RegisterStageEffectObject(CreateWorldSprite(
+                    $"Stage Effect {goal.id} Event Impact",
+                    origin + direction * 0.56f,
+                    Vector3.one * 0.34f,
+                    WithAlpha(secondary, 0.92f),
+                    Color.white,
+                    PixelSpriteKind.Pulse,
+                    sortingOrder + 1));
+            }
+
+            RegisterStageEffectObject(signature);
+        }
+
+        private GameObject CreateDirectionalStageTrail(string goalId, Vector2 origin, Vector2 direction, Color primary, Color secondary, int sortingOrder)
+        {
+            direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector2.right;
+            var trail = CreateWorldSprite(
+                $"Stage Effect {goalId} Direction Trail",
+                origin + direction * 0.34f,
+                new Vector3(0.12f, 0.86f, 1f),
+                WithAlpha(primary, 0.70f),
+                WithAlpha(secondary, 0.88f),
+                PixelSpriteKind.Rug,
+                sortingOrder);
+            trail.transform.rotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.up, direction));
+            return trail;
+        }
+
+        private void CreateStageEffectRim(string name, Vector2 center, Vector2 size, Color color, int sortingOrder)
+        {
+            var glowColor = Color.Lerp(color, Color.white, 0.38f);
+            RegisterStageEffectObject(CreateWorldSprite($"{name} North", center + new Vector2(0f, size.y * 0.5f), Vector3.one, color, glowColor, PixelSpriteKind.WallTrim, sortingOrder, true, new Vector2(size.x, 0.08f)));
+            RegisterStageEffectObject(CreateWorldSprite($"{name} South", center + new Vector2(0f, -size.y * 0.5f), Vector3.one, color, glowColor, PixelSpriteKind.WallTrim, sortingOrder, true, new Vector2(size.x, 0.08f)));
+            RegisterStageEffectObject(CreateWorldSprite($"{name} West", center + new Vector2(-size.x * 0.5f, 0f), Vector3.one, color, glowColor, PixelSpriteKind.WallTrim, sortingOrder, true, new Vector2(0.08f, size.y)));
+            RegisterStageEffectObject(CreateWorldSprite($"{name} East", center + new Vector2(size.x * 0.5f, 0f), Vector3.one, color, glowColor, PixelSpriteKind.WallTrim, sortingOrder, true, new Vector2(0.08f, size.y)));
+        }
+
+        private void RegisterStageEffectObject(GameObject body)
+        {
+            if (body == null)
+            {
+                return;
+            }
+
+            stageEffectObjects.Add(body);
+            floorObjects.Add(body);
+        }
+
+        private static void ResolveStageEffectSpan(StageObstacleDefinition obstacle, StageEntityDefinition entity, out Vector2 center, out Vector2 size)
+        {
+            if (entity != null && entity.createsSteps)
+            {
+                var stepCount = Mathf.Max(1, entity.stepCount);
+                var stepSize = entity.stepSize.sqrMagnitude <= 0.001f ? obstacle.solutionSize : entity.stepSize;
+                var min = obstacle.solutionPosition + entity.stepStartOffset - stepSize * 0.5f;
+                var max = obstacle.solutionPosition + entity.stepStartOffset + stepSize * 0.5f;
+                for (var index = 1; index < stepCount; index++)
+                {
+                    var stepCenter = obstacle.solutionPosition + entity.stepStartOffset + entity.stepSpacing * index;
+                    min = Vector2.Min(min, stepCenter - stepSize * 0.5f);
+                    max = Vector2.Max(max, stepCenter + stepSize * 0.5f);
+                }
+
+                center = (min + max) * 0.5f;
+                size = new Vector2(Mathf.Max(0.42f, max.x - min.x), Mathf.Max(0.20f, max.y - min.y));
+                return;
+            }
+
+            var safeEntity = entity ?? new StageEntityDefinition();
+            center = obstacle.solutionPosition + safeEntity.offset;
+            size = obstacle.solutionSize.sqrMagnitude <= 0.001f ? safeEntity.size : obstacle.solutionSize;
+            size = new Vector2(Mathf.Max(0.42f, size.x), Mathf.Max(0.20f, size.y));
+        }
+
+        private static Vector2 EffectWakeOffset(CustomSpellEffectKind kind)
+        {
+            return kind switch
+            {
+                CustomSpellEffectKind.Ice => new Vector2(0f, 0.05f),
+                CustomSpellEffectKind.Stability => new Vector2(0f, -0.02f),
+                CustomSpellEffectKind.LivingBridge => new Vector2(0f, 0.08f),
+                CustomSpellEffectKind.WindPlatform => new Vector2(0f, 0.16f),
+                _ => Vector2.zero
+            };
+        }
+
+        private static PixelSpriteKind EffectSurfaceSpriteKind(CustomSpellEffectKind kind, PixelSpriteKind fallback)
+        {
+            return kind switch
+            {
+                CustomSpellEffectKind.Ice => PixelSpriteKind.IceBridge,
+                CustomSpellEffectKind.Stability => PixelSpriteKind.EarthStep,
+                CustomSpellEffectKind.LivingBridge => PixelSpriteKind.VineBridge,
+                CustomSpellEffectKind.WindPlatform => PixelSpriteKind.WindPlatformTile,
+                _ => fallback
+            };
+        }
+
+        private static PixelSpriteKind EventSignatureSpriteKind(CustomShapeEventKind eventKind, CustomSpellEffectKind effectKind)
+        {
+            return eventKind switch
+            {
+                CustomShapeEventKind.WallEntity => PixelSpriteKind.WallTrim,
+                CustomShapeEventKind.Barrier or CustomShapeEventKind.GuardBuff => PixelSpriteKind.RuneCircle,
+                CustomShapeEventKind.Trap or CustomShapeEventKind.Stun or CustomShapeEventKind.PiercingMark => PixelSpriteKind.Target,
+                CustomShapeEventKind.DirectionalProjectile or CustomShapeEventKind.AttributeLaser or CustomShapeEventKind.CurveProjectile or CustomShapeEventKind.SlashDamage => PixelSpriteKind.Rug,
+                CustomShapeEventKind.EventBlock or CustomShapeEventKind.BuffDispel or CustomShapeEventKind.RandomBuffDispel => PixelSpriteKind.Portal,
+                _ => effectKind switch
+                {
+                    CustomSpellEffectKind.Ice => PixelSpriteKind.WaterRune,
+                    CustomSpellEffectKind.Stability => PixelSpriteKind.EarthRune,
+                    CustomSpellEffectKind.LivingBridge => PixelSpriteKind.LifeRune,
+                    CustomSpellEffectKind.WindPlatform => PixelSpriteKind.WindRune,
+                    _ => PixelSpriteKind.Pulse
+                }
+            };
+        }
+
+        private static bool UsesDirectionalSignature(CustomShapeEventKind eventKind)
+        {
+            return eventKind is CustomShapeEventKind.DirectionalProjectile or
+                CustomShapeEventKind.AttributeLaser or
+                CustomShapeEventKind.CurveProjectile or
+                CustomShapeEventKind.SlashDamage;
+        }
+
+        private static bool TryParseCustomEventKind(SpellResult spell, out CustomShapeEventKind eventKind)
+        {
+            return Enum.TryParse(spell?.customEventKind, out eventKind);
+        }
+
+        private static PixelSpriteKind FamilyRuneKind(SpellFamily family)
+        {
+            return family switch
+            {
+                SpellFamily.Fire => PixelSpriteKind.FireRune,
+                SpellFamily.Water => PixelSpriteKind.WaterRune,
+                SpellFamily.Wind => PixelSpriteKind.WindRune,
+                SpellFamily.Earth => PixelSpriteKind.EarthRune,
+                SpellFamily.Life => PixelSpriteKind.LifeRune,
+                _ => PixelSpriteKind.RuneCircle
+            };
         }
 
         private void CreateBridgeReaction(WorldStateGoal goal)
@@ -1772,39 +3307,25 @@ namespace MagicExamHall
 
         private void CreateLivingBridgeReaction(WorldStateGoal goal)
         {
-            CreateStagePath(goal, "생명 다리", new Vector2(0f, -2.45f), new Vector2(5.8f, 0.46f), new Color(0.16f, 0.52f, 0.28f), PixelSpriteKind.Rug);
+            CreateStagePath(goal, "덩굴 다리", new Vector2(0f, -2.45f), new Vector2(5.8f, 0.46f), new Color(0.16f, 0.52f, 0.28f), PixelSpriteKind.VineBridge);
             CreateStageNode(goal, goal.position + new Vector2(0.62f, 0.12f), PixelSpriteKind.LifeRune);
         }
 
         private void CreateFrozenRiverReaction(WorldStateGoal goal)
         {
-            CreateStagePath(goal, "얼음길", new Vector2(0f, -0.62f), new Vector2(5.9f, 0.50f), new Color(0.48f, 0.84f, 1f), PixelSpriteKind.FloorTile);
+            CreateStagePath(goal, "얼음길", new Vector2(0f, -0.62f), new Vector2(5.9f, 0.50f), new Color(0.48f, 0.84f, 1f), PixelSpriteKind.IceBridge);
             CreateStageNode(goal, goal.position + new Vector2(0.58f, 0.12f), PixelSpriteKind.WaterRune);
         }
 
-        private void CreateEarthStairsReaction(WorldStateGoal goal)
+        private void CreateEarthGapFillReaction(WorldStateGoal goal)
         {
-            for (var index = 0; index < 5; index++)
-            {
-                var step = CreateWorldSprite(
-                    $"Earth Step {index + 1}",
-                    new Vector2(-1.0f + index * 0.52f, 0.86f + index * 0.10f),
-                    Vector3.one,
-                    new Color(0.58f, 0.42f, 0.24f),
-                    Color.Lerp(goal.color, Color.white, 0.35f),
-                    PixelSpriteKind.WallTrim,
-                    -2,
-                    true,
-                    new Vector2(0.72f, 0.22f));
-                floorObjects.Add(step);
-            }
-
+            CreateStagePath(goal, "구멍 메움판", new Vector2(2.3f, -2.75f), new Vector2(1.35f, 0.42f), new Color(0.58f, 0.42f, 0.24f), PixelSpriteKind.EarthStep);
             CreateStageNode(goal, goal.position + new Vector2(0.48f, 0.1f), PixelSpriteKind.EarthRune);
         }
 
         private void CreateWindPlatformReaction(WorldStateGoal goal)
         {
-            CreateStagePath(goal, "바람 발판", new Vector2(0f, 2.78f), new Vector2(3.8f, 0.38f), new Color(0.54f, 0.80f, 0.92f), PixelSpriteKind.Rug);
+            CreateStagePath(goal, "바람 발판", new Vector2(0f, 2.78f), new Vector2(3.8f, 0.38f), new Color(0.54f, 0.80f, 0.92f), PixelSpriteKind.WindPlatformTile);
             CreateStageNode(goal, goal.position + new Vector2(0.50f, 0.08f), PixelSpriteKind.WindRune);
         }
 
@@ -1842,9 +3363,49 @@ namespace MagicExamHall
             var impact = goal.requiredCustomSpell.HasValue
                 ? CustomSpellEffectCatalog.For(goal.requiredCustomSpell.Value).impact
                 : 20;
+            var target = CombatTargetTransform(goal);
             var label = impact > 0 ? $"-{impact}" : "효과";
-            ShowDamagePopup(goal.position + new Vector2(0f, 0.56f), label, goal.color);
+            var damageColor = DamageColorFor(goal.requiredCustomSpell);
+            ShowDamagePopup(CombatTargetTopPosition(goal, target), label, damageColor);
+            AddCombatStatusBuff(goal, target);
             pulses.Add(new ParticlePulse(goal.position, goal.color, scaleMultiplier: 0.9f, durationSeconds: 0.55f, sortingOrder: 20));
+        }
+
+        private Transform CombatTargetTransform(WorldStateGoal goal)
+        {
+            if (goal?.entityBody != null)
+            {
+                return goal.entityBody.transform;
+            }
+
+            return goal?.body != null ? goal.body.transform : null;
+        }
+
+        private static Vector2 CombatTargetTopPosition(WorldStateGoal goal, Transform target)
+        {
+            if (target != null)
+            {
+                return (Vector2)target.position + new Vector2(0f, 0.98f);
+            }
+
+            return goal.position + new Vector2(0f, 0.74f);
+        }
+
+        private void AddCombatStatusBuff(WorldStateGoal goal, Transform target)
+        {
+            if (goal == null || target == null || !goal.requiredCustomSpell.HasValue)
+            {
+                return;
+            }
+
+            var effect = goal.requiredCustomSpell.Value;
+            AddBuffToEntity(
+                target,
+                BuffOwnerKind.Target,
+                CombatStatusLabel(effect),
+                CombatStatusColor(effect, goal.color),
+                CombatStatusEventKind(effect),
+                CombatStatusDuration(effect));
         }
 
         private void EvaluateFloorCompletion()
@@ -1963,15 +3524,160 @@ namespace MagicExamHall
                 return;
             }
 
-            var input = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
+            if (platformMotionActive)
+            {
+                TickPlatformPlayer();
+                return;
+            }
+
+            var input = ReadMovementInput();
+
+            velocity = Vector2.Lerp(velocity, input * 4.2f, Time.deltaTime * 12f);
+            player.position += (Vector3)(velocity * Time.deltaTime);
+            player.position = new Vector3(Mathf.Clamp(player.position.x, -7.35f, 7.35f), Mathf.Clamp(player.position.y, -4.25f, 4.25f), 0f);
+        }
+
+        private void TickPlatformPlayer()
+        {
+            EnsurePlayerPhysics();
+            if (playerBody == null || activeStageDefinition == null)
+            {
+                return;
+            }
+
+            var inputX = ReadHorizontalMovementInput();
+            var bodyVelocity = playerBody.linearVelocity;
+            bodyVelocity.x = Mathf.MoveTowards(bodyVelocity.x, inputX * 4.6f, 36f * Time.deltaTime);
+            if (ReadJumpPressed() && IsPlatformGrounded())
+            {
+                bodyVelocity.y = 7.6f;
+            }
+
+            playerBody.linearVelocity = bodyVelocity;
+            ClampPlatformPlayer();
+            TickPlatformCamera();
+        }
+
+        private static Vector2 ReadMovementInput()
+        {
+            return BuildMovementInput(
+                Input.GetAxisRaw("Horizontal"),
+                Input.GetAxisRaw("Vertical"),
+                Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow),
+                Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow),
+                Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow),
+                Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow));
+        }
+
+        private static float ReadHorizontalMovementInput()
+        {
+            return ResolveAxisWithKeys(
+                Input.GetAxisRaw("Horizontal"),
+                Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow),
+                Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow));
+        }
+
+        private static bool ReadJumpPressed()
+        {
+            return Input.GetButtonDown("Jump") ||
+                   Input.GetKeyDown(KeyCode.Space) ||
+                   Input.GetKeyDown(KeyCode.W) ||
+                   Input.GetKeyDown(KeyCode.UpArrow);
+        }
+
+        private static Vector2 BuildMovementInput(
+            float horizontalAxis,
+            float verticalAxis,
+            bool leftHeld,
+            bool rightHeld,
+            bool downHeld,
+            bool upHeld)
+        {
+            var input = new Vector2(
+                ResolveAxisWithKeys(horizontalAxis, leftHeld, rightHeld),
+                ResolveAxisWithKeys(verticalAxis, downHeld, upHeld));
             if (input.sqrMagnitude > 1f)
             {
                 input.Normalize();
             }
 
-            velocity = Vector2.Lerp(velocity, input * 4.2f, Time.deltaTime * 12f);
-            player.position += (Vector3)(velocity * Time.deltaTime);
-            player.position = new Vector3(Mathf.Clamp(player.position.x, -7.35f, 7.35f), Mathf.Clamp(player.position.y, -4.25f, 4.25f), 0f);
+            return input;
+        }
+
+        private static float ResolveAxisWithKeys(float axis, bool negativeHeld, bool positiveHeld)
+        {
+            if (negativeHeld || positiveHeld)
+            {
+                return (positiveHeld ? 1f : 0f) - (negativeHeld ? 1f : 0f);
+            }
+
+            return Mathf.Clamp(axis, -1f, 1f);
+        }
+
+        private bool IsPlatformGrounded()
+        {
+            if (player == null)
+            {
+                return false;
+            }
+
+            var hits = Physics2D.OverlapBoxAll((Vector2)player.position + new Vector2(0f, -0.54f), new Vector2(0.46f, 0.12f), 0f);
+            return hits.Any(hit => hit != null && hit.transform != player && !hit.isTrigger);
+        }
+
+        private void ClampPlatformPlayer()
+        {
+            if (activeStageDefinition == null || playerBody == null)
+            {
+                return;
+            }
+
+            var position = playerBody.position;
+            if (position.y < activeStageDefinition.killY)
+            {
+                TakePlayerDamage("낭떠러지 추락", position);
+                ResetPlayerToSafePosition("발판 아래로 떨어졌습니다. 직전 안정 지점에서 다시 시도하세요.");
+                return;
+            }
+
+            position.x = Mathf.Clamp(position.x, activeStageDefinition.stageMin.x, activeStageDefinition.stageMax.x);
+            playerBody.position = position;
+        }
+
+        private void TickPlatformCamera()
+        {
+            if (mainCamera == null || activeStageDefinition == null || player == null)
+            {
+                return;
+            }
+
+            var targetX = Mathf.Clamp(player.position.x, activeStageDefinition.cameraXRange.x, activeStageDefinition.cameraXRange.y);
+            mainCamera.transform.position = new Vector3(targetX, activeStageDefinition.cameraY, -10f);
+        }
+
+        private void ResetPlayerToSafePosition(string note)
+        {
+            MovePlayerTo(safePosition);
+            if (!string.IsNullOrWhiteSpace(note))
+            {
+                magicNote.Show(note);
+            }
+        }
+
+        private void MovePlayerTo(Vector2 worldPosition)
+        {
+            if (player != null)
+            {
+                player.position = worldPosition;
+            }
+
+            if (playerBody != null)
+            {
+                playerBody.position = worldPosition;
+                playerBody.linearVelocity = Vector2.zero;
+            }
+
+            velocity = Vector2.zero;
         }
 
         private void TickStageGates()
@@ -1995,8 +3701,8 @@ namespace MagicExamHall
                     continue;
                 }
 
-                player.position = gate.resetPosition;
-                velocity = Vector2.zero;
+                TakePlayerDamage("장애물 접촉", gate.center);
+                MovePlayerTo(gate.resetPosition);
                 magicNote.Show(gate.lockedNote);
                 pulses.Add(new ParticlePulse(gate.center, new Color(0.72f, 0.88f, 1f), weak: true));
                 return;
@@ -2016,6 +3722,152 @@ namespace MagicExamHall
             }
         }
 
+        private void TickBuffQueues()
+        {
+            for (var index = buffQueues.Count - 1; index >= 0; index--)
+            {
+                var queue = buffQueues[index];
+                if (!queue.Tick(Time.time))
+                {
+                    queue.Destroy();
+                    buffQueues.RemoveAt(index);
+                }
+            }
+        }
+
+        private void AddBuffToEntity(
+            Transform owner,
+            BuffOwnerKind ownerKind,
+            string label,
+            Color color,
+            CustomShapeEventKind eventKind,
+            float durationSeconds)
+        {
+            if (owner == null)
+            {
+                return;
+            }
+
+            var queue = buffQueues.FirstOrDefault(item => item.IsFor(owner));
+            if (queue == null)
+            {
+                queue = new BuffQueueView(owner, ownerKind, uiFont);
+                buffQueues.Add(queue);
+            }
+
+            queue.Add(label, color, EventSignatureSpriteKind(eventKind, CustomSpellEffectKind.None), Mathf.Max(durationSeconds, 0.5f), Time.time);
+            LastBuffLabelForTests = label;
+        }
+
+        private void ClearBuffsForOwner(Transform owner)
+        {
+            if (owner == null)
+            {
+                return;
+            }
+
+            foreach (var queue in buffQueues.Where(item => item.IsFor(owner)))
+            {
+                queue.Clear();
+            }
+        }
+
+        private static string BuffLabelFor(CustomShapeEventKind eventKind)
+        {
+            return eventKind switch
+            {
+                CustomShapeEventKind.AttackBuff => "공격",
+                CustomShapeEventKind.MoveSpeedBuff => "이속",
+                CustomShapeEventKind.SpecialAttackBoost => "특공",
+                CustomShapeEventKind.MagicAmplify => "강화",
+                CustomShapeEventKind.GuardBuff => "방어",
+                CustomShapeEventKind.Barrier => "보호",
+                _ => "버프"
+            };
+        }
+
+        private static float BuffDurationFor(CustomShapeEventKind eventKind)
+        {
+            return eventKind switch
+            {
+                CustomShapeEventKind.AttackBuff => 7.0f,
+                CustomShapeEventKind.SpecialAttackBoost => 6.2f,
+                CustomShapeEventKind.MoveSpeedBuff => 5.8f,
+                CustomShapeEventKind.MagicAmplify => 6.6f,
+                CustomShapeEventKind.GuardBuff => 7.4f,
+                CustomShapeEventKind.Barrier => 5.2f,
+                _ => 4.8f
+            };
+        }
+
+        private static string CombatStatusLabel(CustomSpellEffectKind effect)
+        {
+            return effect switch
+            {
+                CustomSpellEffectKind.Ice => "감속",
+                CustomSpellEffectKind.Electric => "감전",
+                CustomSpellEffectKind.Cleanse => "정화",
+                CustomSpellEffectKind.Focus => "표식",
+                CustomSpellEffectKind.Flow => "흐름",
+                CustomSpellEffectKind.Connection => "속박",
+                CustomSpellEffectKind.Stability => "방벽",
+                _ => "상태"
+            };
+        }
+
+        private static CustomShapeEventKind CombatStatusEventKind(CustomSpellEffectKind effect)
+        {
+            return effect switch
+            {
+                CustomSpellEffectKind.Ice => CustomShapeEventKind.Stun,
+                CustomSpellEffectKind.Electric => CustomShapeEventKind.SlashDamage,
+                CustomSpellEffectKind.Cleanse => CustomShapeEventKind.Barrier,
+                CustomSpellEffectKind.Focus => CustomShapeEventKind.MagicAmplify,
+                CustomSpellEffectKind.Flow => CustomShapeEventKind.MoveSpeedBuff,
+                CustomSpellEffectKind.Connection => CustomShapeEventKind.AttackBuff,
+                CustomSpellEffectKind.Stability => CustomShapeEventKind.GuardBuff,
+                _ => CustomShapeEventKind.PiercingMark
+            };
+        }
+
+        private static float CombatStatusDuration(CustomSpellEffectKind effect)
+        {
+            return effect switch
+            {
+                CustomSpellEffectKind.Ice => 5.8f,
+                CustomSpellEffectKind.Electric => 4.4f,
+                CustomSpellEffectKind.Cleanse => 3.6f,
+                CustomSpellEffectKind.Focus => 6.0f,
+                CustomSpellEffectKind.Stability => 6.5f,
+                _ => 5.0f
+            };
+        }
+
+        private static Color CombatStatusColor(CustomSpellEffectKind effect, Color fallback)
+        {
+            return effect switch
+            {
+                CustomSpellEffectKind.Ice => new Color(0.48f, 0.84f, 1f),
+                CustomSpellEffectKind.Electric => new Color(1f, 0.88f, 0.18f),
+                CustomSpellEffectKind.Cleanse => new Color(0.42f, 0.74f, 1f),
+                CustomSpellEffectKind.Focus => new Color(1f, 0.58f, 0.18f),
+                CustomSpellEffectKind.Stability => new Color(0.74f, 0.55f, 0.32f),
+                _ => fallback
+            };
+        }
+
+        private static Color DamageColorFor(CustomSpellEffectKind? effect)
+        {
+            return effect switch
+            {
+                CustomSpellEffectKind.Electric => new Color(1f, 0.80f, 0.18f),
+                CustomSpellEffectKind.Ice => new Color(0.65f, 0.92f, 1f),
+                CustomSpellEffectKind.Focus => new Color(1f, 0.46f, 0.18f),
+                CustomSpellEffectKind.Stability => new Color(0.95f, 0.64f, 0.32f),
+                _ => new Color(1f, 0.88f, 0.30f)
+            };
+        }
+
         private void TickHazards()
         {
             if (floorController.Current.number != 4)
@@ -2028,6 +3880,7 @@ namespace MagicExamHall
                 hazard.Tick(Time.time);
                 if (Vector2.Distance(player.position, hazard.position) <= hazard.radius * 0.58f)
                 {
+                    TakePlayerDamage("위험 지대 접촉", hazard.position);
                     player.position = safePosition;
                     velocity = Vector2.zero;
                     magicNote.Show("균열이 몸을 밀어냈습니다. 가까운 안전 지점에서 다시 시작합니다.");
@@ -2055,6 +3908,111 @@ namespace MagicExamHall
                 {
                     TriggerDefaultSealFallback(seal);
                 }
+            }
+        }
+
+        private void TickHostileEntityContacts()
+        {
+            if (floorController.Current.number != 4 || player == null)
+            {
+                return;
+            }
+
+            foreach (var goal in activeGoals)
+            {
+                if (goal.completed || goal.entityBody == null)
+                {
+                    continue;
+                }
+
+                var targetPosition = (Vector2)goal.entityBody.transform.position;
+                if (Vector2.Distance(player.position, targetPosition) > 0.78f)
+                {
+                    continue;
+                }
+
+                TakePlayerDamage("적대적 entity 접촉", targetPosition);
+                MovePlayerTo(safePosition);
+                magicNote.Show("적대적 대상에 너무 가까이 닿았습니다. 거리를 두고 다시 시도하세요.");
+                pulses.Add(new ParticlePulse(targetPosition, goal.color, weak: true, scaleMultiplier: 1.1f, durationSeconds: 0.8f, sortingOrder: 32));
+                return;
+            }
+        }
+
+        private bool TakePlayerDamage(string reason, Vector2 sourcePosition)
+        {
+            if (Time.time < playerDamageInvulnerableUntil || playerHealthHalfUnits <= 0)
+            {
+                return false;
+            }
+
+            playerHealthHalfUnits = Mathf.Max(0, playerHealthHalfUnits - 1);
+            playerDamageInvulnerableUntil = Time.time + PlayerDamageInvulnerabilitySeconds;
+            playerBlinkUntil = Time.time + PlayerDamageBlinkSeconds;
+            RefreshPlayerBlinkRenderers();
+            RefreshHealthUi();
+            ShowDamagePopup((Vector2)player.position + new Vector2(0f, 0.95f), "-1/2", new Color(1f, 0.20f, 0.18f));
+            pulses.Add(new ParticlePulse(sourcePosition, new Color(1f, 0.18f, 0.14f), weak: true, scaleMultiplier: 0.9f, durationSeconds: 0.7f, sortingOrder: 34));
+            if (playerHealthHalfUnits == 0)
+            {
+                magicNote.Show($"{reason}: 체력이 모두 사라졌습니다. 안전 지점에서 다시 움직임을 정리하세요.");
+            }
+
+            return true;
+        }
+
+        private void RefreshHealthUi()
+        {
+            for (var index = 0; index < healthHearts.Count; index++)
+            {
+                healthHearts[index].State = Mathf.Clamp(playerHealthHalfUnits - index * 2, 0, 2);
+            }
+        }
+
+        private void RefreshPlayerBlinkRenderers()
+        {
+            playerBlinkRenderers.Clear();
+            if (player == null)
+            {
+                return;
+            }
+
+            playerBlinkRenderers.AddRange(player.GetComponentsInChildren<SpriteRenderer>(includeInactive: true));
+        }
+
+        private void TickPlayerBlink()
+        {
+            if (playerBlinkRenderers.Count == 0)
+            {
+                RefreshPlayerBlinkRenderers();
+            }
+
+            if (Time.time >= playerBlinkUntil)
+            {
+                if (playerBlinkUntil > 0f)
+                {
+                    SetPlayerBlinkAlpha(1f);
+                    playerBlinkUntil = -1f;
+                }
+                return;
+            }
+
+            var wave = (Mathf.Sin(Time.time * 34f) + 1f) * 0.5f;
+            SetPlayerBlinkAlpha(Mathf.Lerp(0.34f, 0.96f, wave));
+        }
+
+        private void SetPlayerBlinkAlpha(float alpha)
+        {
+            foreach (var renderer in playerBlinkRenderers)
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                var tint = renderer.color;
+                tint.a = alpha;
+                renderer.color = tint;
             }
         }
 
@@ -2124,6 +4082,7 @@ namespace MagicExamHall
                 floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completedFinal}/{activeGoals.Count}   final seal";
                 notePanel.gameObject.SetActive(magicNote.Visible);
                 noteText.text = magicNote.Text;
+                RefreshQuestLogText();
                 return;
             }
 
@@ -2144,14 +4103,30 @@ namespace MagicExamHall
                 {
                     hudCopy.text = $"{floor.objective}\n좌측 책장 접근 -> 레퍼런스 보기 -> 들여오기 후 표식 근처에 커스텀 도형을 그리세요.";
                 }
+                else if (floor.number == 3)
+                {
+                    hudCopy.text = $"{floor.objective}\nA/D 또는 ←/→ 이동, Space 또는 ↑ 점프. 시작 책장에서 3층 프리셋을 가져온 뒤 강물/구멍/낭떠러지/빈 공간 표식 위에 도형을 얹으세요.";
+                }
                 else
                 {
-                    hudCopy.text = $"{floor.objective}\nWASD 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요. Esc/Backspace 취소.";
+                    hudCopy.text = $"{floor.objective}\nWASD 또는 방향키 이동 / 우클릭 hold로 바닥에 직접 문양을 그리세요. Esc/Backspace 취소.";
                 }
                 floorProgress.text = $"탑 진행 {floorController.CurrentFloorNumber}/{floorController.FloorCount}   목표 {completed}/{activeGoals.Count}   seal {seals.Count}";
             }
             notePanel.gameObject.SetActive(magicNote.Visible);
             noteText.text = magicNote.Text;
+            RefreshQuestLogText();
+        }
+
+        private void RefreshQuestLogText()
+        {
+            if (questStatusText == null || questProgressText == null)
+            {
+                return;
+            }
+
+            questStatusText.text = $"{hudTitle.text}\n{ShortLine(hudCopy.text, 86)}";
+            questProgressText.text = floorProgress.text;
         }
 
         private string BuildFloorEntryNote(FloorDefinition floor)
@@ -2164,6 +4139,11 @@ namespace MagicExamHall
             if (floor.number == CustomReferenceFloorNumber)
             {
                 return $"{floor.entryNote}\n좌측 책장 근처에서 말풍선의 보기 버튼을 누르면 base별 커스텀 도형을 슬롯에 들여올 수 있습니다.";
+            }
+
+            if (floor.number == 3)
+            {
+                return $"{floor.entryNote}\n시작 구간의 책장에서 3층 프리셋 도형을 가져온 뒤 강물, 깨진 구멍, 낭떠러지, 빈 공간 표식 근처에서 기본 문양과 커스텀 도형을 순서대로 사용하세요.";
             }
 
             return IsFinalFloor ? $"{floor.entryNote}\n{BuildNextFinalGoalHint()}" : floor.entryNote;
@@ -2231,10 +4211,12 @@ namespace MagicExamHall
 
         private void ShowEndingReport()
         {
+            SaveCurrentQuestChecklistScore("ending");
             reportPanel.gameObject.SetActive(true);
             notePanel.gameObject.SetActive(false);
             resultPanel.gameObject.SetActive(false);
             floorSkipButton.gameObject.SetActive(false);
+            questScrollPanel.gameObject.SetActive(false);
             var completedFinalGoals = IsFinalFloor ? activeGoals.Count(goal => goal.completed) : activeGoals.Count;
             hudTitle.text = finalTrueEnding ? "입학 시험 완전 통과" : "입학 시험 통과";
             hudCopy.text = finalTrueEnding ? "입학 마법진이 완전히 밝아졌습니다." : "입학 마법진이 다시 밝아졌습니다.";
@@ -2434,9 +4416,21 @@ namespace MagicExamHall
                 popup.Destroy();
             }
             damagePopups.Clear();
+            foreach (var queue in buffQueues)
+            {
+                queue.Destroy();
+            }
+            buffQueues.Clear();
+            elementalEntities.Clear();
+            shelfGuideArrows.Clear();
             activeStageGates.Clear();
+            stageEntityObjects.Clear();
+            stageEffectObjects.Clear();
             CustomShapeEventObjectCountForTests = 0;
+            LastElementalReactionCountForTests = 0;
+            LastElementalReactionSummaryForTests = "";
             LastDamagePopupTextForTests = "";
+            LastBuffLabelForTests = "";
             LastCustomShapeEventKindForTests = "";
             LastCustomShapeEventLabelForTests = "";
             LastCustomShapeEventDirectionForTests = Vector2.right;
@@ -2464,32 +4458,291 @@ namespace MagicExamHall
             pixelSprite.tiled = tiled;
             pixelSprite.tiledSize = tiledSize == default ? Vector2.one : tiledSize;
             pixelSprite.Apply();
+            RegisterElementalEntityForSprite(body, name, kind, scale, tiled, pixelSprite.tiledSize);
             return body;
+        }
+
+        private void RegisterElementalEntityForSprite(
+            GameObject body,
+            string entityName,
+            PixelSpriteKind kind,
+            Vector3 scale,
+            bool tiled,
+            Vector2 tiledSize)
+        {
+            if (body == null || !ElementalInteractionSystem.IsPhysicalElementalSprite(entityName, kind))
+            {
+                return;
+            }
+
+            var material = ElementalInteractionSystem.InferMaterial(entityName, kind);
+            if (material == ElementalMaterial.None)
+            {
+                return;
+            }
+
+            var renderer = body.GetComponent<SpriteRenderer>();
+            var entity = body.GetComponent<ElementalEntity>() ?? body.AddComponent<ElementalEntity>();
+            entity.Configure(
+                entityName,
+                material,
+                ElementalInteractionSystem.InferResponseRadius(scale, tiled, tiledSize),
+                ElementalInteractionSystem.InferWindMovable(entityName, kind, tiled),
+                renderer);
+            if (!elementalEntities.Contains(entity))
+            {
+                elementalEntities.Add(entity);
+            }
+        }
+
+        private void RegisterExistingElementalSprites()
+        {
+            foreach (var sprite in FindObjectsByType<PixelSpriteView>(FindObjectsSortMode.None))
+            {
+                if (sprite == null)
+                {
+                    continue;
+                }
+
+                RegisterElementalEntityForSprite(
+                    sprite.gameObject,
+                    sprite.name,
+                    sprite.kind,
+                    sprite.transform.localScale,
+                    sprite.tiled,
+                    sprite.tiledSize);
+            }
+        }
+
+        private static void AddPlatformCollider(GameObject body, Vector2 size)
+        {
+            if (body == null)
+            {
+                return;
+            }
+
+            var platformCollider = body.GetComponent<BoxCollider2D>();
+            if (platformCollider == null)
+            {
+                platformCollider = body.AddComponent<BoxCollider2D>();
+            }
+            platformCollider.size = size.sqrMagnitude <= 0.001f ? Vector2.one : size;
+            platformCollider.offset = Vector2.zero;
+            platformCollider.isTrigger = false;
+        }
+
+        private static void ApplySpriteOverride(GameObject body, Sprite spriteOverride)
+        {
+            if (body == null || spriteOverride == null)
+            {
+                return;
+            }
+
+            var renderer = body.GetComponent<SpriteRenderer>();
+            if (renderer != null)
+            {
+                renderer.sprite = spriteOverride;
+            }
         }
 
         private Text CreateGoalLabel(WorldStateGoal goal, Transform parent)
         {
-            var labelSize = new Vector2(220f, 64f);
+            var stageLabel = floorController?.Current.number == 3;
+            var visualRequirement = floorController != null && floorController.Current.number <= 3;
+            var labelSize = stageLabel ? new Vector2(198f, 54f) : new Vector2(220f, 64f);
             var canvasObject = new GameObject($"{goal.title} Goal Label");
             canvasObject.transform.SetParent(parent, false);
-            canvasObject.transform.position = goal.position + new Vector2(0f, -0.86f);
+            canvasObject.transform.position = goal.position + (stageLabel ? new Vector2(0f, 0.78f) : new Vector2(0f, -0.86f));
             var worldCanvas = canvasObject.AddComponent<Canvas>();
             worldCanvas.renderMode = RenderMode.WorldSpace;
             worldCanvas.overrideSorting = true;
             worldCanvas.sortingOrder = 42;
             var rect = canvasObject.GetComponent<RectTransform>() ?? canvasObject.AddComponent<RectTransform>();
             rect.sizeDelta = labelSize;
-            canvasObject.transform.localScale = Vector3.one * 0.016f;
+            canvasObject.transform.localScale = Vector3.one * (stageLabel ? 0.014f : 0.016f);
 
             var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, labelSize, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, 0.86f));
             background.raycastTarget = false;
-            var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 24, FontStyle.Bold, Vector2.zero, labelSize, Anchor.Center);
+            var textPosition = visualRequirement
+                ? new Vector2(0f, stageLabel ? 10f : 12f)
+                : Vector2.zero;
+            var textSize = visualRequirement
+                ? new Vector2(labelSize.x - 12f, stageLabel ? 26f : 30f)
+                : labelSize;
+            var text = CreateText("Goal Label Text", canvasObject.transform, visualRequirement ? goal.title : goal.OpenLabel, stageLabel ? 22 : 24, FontStyle.Bold, textPosition, textSize, Anchor.Center);
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.Lerp(goal.color, Color.white, 0.45f);
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
             text.lineSpacing = 0.88f;
             text.raycastTarget = false;
+            if (visualRequirement)
+            {
+                CreateGoalRequirementIconRow(goal, canvasObject.transform, stageLabel);
+            }
+
             return text;
+        }
+
+        private void CreateGoalRequirementIconRow(WorldStateGoal goal, Transform parent, bool stageLabel)
+        {
+            var glyphs = BuildGoalRequirementGlyphs(goal);
+            if (glyphs.Count == 0)
+            {
+                return;
+            }
+
+            var iconSize = stageLabel ? 18f : 21f;
+            var plusWidth = stageLabel ? 9f : 11f;
+            var gap = stageLabel ? 3f : 4f;
+            var totalWidth = glyphs.Count * iconSize + Mathf.Max(0, glyphs.Count - 1) * (plusWidth + gap * 2f);
+            var row = CreatePanel(
+                $"Goal Requirement Icon Row {goal.id}",
+                parent,
+                new Vector2(0f, stageLabel ? -14f : -17f),
+                new Vector2(totalWidth + 8f, iconSize + 4f),
+                Anchor.Center,
+                new Color(0f, 0f, 0f, 0f));
+            row.GetComponent<Image>().raycastTarget = false;
+
+            var x = -totalWidth * 0.5f + iconSize * 0.5f;
+            for (var index = 0; index < glyphs.Count; index++)
+            {
+                if (index > 0)
+                {
+                    var plus = CreateText(
+                        $"Goal Requirement Plus {goal.id} {index}",
+                        row,
+                        "+",
+                        stageLabel ? 16 : 18,
+                        FontStyle.Bold,
+                        new Vector2(x - iconSize * 0.5f - gap - plusWidth * 0.5f, 0f),
+                        new Vector2(plusWidth, iconSize),
+                        Anchor.Center);
+                    plus.alignment = TextAnchor.MiddleCenter;
+                    plus.color = new Color(1f, 1f, 1f, 0.82f);
+                    plus.raycastTarget = false;
+                }
+
+                var glyph = glyphs[index];
+                var image = CreateImage(
+                    $"Goal Requirement Icon {goal.id} {index + 1}",
+                    row,
+                    new Vector2(x, 0f),
+                    new Vector2(iconSize, iconSize),
+                    Anchor.Center,
+                    Color.white);
+                image.sprite = PixelArtFactory.CreateSprite($"Goal Requirement {goal.id} {index + 1}", glyph.primary, glyph.secondary, glyph.kind);
+                image.preserveAspect = true;
+                image.raycastTarget = false;
+                x += iconSize + plusWidth + gap * 2f;
+            }
+        }
+
+        private static List<GoalRequirementGlyph> BuildGoalRequirementGlyphs(WorldStateGoal goal)
+        {
+            var glyphs = new List<GoalRequirementGlyph>();
+            if (goal.comboBase.HasValue)
+            {
+                glyphs.Add(FamilyRequirementGlyph(goal.comboBase.Value));
+                if (goal.comboOverlay.HasValue)
+                {
+                    glyphs.Add(OverlayRequirementGlyph(goal.comboOverlay.Value));
+                }
+
+                return glyphs;
+            }
+
+            if (goal.requiredBase.HasValue)
+            {
+                glyphs.Add(FamilyRequirementGlyph(goal.requiredBase.Value));
+                if (goal.requiresCustomShape || goal.requiredCustomSpell.HasValue)
+                {
+                    foreach (var token in GoalRequirementShapeTokens(goal))
+                    {
+                        glyphs.Add(ShapeRequirementGlyph(token, goal.color));
+                    }
+                }
+
+                return glyphs;
+            }
+
+            if (goal.requiredOverlay.HasValue)
+            {
+                glyphs.Add(OverlayRequirementGlyph(goal.requiredOverlay.Value));
+            }
+
+            return glyphs;
+        }
+
+        private static IReadOnlyList<string> GoalRequirementShapeTokens(WorldStateGoal goal)
+        {
+            if (goal.requirementShapeTokens.Count > 0)
+            {
+                return goal.requirementShapeTokens;
+            }
+
+            if (!goal.requiredCustomSpell.HasValue)
+            {
+                return Array.Empty<string>();
+            }
+
+            return goal.requiredCustomSpell.Value switch
+            {
+                CustomSpellEffectKind.Ice => new[] { "hexagon" },
+                CustomSpellEffectKind.Electric => new[] { "line" },
+                CustomSpellEffectKind.Cleanse => new[] { "ellipse" },
+                CustomSpellEffectKind.Focus => new[] { "star" },
+                CustomSpellEffectKind.Flow => new[] { "wave" },
+                CustomSpellEffectKind.Connection => new[] { "brace" },
+                CustomSpellEffectKind.Stability => new[] { "rect" },
+                CustomSpellEffectKind.LivingBridge => new[] { "arrow", "rect" },
+                CustomSpellEffectKind.WindPlatform => new[] { "rect" },
+                _ => Array.Empty<string>()
+            };
+        }
+
+        private static GoalRequirementGlyph FamilyRequirementGlyph(SpellFamily family)
+        {
+            var color = FamilyColor(family);
+            return new GoalRequirementGlyph(FamilyRuneKind(family), color, Color.Lerp(color, Color.white, 0.48f));
+        }
+
+        private static GoalRequirementGlyph OverlayRequirementGlyph(OverlayOperator op)
+        {
+            var color = OverlayColor(op);
+            var kind = op switch
+            {
+                OverlayOperator.SteelBrace => PixelSpriteKind.ShapeRect,
+                OverlayOperator.ElectricFork => PixelSpriteKind.ShapeLine,
+                OverlayOperator.IceBar => PixelSpriteKind.ShapeLine,
+                OverlayOperator.SoulDot => PixelSpriteKind.ShapeEllipse,
+                OverlayOperator.VoidCut => PixelSpriteKind.ShapeLine,
+                OverlayOperator.MartialAxis => PixelSpriteKind.ShapeCross,
+                _ => PixelSpriteKind.RuneCircle
+            };
+            return new GoalRequirementGlyph(kind, color, Color.Lerp(color, Color.white, 0.52f));
+        }
+
+        private static GoalRequirementGlyph ShapeRequirementGlyph(string token, Color fallbackColor)
+        {
+            var primary = Color.Lerp(fallbackColor, Color.white, 0.18f);
+            var secondary = Color.Lerp(fallbackColor, Color.white, 0.58f);
+            return new GoalRequirementGlyph(ShapeTokenSpriteKind(token), primary, secondary);
+        }
+
+        private static PixelSpriteKind ShapeTokenSpriteKind(string token)
+        {
+            return (token ?? "").Trim().ToLowerInvariant() switch
+            {
+                "line" => PixelSpriteKind.ShapeLine,
+                "arrow" => PixelSpriteKind.ShapeArrow,
+                "rect" or "roundrect" => PixelSpriteKind.ShapeRect,
+                "ellipse" => PixelSpriteKind.ShapeEllipse,
+                "hexagon" => PixelSpriteKind.ShapeHexagon,
+                "brace" or "curve" or "arc" or "wave" => PixelSpriteKind.ShapeBrace,
+                "cross" => PixelSpriteKind.ShapeCross,
+                _ => PixelSpriteKind.RuneCircle
+            };
         }
 
         private Image CreateImage(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
@@ -2617,6 +4870,12 @@ namespace MagicExamHall
             };
         }
 
+        private static Color WithAlpha(Color color, float alpha)
+        {
+            color.a = alpha;
+            return color;
+        }
+
         private static Color OverlayColor(OverlayOperator op)
         {
             return op switch
@@ -2730,6 +4989,12 @@ namespace MagicExamHall
             BottomRight
         }
 
+        private enum BuffOwnerKind
+        {
+            Player,
+            Target
+        }
+
         private sealed class CustomShapeReferenceDefinition
         {
             public readonly SpellFamily family;
@@ -2753,6 +5018,153 @@ namespace MagicExamHall
             }
         }
 
+        private enum QuestChecklistConditionKind
+        {
+            GoalCompleted,
+            GoalsCompletedAtLeast,
+            AllGoalsCompleted,
+            ReferencePanelOpened,
+            ReferenceImportsAtLeast
+        }
+
+        private sealed class QuestChecklistItemDefinition
+        {
+            public readonly string id;
+            public readonly string label;
+            public readonly QuestChecklistConditionKind kind;
+            public readonly string goalId;
+            public readonly int threshold;
+
+            private QuestChecklistItemDefinition(string id, string label, QuestChecklistConditionKind kind, string goalId = "", int threshold = 0)
+            {
+                this.id = id;
+                this.label = label;
+                this.kind = kind;
+                this.goalId = goalId;
+                this.threshold = threshold;
+            }
+
+            public static QuestChecklistItemDefinition Goal(string id, string label, string goalId)
+            {
+                return new QuestChecklistItemDefinition(id, label, QuestChecklistConditionKind.GoalCompleted, goalId);
+            }
+
+            public static QuestChecklistItemDefinition GoalsAtLeast(string id, string label, int threshold)
+            {
+                return new QuestChecklistItemDefinition(id, label, QuestChecklistConditionKind.GoalsCompletedAtLeast, threshold: threshold);
+            }
+
+            public static QuestChecklistItemDefinition AllGoals(string id, string label)
+            {
+                return new QuestChecklistItemDefinition(id, label, QuestChecklistConditionKind.AllGoalsCompleted);
+            }
+
+            public static QuestChecklistItemDefinition ReferencePanel(string id, string label)
+            {
+                return new QuestChecklistItemDefinition(id, label, QuestChecklistConditionKind.ReferencePanelOpened);
+            }
+
+            public static QuestChecklistItemDefinition ReferenceImports(string id, string label, int threshold)
+            {
+                return new QuestChecklistItemDefinition(id, label, QuestChecklistConditionKind.ReferenceImportsAtLeast, threshold: threshold);
+            }
+        }
+
+        private sealed class QuestChecklistEntry
+        {
+            public readonly QuestChecklistItemDefinition definition;
+            public bool completed;
+
+            public QuestChecklistEntry(QuestChecklistItemDefinition definition)
+            {
+                this.definition = definition;
+            }
+        }
+
+        private sealed class QuestChecklistState
+        {
+            public readonly int floorNumber;
+            public readonly string floorTitle;
+            public readonly List<QuestChecklistEntry> entries;
+
+            public QuestChecklistState(int floorNumber, string floorTitle, IReadOnlyList<QuestChecklistItemDefinition> definitions)
+            {
+                this.floorNumber = floorNumber;
+                this.floorTitle = floorTitle;
+                entries = definitions.Select(definition => new QuestChecklistEntry(definition)).ToList();
+            }
+
+            public int CompletedCount => entries.Count(entry => entry.completed);
+            public int TotalCount => entries.Count;
+        }
+
+        private sealed class QuestChecklistItemView
+        {
+            private readonly GameObject row;
+            private readonly Image box;
+            private readonly QuestCheckMarkGraphic check;
+            private readonly Text label;
+
+            public QuestChecklistItemView(GameObject row, Image box, QuestCheckMarkGraphic check, Text label)
+            {
+                this.row = row;
+                this.box = box;
+                this.check = check;
+                this.label = label;
+            }
+
+            public void Refresh(bool completed)
+            {
+                if (box != null)
+                {
+                    box.color = completed
+                        ? new Color(0.96f, 0.82f, 0.54f, 0.72f)
+                        : new Color(0.92f, 0.78f, 0.52f, 0.55f);
+                }
+
+                if (check != null)
+                {
+                    check.gameObject.SetActive(completed);
+                    check.SetVerticesDirty();
+                }
+
+                if (label != null)
+                {
+                    label.color = completed
+                        ? new Color(0.13f, 0.07f, 0.035f, 0.94f)
+                        : new Color(0.18f, 0.09f, 0.035f, 0.96f);
+                }
+            }
+
+            public void Destroy()
+            {
+                if (row == null)
+                {
+                    return;
+                }
+
+                if (Application.isPlaying)
+                {
+                    UnityEngine.Object.Destroy(row);
+                }
+                else
+                {
+                    UnityEngine.Object.DestroyImmediate(row);
+                }
+            }
+        }
+
+        private sealed class QuestChecklistSnapshot
+        {
+            public int floorNumber;
+            public string floorTitle = "";
+            public int completedCount;
+            public int totalCount;
+            public string reason = "";
+            public int elapsedMs;
+            public string items = "";
+        }
+
         private readonly struct GoalEffect
         {
             public readonly string note;
@@ -2765,10 +5177,69 @@ namespace MagicExamHall
             }
         }
 
+        private readonly struct GoalRequirementGlyph
+        {
+            public readonly PixelSpriteKind kind;
+            public readonly Color primary;
+            public readonly Color secondary;
+
+            public GoalRequirementGlyph(PixelSpriteKind kind, Color primary, Color secondary)
+            {
+                this.kind = kind;
+                this.primary = primary;
+                this.secondary = secondary;
+            }
+        }
+
         private sealed class ProcessedSpell
         {
             public BaseRecognitionResult baseResult = null;
             public OverlayRecognitionResult overlayResult = null;
+        }
+
+        private sealed class FloatingGuideArrow
+        {
+            private readonly GameObject body;
+            private readonly Vector2 anchor;
+            private readonly float phase;
+            private readonly float baseScale;
+            private readonly float baseAlpha;
+            private float verticalOffset;
+            private float verticalVelocity;
+
+            public FloatingGuideArrow(GameObject body, Vector2 anchor, float phase, float baseScale, float baseAlpha)
+            {
+                this.body = body;
+                this.anchor = anchor;
+                this.phase = phase;
+                this.baseScale = baseScale;
+                this.baseAlpha = baseAlpha;
+            }
+
+            public bool IsActive => body != null;
+
+            public void Tick(float time, float deltaTime)
+            {
+                if (body == null)
+                {
+                    return;
+                }
+
+                var targetOffset = Mathf.Sin(time * 2.25f + phase) * 0.18f;
+                verticalVelocity += (targetOffset - verticalOffset) * 30f * deltaTime;
+                verticalVelocity *= Mathf.Exp(-4.8f * deltaTime);
+                verticalOffset += verticalVelocity * deltaTime;
+
+                body.transform.position = anchor + new Vector2(0f, verticalOffset);
+                body.transform.localScale = Vector3.one * baseScale * (1f + Mathf.Sin(time * 3.15f + phase) * 0.025f);
+                body.transform.rotation = Quaternion.identity;
+
+                var renderer = body.GetComponent<SpriteRenderer>();
+                if (renderer != null)
+                {
+                    renderer.color = new Color(1f, 1f, 1f, baseAlpha * (0.82f + Mathf.Sin(time * 2.8f + phase) * 0.12f));
+                }
+            }
         }
 
         private sealed class ParticlePulse
@@ -2805,7 +5276,7 @@ namespace MagicExamHall
                 this.resetPosition = resetPosition;
                 this.lockedNote = lockedNote;
                 this.body = body;
-                halfSize = size * 0.5f;
+                halfSize = new Vector2(size.x * 0.5f, size.y * 0.5f + StageGatePlayerCenterVerticalPadding);
             }
 
             public readonly string requiredGoalId;
@@ -2836,9 +5307,254 @@ namespace MagicExamHall
             }
         }
 
+        private sealed class BuffQueueView
+        {
+            private const int MaxVisibleBuffs = 6;
+            private readonly Transform owner;
+            private readonly RectTransform rootRect;
+            private readonly Font font;
+            private readonly List<BuffSlotView> slots = new();
+
+            public BuffQueueView(Transform owner, BuffOwnerKind ownerKind, Font font)
+            {
+                this.owner = owner;
+                OwnerKind = ownerKind;
+                this.font = font;
+                root = new GameObject(ownerKind == BuffOwnerKind.Player ? "Buff Queue Player" : $"Buff Queue {owner.name}");
+                root.transform.SetParent(owner, false);
+                root.transform.localPosition = ownerKind == BuffOwnerKind.Player
+                    ? new Vector3(0f, -0.76f, 0f)
+                    : new Vector3(0f, -0.68f, 0f);
+                root.transform.localScale = Vector3.one * 0.0135f;
+                var canvas = root.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.WorldSpace;
+                canvas.overrideSorting = true;
+                canvas.sortingOrder = 76;
+                rootRect = root.GetComponent<RectTransform>() ?? root.AddComponent<RectTransform>();
+                rootRect.sizeDelta = new Vector2(164f, 28f);
+            }
+
+            public readonly GameObject root;
+            public BuffOwnerKind OwnerKind { get; }
+            public bool IsActive => root != null && owner != null;
+            public int ActiveBuffCount => slots.Count(slot => !slot.Expired(Time.time));
+            public float FirstFillAmount => slots.FirstOrDefault(slot => !slot.Expired(Time.time))?.FillAmount ?? 0f;
+
+            public bool IsFor(Transform candidate)
+            {
+                return candidate != null && ReferenceEquals(owner, candidate);
+            }
+
+            public void Add(string label, Color color, PixelSpriteKind iconKind, float durationSeconds, float now)
+            {
+                for (var index = slots.Count - 1; index >= 0; index--)
+                {
+                    if (string.Equals(slots[index].Label, label, StringComparison.Ordinal))
+                    {
+                        slots[index].Destroy();
+                        slots.RemoveAt(index);
+                    }
+                }
+
+                while (slots.Count >= MaxVisibleBuffs)
+                {
+                    slots[0].Destroy();
+                    slots.RemoveAt(0);
+                }
+
+                slots.Add(new BuffSlotView(rootRect, label, color, iconKind, durationSeconds, now, font));
+                Layout();
+            }
+
+            public void Clear()
+            {
+                foreach (var slot in slots)
+                {
+                    slot.Destroy();
+                }
+
+                slots.Clear();
+            }
+
+            public bool Tick(float now)
+            {
+                if (!IsActive)
+                {
+                    return false;
+                }
+
+                for (var index = slots.Count - 1; index >= 0; index--)
+                {
+                    var slot = slots[index];
+                    if (slot.Expired(now))
+                    {
+                        slot.Destroy();
+                        slots.RemoveAt(index);
+                        continue;
+                    }
+
+                    slot.Tick(now);
+                }
+
+                Layout();
+                return slots.Count > 0;
+            }
+
+            public void Destroy()
+            {
+                Clear();
+                if (root != null)
+                {
+                    UnityEngine.Object.Destroy(root);
+                }
+            }
+
+            private void Layout()
+            {
+                var totalWidth = slots.Count * 24f;
+                var startX = -totalWidth * 0.5f + 12f;
+                for (var index = 0; index < slots.Count; index++)
+                {
+                    slots[index].SetPosition(new Vector2(startX + index * 24f, 0f));
+                }
+            }
+        }
+
+        private sealed class BuffSlotView
+        {
+            private readonly GameObject root;
+            private readonly BuffCooldownClockGraphic cooldown;
+            private readonly Text labelText;
+            private readonly float createdAt;
+            private readonly float durationSeconds;
+
+            public BuffSlotView(
+                Transform parent,
+                string label,
+                Color color,
+                PixelSpriteKind iconKind,
+                float durationSeconds,
+                float now,
+                Font font)
+            {
+                Label = label;
+                this.durationSeconds = Mathf.Max(durationSeconds, 0.1f);
+                createdAt = now;
+
+                root = new GameObject($"Buff Slot {label}");
+                root.transform.SetParent(parent, false);
+                var rect = root.AddComponent<RectTransform>();
+                rect.sizeDelta = new Vector2(22f, 22f);
+                var background = root.AddComponent<Image>();
+                background.color = Color.Lerp(color, Color.black, 0.18f);
+                background.material = PixelMaterialProvider.UiMaterial;
+                background.raycastTarget = false;
+                AddUiBorder(rect, new Color(0.03f, 0.035f, 0.045f, 0.92f), 1.25f);
+
+                var iconObject = new GameObject("Buff Slot Icon");
+                iconObject.transform.SetParent(root.transform, false);
+                var iconRect = iconObject.AddComponent<RectTransform>();
+                iconRect.anchorMin = Vector2.zero;
+                iconRect.anchorMax = Vector2.one;
+                iconRect.offsetMin = new Vector2(3f, 3f);
+                iconRect.offsetMax = new Vector2(-3f, -3f);
+                var icon = iconObject.AddComponent<Image>();
+                icon.sprite = PixelArtFactory.CreateSprite($"Buff Icon {label}", Color.Lerp(color, Color.white, 0.12f), Color.white, iconKind);
+                icon.material = PixelMaterialProvider.UiMaterial;
+                icon.preserveAspect = true;
+                icon.raycastTarget = false;
+
+                var cooldownObject = new GameObject("Buff Cooldown Clock Fill");
+                cooldownObject.transform.SetParent(root.transform, false);
+                var cooldownRect = cooldownObject.AddComponent<RectTransform>();
+                cooldownRect.anchorMin = Vector2.zero;
+                cooldownRect.anchorMax = Vector2.one;
+                cooldownRect.offsetMin = Vector2.zero;
+                cooldownRect.offsetMax = Vector2.zero;
+                cooldown = cooldownObject.AddComponent<BuffCooldownClockGraphic>();
+                cooldown.color = new Color(0f, 0f, 0f, 0.58f);
+                cooldown.raycastTarget = false;
+
+                var labelObject = new GameObject("Buff Slot Label");
+                labelObject.transform.SetParent(root.transform, false);
+                var labelRect = labelObject.AddComponent<RectTransform>();
+                labelRect.anchorMin = Vector2.zero;
+                labelRect.anchorMax = Vector2.one;
+                labelRect.offsetMin = new Vector2(0f, -1f);
+                labelRect.offsetMax = Vector2.zero;
+                labelText = labelObject.AddComponent<Text>();
+                labelText.font = font;
+                labelText.fontSize = 7;
+                labelText.fontStyle = FontStyle.Bold;
+                labelText.alignment = TextAnchor.LowerCenter;
+                labelText.color = Color.white;
+                labelText.text = ShortBuffLabel(label);
+                labelText.raycastTarget = false;
+            }
+
+            public string Label { get; }
+            public float FillAmount => cooldown == null ? 0f : cooldown.FillAmount;
+
+            public bool Expired(float now)
+            {
+                return now >= createdAt + durationSeconds;
+            }
+
+            public void Tick(float now)
+            {
+                if (cooldown == null)
+                {
+                    return;
+                }
+
+                cooldown.FillAmount = Mathf.Clamp01((now - createdAt) / durationSeconds);
+            }
+
+            public void SetPosition(Vector2 anchoredPosition)
+            {
+                if (root == null)
+                {
+                    return;
+                }
+
+                root.GetComponent<RectTransform>().anchoredPosition = anchoredPosition;
+            }
+
+            public void Destroy()
+            {
+                if (root != null)
+                {
+                    UnityEngine.Object.Destroy(root);
+                }
+            }
+
+            private static string ShortBuffLabel(string label)
+            {
+                return string.IsNullOrWhiteSpace(label)
+                    ? ""
+                    : label.Length <= 2 ? label : label[..2];
+            }
+
+            private static void AddUiBorder(RectTransform target, Color color, float thickness)
+            {
+                var borderObject = new GameObject($"{target.name} Border");
+                borderObject.transform.SetParent(target, false);
+                var rect = borderObject.AddComponent<RectTransform>();
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+                var border = borderObject.AddComponent<CustomShapeRectBorder>();
+                border.color = color;
+                border.thickness = thickness;
+                border.raycastTarget = false;
+            }
+        }
+
         private sealed class DamagePopupView
         {
-            private readonly Text text;
+            private readonly Text mainText;
+            private readonly List<Text> shadowTexts = new();
             private readonly Color color;
             private float age;
 
@@ -2852,27 +5568,41 @@ namespace MagicExamHall
                 canvas.overrideSorting = true;
                 canvas.sortingOrder = 64;
                 var rect = root.GetComponent<RectTransform>() ?? root.AddComponent<RectTransform>();
-                rect.sizeDelta = new Vector2(96f, 42f);
+                rect.sizeDelta = new Vector2(128f, 54f);
                 root.transform.localScale = Vector3.one * 0.017f;
 
-                var textObject = new GameObject("Damage Popup Text");
+                shadowTexts.Add(CreateDamageText("Damage Popup Shadow NW", value, font, new Vector2(-2.2f, 2f), new Color(0f, 0f, 0f, 0.82f), 36));
+                shadowTexts.Add(CreateDamageText("Damage Popup Shadow SE", value, font, new Vector2(2.2f, -2f), new Color(0f, 0f, 0f, 0.78f), 36));
+                shadowTexts.Add(CreateDamageText("Damage Popup Shadow Drop", value, font, new Vector2(0f, -3.6f), new Color(0.18f, 0.02f, 0.01f, 0.62f), 36));
+                mainText = CreateDamageText("Damage Popup Main Text", value, font, Vector2.zero, Color.Lerp(color, Color.white, 0.22f), 38);
+                var outline = mainText.gameObject.AddComponent<Outline>();
+                outline.effectColor = new Color(0.08f, 0.015f, 0.005f, 0.90f);
+                outline.effectDistance = new Vector2(1.4f, -1.4f);
+            }
+
+            public readonly GameObject root;
+
+            private Text CreateDamageText(string name, string value, Font font, Vector2 offset, Color textColor, int fontSize)
+            {
+                var textObject = new GameObject(name);
                 textObject.transform.SetParent(root.transform, false);
                 var textRect = textObject.AddComponent<RectTransform>();
                 textRect.anchorMin = Vector2.zero;
                 textRect.anchorMax = Vector2.one;
-                textRect.offsetMin = Vector2.zero;
-                textRect.offsetMax = Vector2.zero;
-                text = textObject.AddComponent<Text>();
+                textRect.offsetMin = offset;
+                textRect.offsetMax = offset;
+                var text = textObject.AddComponent<Text>();
                 text.font = font;
-                text.fontSize = 28;
+                text.fontSize = fontSize;
                 text.fontStyle = FontStyle.Bold;
                 text.alignment = TextAnchor.MiddleCenter;
-                text.color = Color.Lerp(color, Color.white, 0.18f);
+                text.horizontalOverflow = HorizontalWrapMode.Overflow;
+                text.verticalOverflow = VerticalWrapMode.Overflow;
+                text.color = textColor;
                 text.text = value;
                 text.raycastTarget = false;
+                return text;
             }
-
-            public readonly GameObject root;
 
             public bool Tick(float deltaTime)
             {
@@ -2882,10 +5612,17 @@ namespace MagicExamHall
                 }
 
                 age += deltaTime;
-                var t = Mathf.Clamp01(age / 0.95f);
-                root.transform.position += Vector3.up * (deltaTime * 0.62f);
-                root.transform.localScale = Vector3.one * Mathf.Lerp(0.017f, 0.022f, t);
-                text.color = new Color(color.r, color.g, color.b, Mathf.Lerp(1f, 0f, t));
+                var t = Mathf.Clamp01(age / 1.15f);
+                var bounce = Mathf.Sin(Mathf.Clamp01(age / 0.22f) * Mathf.PI) * 0.16f;
+                root.transform.position += Vector3.up * (deltaTime * (0.82f + bounce));
+                root.transform.localScale = Vector3.one * Mathf.Lerp(0.018f, 0.024f, Mathf.Clamp01(age / 0.24f)) * Mathf.Lerp(1f, 0.88f, t);
+                var alpha = Mathf.Lerp(1f, 0f, Mathf.Clamp01((t - 0.68f) / 0.32f));
+                mainText.color = new Color(color.r, color.g, color.b, alpha);
+                foreach (var shadow in shadowTexts)
+                {
+                    var shadowColor = shadow.color;
+                    shadow.color = new Color(shadowColor.r, shadowColor.g, shadowColor.b, alpha * shadowColor.a);
+                }
                 return t < 1f;
             }
 
@@ -3035,6 +5772,360 @@ namespace MagicExamHall
         }
     }
 
+    public sealed class BuffCooldownClockGraphic : MaskableGraphic
+    {
+        [Range(0f, 1f)]
+        [SerializeField]
+        private float fillAmount;
+
+        public float FillAmount
+        {
+            get => fillAmount;
+            set
+            {
+                var next = Mathf.Clamp01(value);
+                if (Mathf.Approximately(fillAmount, next))
+                {
+                    return;
+                }
+
+                fillAmount = next;
+                SetVerticesDirty();
+            }
+        }
+
+        protected override void OnPopulateMesh(VertexHelper vertexHelper)
+        {
+            vertexHelper.Clear();
+            if (fillAmount <= 0.001f)
+            {
+                return;
+            }
+
+            var rect = GetPixelAdjustedRect();
+            if (fillAmount >= 0.999f)
+            {
+                AddFullRect(vertexHelper, rect, color);
+                return;
+            }
+
+            var points = new List<Vector2> { rect.center, ClockPoint(rect, 0f) };
+            var stops = new[] { 0.125f, 0.375f, 0.625f, 0.875f };
+            foreach (var stop in stops)
+            {
+                if (fillAmount > stop)
+                {
+                    points.Add(ClockPoint(rect, stop));
+                }
+            }
+            points.Add(ClockPoint(rect, fillAmount));
+
+            var color32 = (Color32)color;
+            for (var index = 0; index < points.Count; index++)
+            {
+                vertexHelper.AddVert(points[index], color32, Vector2.zero);
+            }
+
+            for (var index = 1; index < points.Count - 1; index++)
+            {
+                vertexHelper.AddTriangle(0, index, index + 1);
+            }
+        }
+
+        private static Vector2 ClockPoint(Rect rect, float amount)
+        {
+            amount = Mathf.Repeat(amount, 1f);
+            var perimeter = rect.width * 2f + rect.height * 2f;
+            var distance = amount * perimeter;
+            var halfWidth = rect.width * 0.5f;
+
+            if (distance <= halfWidth)
+            {
+                return new Vector2(rect.center.x + distance, rect.yMax);
+            }
+
+            distance -= halfWidth;
+            if (distance <= rect.height)
+            {
+                return new Vector2(rect.xMax, rect.yMax - distance);
+            }
+
+            distance -= rect.height;
+            if (distance <= rect.width)
+            {
+                return new Vector2(rect.xMax - distance, rect.yMin);
+            }
+
+            distance -= rect.width;
+            if (distance <= rect.height)
+            {
+                return new Vector2(rect.xMin, rect.yMin + distance);
+            }
+
+            distance -= rect.height;
+            return new Vector2(rect.xMin + distance, rect.yMax);
+        }
+
+        private static void AddFullRect(VertexHelper vertexHelper, Rect rect, Color fillColor)
+        {
+            var color32 = (Color32)fillColor;
+            vertexHelper.AddVert(new Vector2(rect.xMin, rect.yMin), color32, Vector2.zero);
+            vertexHelper.AddVert(new Vector2(rect.xMin, rect.yMax), color32, Vector2.zero);
+            vertexHelper.AddVert(new Vector2(rect.xMax, rect.yMax), color32, Vector2.zero);
+            vertexHelper.AddVert(new Vector2(rect.xMax, rect.yMin), color32, Vector2.zero);
+            vertexHelper.AddTriangle(0, 1, 2);
+            vertexHelper.AddTriangle(2, 3, 0);
+        }
+    }
+
+    public sealed class HeartHealthGraphic : MaskableGraphic
+    {
+        private int state = 2;
+
+        public int State
+        {
+            get => state;
+            set
+            {
+                var next = Mathf.Clamp(value, 0, 2);
+                if (state == next)
+                {
+                    return;
+                }
+
+                state = next;
+                SetVerticesDirty();
+            }
+        }
+
+        protected override void OnPopulateMesh(VertexHelper vertexHelper)
+        {
+            vertexHelper.Clear();
+            var rect = GetPixelAdjustedRect();
+            var points = HeartPoints();
+            var empty = new Color(0.22f, 0.035f, 0.045f, 0.66f);
+            var broken = new Color(0.12f, 0.025f, 0.030f, 0.82f);
+            var outline = new Color(0.08f, 0.010f, 0.015f, 0.92f);
+            AddPolygon(vertexHelper, Project(points, rect), empty);
+
+            if (state == 2)
+            {
+                AddPolygon(vertexHelper, Project(points, rect), color);
+            }
+            else if (state == 1)
+            {
+                AddPolygon(vertexHelper, Project(ClipByX(points, 0.52f, keepLeft: true), rect), color);
+                AddPolygon(vertexHelper, Project(ClipByX(points, 0.48f, keepLeft: false), rect), broken);
+                AddZigzag(vertexHelper, rect, outline);
+            }
+            else
+            {
+                AddZigzag(vertexHelper, rect, outline);
+                AddZigzag(vertexHelper, rect, WithAlpha(color, 0.24f), new Vector2(1.6f, -1.4f));
+            }
+
+            AddOutline(vertexHelper, Project(points, rect), outline);
+        }
+
+        private static List<Vector2> HeartPoints()
+        {
+            return new List<Vector2>
+            {
+                new(0.50f, 0.08f),
+                new(0.15f, 0.34f),
+                new(0.07f, 0.58f),
+                new(0.15f, 0.78f),
+                new(0.32f, 0.90f),
+                new(0.50f, 0.77f),
+                new(0.68f, 0.90f),
+                new(0.85f, 0.78f),
+                new(0.93f, 0.58f),
+                new(0.85f, 0.34f)
+            };
+        }
+
+        private static List<Vector2> ClipByX(IReadOnlyList<Vector2> source, float clipX, bool keepLeft)
+        {
+            var output = new List<Vector2>();
+            if (source.Count == 0)
+            {
+                return output;
+            }
+
+            var previous = source[^1];
+            var previousInside = Inside(previous, clipX, keepLeft);
+            foreach (var current in source)
+            {
+                var currentInside = Inside(current, clipX, keepLeft);
+                if (currentInside != previousInside)
+                {
+                    output.Add(IntersectX(previous, current, clipX));
+                }
+
+                if (currentInside)
+                {
+                    output.Add(current);
+                }
+
+                previous = current;
+                previousInside = currentInside;
+            }
+
+            return output;
+        }
+
+        private static bool Inside(Vector2 point, float clipX, bool keepLeft)
+        {
+            return keepLeft ? point.x <= clipX : point.x >= clipX;
+        }
+
+        private static Vector2 IntersectX(Vector2 start, Vector2 end, float clipX)
+        {
+            var delta = end - start;
+            if (Mathf.Abs(delta.x) < 0.0001f)
+            {
+                return new Vector2(clipX, start.y);
+            }
+
+            var t = Mathf.Clamp01((clipX - start.x) / delta.x);
+            return Vector2.Lerp(start, end, t);
+        }
+
+        private static List<Vector2> Project(IReadOnlyList<Vector2> points, Rect rect)
+        {
+            var projected = new List<Vector2>(points.Count);
+            foreach (var point in points)
+            {
+                projected.Add(new Vector2(rect.xMin + rect.width * point.x, rect.yMin + rect.height * point.y));
+            }
+
+            return projected;
+        }
+
+        private static void AddPolygon(VertexHelper vertexHelper, IReadOnlyList<Vector2> points, Color fillColor)
+        {
+            if (points.Count < 3)
+            {
+                return;
+            }
+
+            var center = Vector2.zero;
+            foreach (var point in points)
+            {
+                center += point;
+            }
+            center /= points.Count;
+
+            var color32 = (Color32)fillColor;
+            var start = vertexHelper.currentVertCount;
+            vertexHelper.AddVert(center, color32, Vector2.zero);
+            for (var index = 0; index < points.Count; index++)
+            {
+                vertexHelper.AddVert(points[index], color32, Vector2.zero);
+            }
+
+            for (var index = 1; index <= points.Count; index++)
+            {
+                var next = index == points.Count ? 1 : index + 1;
+                vertexHelper.AddTriangle(start, start + index, start + next);
+            }
+        }
+
+        private static void AddOutline(VertexHelper vertexHelper, IReadOnlyList<Vector2> points, Color outlineColor)
+        {
+            for (var index = 0; index < points.Count; index++)
+            {
+                AddStroke(vertexHelper, points[index], points[(index + 1) % points.Count], 2.2f, outlineColor);
+            }
+        }
+
+        private static void AddZigzag(VertexHelper vertexHelper, Rect rect, Color strokeColor, Vector2 offset = default)
+        {
+            var points = new[]
+            {
+                new Vector2(rect.xMin + rect.width * 0.53f, rect.yMin + rect.height * 0.82f),
+                new Vector2(rect.xMin + rect.width * 0.43f, rect.yMin + rect.height * 0.66f),
+                new Vector2(rect.xMin + rect.width * 0.56f, rect.yMin + rect.height * 0.51f),
+                new Vector2(rect.xMin + rect.width * 0.45f, rect.yMin + rect.height * 0.34f),
+                new Vector2(rect.xMin + rect.width * 0.54f, rect.yMin + rect.height * 0.16f)
+            };
+            for (var index = 0; index < points.Length - 1; index++)
+            {
+                AddStroke(vertexHelper, points[index] + offset, points[index + 1] + offset, 3.1f, strokeColor);
+            }
+        }
+
+        private static void AddStroke(VertexHelper vertexHelper, Vector2 start, Vector2 end, float thickness, Color strokeColor)
+        {
+            var direction = end - start;
+            if (direction.sqrMagnitude < 0.001f)
+            {
+                return;
+            }
+
+            var normal = new Vector2(-direction.y, direction.x).normalized * (thickness * 0.5f);
+            var color32 = (Color32)strokeColor;
+            var index = vertexHelper.currentVertCount;
+            vertexHelper.AddVert(start - normal, color32, Vector2.zero);
+            vertexHelper.AddVert(start + normal, color32, Vector2.zero);
+            vertexHelper.AddVert(end + normal, color32, Vector2.zero);
+            vertexHelper.AddVert(end - normal, color32, Vector2.zero);
+            vertexHelper.AddTriangle(index, index + 1, index + 2);
+            vertexHelper.AddTriangle(index + 2, index + 3, index);
+        }
+
+        private static Color WithAlpha(Color source, float alpha)
+        {
+            source.a *= alpha;
+            return source;
+        }
+    }
+
+    public sealed class QuestCheckMarkGraphic : MaskableGraphic
+    {
+        protected override void OnPopulateMesh(VertexHelper vertexHelper)
+        {
+            vertexHelper.Clear();
+            var rect = GetPixelAdjustedRect();
+            var a = new Vector2(rect.xMin + rect.width * 0.17f, rect.yMin + rect.height * 0.48f);
+            var b = new Vector2(rect.xMin + rect.width * 0.39f, rect.yMin + rect.height * 0.24f);
+            var c = new Vector2(rect.xMin + rect.width * 0.84f, rect.yMin + rect.height * 0.76f);
+            AddPencilStroke(vertexHelper, a, b, 4.2f, color, Vector2.zero);
+            AddPencilStroke(vertexHelper, b, c, 4.2f, color, Vector2.zero);
+            AddPencilStroke(vertexHelper, a, b, 1.6f, WithAlpha(color, 0.38f), new Vector2(0.8f, 1.1f));
+            AddPencilStroke(vertexHelper, b, c, 1.6f, WithAlpha(color, 0.38f), new Vector2(0.8f, 1.1f));
+            AddPencilStroke(vertexHelper, a, b, 1.2f, WithAlpha(color, 0.30f), new Vector2(-0.9f, -0.7f));
+            AddPencilStroke(vertexHelper, b, c, 1.2f, WithAlpha(color, 0.30f), new Vector2(-0.9f, -0.7f));
+        }
+
+        private static void AddPencilStroke(VertexHelper vertexHelper, Vector2 start, Vector2 end, float thickness, Color strokeColor, Vector2 offset)
+        {
+            var direction = end - start;
+            if (direction.sqrMagnitude < 0.001f)
+            {
+                return;
+            }
+
+            var normal = new Vector2(-direction.y, direction.x).normalized * (thickness * 0.5f);
+            start += offset;
+            end += offset;
+            var color32 = (Color32)strokeColor;
+            var index = vertexHelper.currentVertCount;
+            vertexHelper.AddVert(start - normal, color32, Vector2.zero);
+            vertexHelper.AddVert(start + normal, color32, Vector2.zero);
+            vertexHelper.AddVert(end + normal, color32, Vector2.zero);
+            vertexHelper.AddVert(end - normal, color32, Vector2.zero);
+            vertexHelper.AddTriangle(index, index + 1, index + 2);
+            vertexHelper.AddTriangle(index + 2, index + 3, index);
+        }
+
+        private static Color WithAlpha(Color source, float alpha)
+        {
+            source.a *= alpha;
+            return source;
+        }
+    }
+
     public sealed class SpellSealSnapshot
     {
         public string sealId = "";
@@ -3087,6 +6178,9 @@ namespace MagicExamHall
         private readonly HashSet<string> discoveries = new();
         private readonly List<float> qualityScores = new();
         private readonly List<QualityVector> successfulQualities = new();
+        private string questChecklistSummary = "아직 저장된 퀘스트 점수가 없습니다.";
+        private int questChecklistCompleted;
+        private int questChecklistTotal;
         private int hintShownCount;
         private int assistedSuccessCount;
         private int maxAssistLevel;
@@ -3136,6 +6230,13 @@ namespace MagicExamHall
             discoveries.Add($"{id}:{effect}");
         }
 
+        public void RecordQuestChecklist(string summary, int completed, int total)
+        {
+            questChecklistSummary = string.IsNullOrWhiteSpace(summary) ? "아직 저장된 퀘스트 점수가 없습니다." : summary;
+            questChecklistCompleted = Math.Max(0, completed);
+            questChecklistTotal = Math.Max(0, total);
+        }
+
         public string BuildText(int totalAttempts, string outputDirectory, bool trueEnding, int completedFinalGoals, int totalFinalGoals)
         {
             var favoriteBase = baseUse.Count == 0 ? "없음" : SpellLabels.Korean(baseUse.OrderByDescending(item => item.Value).First().Key);
@@ -3154,6 +6255,8 @@ namespace MagicExamHall
                 $"발견한 세계 반응: {discoveries.Count}개\n" +
                 $"평균 문양 안정도: {averageQuality:0}%\n" +
                 $"힌트 표시: {hintShownCount}회 / 최대 {AssistLevelLabel(maxAssistLevel)} / 힌트 후 성공 {assistedSuccessCount}회\n" +
+                $"퀘스트 체크: {questChecklistCompleted}/{questChecklistTotal}\n" +
+                $"{questChecklistSummary}\n" +
                 $"{BuildProfileSummary()}\n" +
                 "보정 정책: profile은 성공/실패 판정을 뒤집지 않고 품질 설명과 다음 연습 방향에만 사용됩니다.\n\n" +
                 BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
@@ -3301,11 +6404,11 @@ namespace MagicExamHall
                     rugColor = new Color(0.18f, 0.18f, 0.42f),
                     goals =
                     {
-                        WorldStateGoal.CustomBase("custom_fire", "불꽃별", SpellFamily.Fire, new Vector2(-5.4f, 2.55f), new Color(1f, 0.31f, 0.18f), "커스텀 불꽃별이 다음 마법을 강화하는 반응으로 새겨집니다."),
-                        WorldStateGoal.CustomBase("custom_water", "물막원", SpellFamily.Water, new Vector2(-2.7f, 3.0f), new Color(0.24f, 0.48f, 0.86f), "커스텀 물막원이 방어막 반응으로 안정화됩니다."),
-                        WorldStateGoal.CustomBase("custom_wind", "질풍화살", SpellFamily.Wind, new Vector2(0f, 3.05f), new Color(0.74f, 0.86f, 0.92f), "커스텀 질풍화살이 끝점 방향 사출 반응을 깨웁니다."),
-                        WorldStateGoal.CustomBase("custom_earth", "대지벽", SpellFamily.Earth, new Vector2(2.7f, 3.0f), new Color(0.74f, 0.55f, 0.32f), "커스텀 대지벽이 구조물 생성 반응을 고정합니다."),
-                        WorldStateGoal.CustomBase("custom_life", "생명가새", SpellFamily.Life, new Vector2(5.4f, 2.55f), new Color(0.35f, 0.86f, 0.42f), "커스텀 생명가새가 지속 버프 반응으로 이어집니다.")
+                        WorldStateGoal.CustomBase("custom_fire", "불꽃 직선", SpellFamily.Fire, new Vector2(-5.4f, 2.55f), new Color(1f, 0.31f, 0.18f), "불꽃 직선이 직선 불꽃 반응으로 새겨집니다.").WithRequirementShapes("line"),
+                        WorldStateGoal.CustomBase("custom_water", "물 보호막", SpellFamily.Water, new Vector2(-2.7f, 3.0f), new Color(0.24f, 0.48f, 0.86f), "물 보호막이 방어막 반응으로 안정화됩니다.").WithRequirementShapes("ellipse"),
+                        WorldStateGoal.CustomBase("custom_wind", "바람 화살표", SpellFamily.Wind, new Vector2(0f, 3.05f), new Color(0.74f, 0.86f, 0.92f), "바람 화살표가 끝점 방향 사출 반응을 깨웁니다.").WithRequirementShapes("arrow"),
+                        WorldStateGoal.CustomBase("custom_earth", "사각 방벽", SpellFamily.Earth, new Vector2(2.7f, 3.0f), new Color(0.74f, 0.55f, 0.32f), "사각 방벽이 구조물 생성 반응을 고정합니다.").WithRequirementShapes("rect"),
+                        WorldStateGoal.CustomBase("custom_life", "생명 연결선", SpellFamily.Life, new Vector2(5.4f, 2.55f), new Color(0.35f, 0.86f, 0.42f), "생명 연결선이 지속 버프 반응으로 이어집니다.").WithRequirementShapes("brace")
                     }
                 },
                 new()
@@ -3319,10 +6422,10 @@ namespace MagicExamHall
                     rugColor = new Color(0.12f, 0.34f, 0.42f),
                     goals =
                     {
-                        WorldStateGoal.CustomSpell("living_bridge", "낭떠러지 다리", SpellFamily.Life, CustomSpellEffectKind.LivingBridge, new Vector2(2.85f, -3.02f), new Color(0.35f, 0.86f, 0.42f), "생명 사출 발판이 낭떠러지를 이어 줍니다.").WithReaction(WorldReactionKind.LivingBridge),
-                        WorldStateGoal.CustomSpell("frozen_river", "강 얼리기", SpellFamily.Water, CustomSpellEffectKind.Ice, new Vector2(-1.75f, -1.18f), new Color(0.48f, 0.84f, 1f), "강물이 얼어 안전한 얼음길이 됩니다.").WithReaction(WorldReactionKind.FreezeRiver),
-                        WorldStateGoal.CustomSpell("earth_stairs", "계단 만들기", SpellFamily.Earth, CustomSpellEffectKind.Stability, new Vector2(1.75f, 0.42f), new Color(0.74f, 0.55f, 0.32f), "대지 구조물이 가파른 길 위에 계단처럼 쌓입니다.").WithReaction(WorldReactionKind.EarthStairs),
-                        WorldStateGoal.CustomSpell("wind_platform", "바람 발판", SpellFamily.Wind, CustomSpellEffectKind.WindPlatform, new Vector2(4.65f, 2.15f), new Color(0.74f, 0.86f, 0.92f), "바람이 사각 발판을 띄워 마지막 빈 공간을 건널 수 있게 합니다.").WithReaction(WorldReactionKind.WindPlatform)
+                        WorldStateGoal.CustomSpell("frozen_river", "강물 얼리기", SpellFamily.Water, CustomSpellEffectKind.Ice, new Vector2(-1.75f, -1.18f), new Color(0.48f, 0.84f, 1f), "얼음 결정이 강물을 얼려 안전한 얼음길로 만듭니다.").WithRequirementShapes("hexagon").WithReaction(WorldReactionKind.FreezeRiver),
+                        WorldStateGoal.CustomSpell("earth_stairs", "구멍 메우기", SpellFamily.Earth, CustomSpellEffectKind.Stability, new Vector2(1.75f, 0.42f), new Color(0.74f, 0.55f, 0.32f), "구멍 메움판이 깨진 바닥 구멍을 채워 지나갈 길을 만듭니다.").WithRequirementShapes("rect").WithReaction(WorldReactionKind.EarthStairs),
+                        WorldStateGoal.CustomSpell("living_bridge", "덩굴 다리", SpellFamily.Life, CustomSpellEffectKind.LivingBridge, new Vector2(2.85f, -3.02f), new Color(0.35f, 0.86f, 0.42f), "덩굴 다리가 낭떠러지를 이어 줍니다.").WithRequirementShapes("arrow", "rect").WithReaction(WorldReactionKind.LivingBridge),
+                        WorldStateGoal.CustomSpell("wind_platform", "바람 발판", SpellFamily.Wind, CustomSpellEffectKind.WindPlatform, new Vector2(4.65f, 2.15f), new Color(0.74f, 0.86f, 0.92f), "바람 발판이 마지막 빈 공간을 건널 수 있게 합니다.").WithRequirementShapes("rect").WithReaction(WorldReactionKind.WindPlatform)
                     }
                 },
                 new()
@@ -3336,10 +6439,10 @@ namespace MagicExamHall
                     rugColor = new Color(0.42f, 0.10f, 0.16f),
                     goals =
                     {
-                        WorldStateGoal.CustomSpell("ice_training", "얼음 제압", SpellFamily.Water, CustomSpellEffectKind.Ice, new Vector2(-4.8f, 1.55f), new Color(0.48f, 0.84f, 1f), "얼음 반응이 표적의 움직임을 늦춥니다.").WithReaction(WorldReactionKind.CombatHit),
-                        WorldStateGoal.CustomSpell("electric_training", "전기 타격", SpellFamily.Fire, CustomSpellEffectKind.Electric, new Vector2(-1.6f, 2.15f), new Color(1f, 0.9f, 0.22f), "직선 전류가 표적을 빠르게 때립니다.").WithReaction(WorldReactionKind.CombatHit),
-                        WorldStateGoal.CustomSpell("cleanse_training", "정화 해제", SpellFamily.Water, CustomSpellEffectKind.Cleanse, new Vector2(1.6f, 2.15f), new Color(0.24f, 0.48f, 0.86f), "둥근 물막이 표적의 오염 효과를 씻어 냅니다.").WithReaction(WorldReactionKind.CombatHit),
-                        WorldStateGoal.CustomSpell("stable_training", "방벽 시험", SpellFamily.Earth, CustomSpellEffectKind.Stability, new Vector2(4.8f, 1.55f), new Color(0.74f, 0.55f, 0.32f), "사각 구조물이 표적 앞에 엄폐물을 세웁니다.").WithReaction(WorldReactionKind.CombatHit)
+                        WorldStateGoal.CustomSpell("ice_training", "얼음 제압", SpellFamily.Water, CustomSpellEffectKind.Ice, new Vector2(-4.8f, 1.55f), new Color(0.48f, 0.84f, 1f), "얼음 결정이 표적의 움직임을 늦춥니다.").WithReaction(WorldReactionKind.CombatHit),
+                        WorldStateGoal.CustomSpell("electric_training", "번개 타격", SpellFamily.Fire, CustomSpellEffectKind.Electric, new Vector2(-1.6f, 2.15f), new Color(1f, 0.9f, 0.22f), "번개 직선이 표적을 빠르게 때립니다.").WithReaction(WorldReactionKind.CombatHit),
+                        WorldStateGoal.CustomSpell("cleanse_training", "정화 수막", SpellFamily.Water, CustomSpellEffectKind.Cleanse, new Vector2(1.6f, 2.15f), new Color(0.24f, 0.48f, 0.86f), "둥근 수막이 표적의 오염 효과를 씻어 냅니다.").WithReaction(WorldReactionKind.CombatHit),
+                        WorldStateGoal.CustomSpell("stable_training", "사각 방벽", SpellFamily.Earth, CustomSpellEffectKind.Stability, new Vector2(4.8f, 1.55f), new Color(0.74f, 0.55f, 0.32f), "사각 방벽이 표적 앞에 엄폐물을 세웁니다.").WithReaction(WorldReactionKind.CombatHit)
                     }
                 },
                 new()
@@ -3380,6 +6483,7 @@ namespace MagicExamHall
         public SpellFamily? comboBase;
         public OverlayOperator? comboOverlay;
         public CustomSpellEffectKind? requiredCustomSpell;
+        public IReadOnlyList<string> requirementShapeTokens = Array.Empty<string>();
         public string discoveryNote;
         public WorldReactionKind reactionKind;
         public bool requiresCustomShape;
@@ -3387,6 +6491,7 @@ namespace MagicExamHall
         public float radius = 2.15f;
         public float visualScale = 1f;
         public GameObject body;
+        public GameObject entityBody;
         public SpriteRenderer renderer;
         public Text label;
 
@@ -3497,6 +6602,15 @@ namespace MagicExamHall
             return this;
         }
 
+        public WorldStateGoal WithRequirementShapes(params string[] tokens)
+        {
+            requirementShapeTokens = (tokens ?? Array.Empty<string>())
+                .Where(token => !string.IsNullOrWhiteSpace(token))
+                .Select(token => token.Trim())
+                .ToArray();
+            return this;
+        }
+
         public bool MatchesBase(SpellFamily family, Vector2 center)
         {
             return requiredBase == family && Vector2.Distance(center, position) <= radius;
@@ -3532,6 +6646,7 @@ namespace MagicExamHall
                 comboBase = comboBase,
                 comboOverlay = comboOverlay,
                 requiredCustomSpell = requiredCustomSpell,
+                requirementShapeTokens = requirementShapeTokens?.ToArray() ?? Array.Empty<string>(),
                 reactionKind = reactionKind,
                 requiresCustomShape = requiresCustomShape,
                 radius = radius,

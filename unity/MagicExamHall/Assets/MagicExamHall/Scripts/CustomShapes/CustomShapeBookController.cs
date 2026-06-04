@@ -28,11 +28,6 @@ namespace MagicExamHall
         private RectTransform editorShadow = null!;
         private RectTransform editorRoot = null!;
         private InputField labelInput = null!;
-        private Text familyLabel = null!;
-        private readonly List<Image> familyReelIcons = new();
-        private readonly List<SpellFamily> familyReelFamilies = new();
-        private RectTransform familyReelViewport = null!;
-        private RectTransform familyReelContent = null!;
         private Text shapeEventLabel = null!;
         private Text editorStatus = null!;
         private CustomShapeCapturePad capturePad = null!;
@@ -43,25 +38,11 @@ namespace MagicExamHall
         private string editorShapeToken = "line";
         private Vector2 penPopupVelocity;
         private float penFloatPhase;
-        private int familyReelVirtualIndex;
-        private float familyReelPosition;
-        private float familyReelTarget;
-        private float familyReelVelocity;
         private BubbleMode bubbleMode = BubbleMode.None;
         private static Sprite circleSprite = null!;
         private static readonly Vector2 BaseEditorPopupSize = new(940f, 522f);
         private static readonly Vector2 CapturePanelSize = new(480f, 310f);
-        private static readonly Vector2 FamilyReelViewportPosition = new(128f, 12f);
-        private static readonly Vector2 FamilyReelViewportSize = new(136f, 112f);
         private const float EditorTitleBarHeight = 54f;
-        private const float FamilySlotSpacing = 34f;
-        private const float FamilyReelTopPadding = 18f;
-        private const int FamilyReelCycles = 3;
-        private const float FamilyReelKickVelocity = 420f;
-        private const float FamilyReelMaxVelocity = 820f;
-        private const float FamilyReelSpring = 62f;
-        private const float FamilyReelDamping = 8.5f;
-        private const float FamilyReelFadeDistance = 58f;
         private const float SlotPreviewStrokeWidth = 2f;
         private const float SidePreviewStrokeWidth = 2f;
         private const int SavedSlotPreviewStrokeWidth = 2;
@@ -105,11 +86,6 @@ namespace MagicExamHall
             if (IsPenPopupVisible)
             {
                 UpdatePenPopupMotion(Time.unscaledDeltaTime);
-            }
-
-            if (IsEditorOpen)
-            {
-                UpdateFamilyCarouselAnimation(Time.unscaledDeltaTime);
             }
 
             if (!Input.GetMouseButtonDown(0) || PointerIsOverUi())
@@ -475,8 +451,6 @@ namespace MagicExamHall
             labelInput = CreateInputField("Custom Shape Label Input", editorRoot, "이름", new Vector2(22f, -70f), new Vector2(270f, 42f), UiAnchor.TopLeft);
             BuildShapePalette(editorRoot);
 
-            BuildFamilyCarousel(editorRoot);
-
             var padRoot = CreatePanel("Custom Shape Capture Panel", editorRoot, new Vector2(-42f, -74f), CapturePanelSize, UiAnchor.TopRight, new Color(0.92f, 0.94f, 0.9f, 1f));
             captureTemplatePreview = CreateShapeIcon("Custom Shape Capture Template Preview", padRoot, editorShapeToken, Vector2.zero, new Vector2(250f, 210f), UiAnchor.Center, new Color(0.12f, 0.13f, 0.12f, 0.34f), 6f);
             captureTemplatePreview.raycastTarget = false;
@@ -509,7 +483,6 @@ namespace MagicExamHall
             CreateButton("Custom Shape Cancel", editorRoot, "취소", 15, new Vector2(-68f, 26f), new Vector2(92f, 38f), UiAnchor.BottomRight, CloseEditor);
             AddSimpleBorder(editorRoot, new Color(0.68f, 0.78f, 0.92f, 0.96f), 2f);
             UpdateShapeSelection();
-            UpdateFamilyLabel();
         }
 
         private void BuildShapePalette(Transform parent)
@@ -630,55 +603,6 @@ namespace MagicExamHall
             captureStrokePreview.enabled = false;
         }
 
-        private void BuildFamilyCarousel(Transform parent)
-        {
-            var root = CreatePanel("Custom Shape Family Carousel", parent, new Vector2(18f, 30f), new Vector2(294f, 138f), UiAnchor.BottomLeft, new Color(0.014f, 0.086f, 0.088f, 0.985f));
-            AddSimpleBorder(root, new Color(0.14f, 0.36f, 0.35f, 0.82f), 1.5f);
-            familyLabel = CreateText("Custom Shape Family Label", root, "", 16, FontStyle.Bold, new Vector2(14f, -10f), new Vector2(120f, 28f), UiAnchor.TopLeft);
-            CreateButton("Custom Shape Family Up", root, "▲", 16, new Vector2(18f, 54f), new Vector2(42f, 34f), UiAnchor.BottomLeft, () => CycleFamily(1));
-            CreateButton("Custom Shape Family Down", root, "▼", 16, new Vector2(18f, 14f), new Vector2(42f, 34f), UiAnchor.BottomLeft, () => CycleFamily(-1));
-            familyReelViewport = CreatePanel("Custom Shape Family Reel Viewport", root, FamilyReelViewportPosition, FamilyReelViewportSize, UiAnchor.BottomLeft, new Color(0.018f, 0.034f, 0.041f, 0.98f));
-            var mask = familyReelViewport.gameObject.AddComponent<Mask>();
-            mask.showMaskGraphic = true;
-            AddSimpleBorder(familyReelViewport, new Color(0.10f, 0.20f, 0.23f, 0.76f), 1f);
-
-            var values = FamilyValues();
-            var contentHeight = FamilyReelTopPadding * 2f + values.Count * FamilyReelCycles * FamilySlotSpacing;
-            var content = new GameObject("Custom Shape Family Reel Content");
-            content.transform.SetParent(familyReelViewport, false);
-            familyReelContent = content.AddComponent<RectTransform>();
-            ApplyAnchor(familyReelContent, UiAnchor.TopLeft);
-            familyReelContent.sizeDelta = new Vector2(FamilyReelViewportSize.x, contentHeight);
-            familyReelIcons.Clear();
-            familyReelFamilies.Clear();
-            for (var cycle = 0; cycle < FamilyReelCycles; cycle++)
-            {
-                for (var index = 0; index < values.Count; index++)
-                {
-                    var family = values[index];
-                    var virtualIndex = cycle * values.Count + index;
-                    var icon = CreateShapeIcon(
-                        $"Custom Shape Family Reel Icon {cycle + 1}-{family}",
-                        familyReelContent,
-                        FamilyShapeToken(family),
-                        new Vector2(42f, -FamilyReelTopPadding - virtualIndex * FamilySlotSpacing),
-                        new Vector2(70f, 42f),
-                        UiAnchor.TopLeft,
-                        FamilyColor(family),
-                        4.1f);
-                    icon.raycastTarget = false;
-                    familyReelIcons.Add(icon);
-                    familyReelFamilies.Add(family);
-                }
-            }
-
-            var centerLine = CreatePanel("Custom Shape Family Reel Center Line", familyReelViewport, Vector2.zero, new Vector2(FamilyReelViewportSize.x - 18f, 2f), UiAnchor.Center, new Color(0.55f, 0.75f, 0.78f, 0.18f));
-            centerLine.GetComponent<Image>().raycastTarget = false;
-            centerLine.SetAsFirstSibling();
-            familyReelViewport.Find($"{familyReelViewport.name} Border")?.SetAsLastSibling();
-            ResetFamilyReelPosition();
-        }
-
         private void SaveEditor()
         {
             if (!capturePad.HasPlacedShapes)
@@ -699,136 +623,6 @@ namespace MagicExamHall
             editorStatus.text = message;
         }
 
-        private void CycleFamily(int direction)
-        {
-            if (direction == 0)
-            {
-                return;
-            }
-
-            direction = Math.Sign(direction);
-            var values = FamilyValues();
-            familyReelVirtualIndex += direction;
-            editorFamily = values[PositiveModulo(familyReelVirtualIndex, values.Count)];
-            familyReelTarget = FamilyReelTargetForIndex(familyReelVirtualIndex);
-            familyReelVelocity = Mathf.Clamp(familyReelVelocity + direction * FamilyReelKickVelocity, -FamilyReelMaxVelocity, FamilyReelMaxVelocity);
-            UpdateFamilyLabel();
-        }
-
-        private void UpdateFamilyLabel()
-        {
-            if (familyLabel != null)
-            {
-                familyLabel.text = $"매핑: {SpellLabels.Korean(editorFamily)}";
-            }
-
-            if (familyReelContent == null)
-            {
-                return;
-            }
-
-            UpdateFamilyReelIconSprites();
-            ApplyFamilyReelVisuals();
-            capturePad?.SetStrokeColor(FamilyColor(editorFamily));
-        }
-
-        private void UpdateFamilyCarouselAnimation(float deltaTime)
-        {
-            if (familyReelContent == null)
-            {
-                return;
-            }
-
-            if (Mathf.Abs(familyReelPosition - familyReelTarget) <= 0.05f && Mathf.Abs(familyReelVelocity) <= 0.05f)
-            {
-                familyReelPosition = familyReelTarget;
-                familyReelVelocity = 0f;
-                NormalizeFamilyReelIndex();
-                ApplyFamilyReelVisuals();
-                return;
-            }
-
-            var dt = Mathf.Clamp(deltaTime, 1f / 60f, 0.05f);
-            var acceleration = (familyReelTarget - familyReelPosition) * FamilyReelSpring - familyReelVelocity * FamilyReelDamping;
-            familyReelVelocity = Mathf.Clamp(familyReelVelocity + acceleration * dt, -FamilyReelMaxVelocity, FamilyReelMaxVelocity);
-            familyReelPosition += familyReelVelocity * dt;
-            ApplyFamilyReelVisuals();
-        }
-
-        private void ResetFamilyReelPosition()
-        {
-            var values = FamilyValues();
-            var baseIndex = values.IndexOf(editorFamily);
-            familyReelVirtualIndex = values.Count + Mathf.Max(0, baseIndex);
-            familyReelPosition = FamilyReelTargetForIndex(familyReelVirtualIndex);
-            familyReelTarget = familyReelPosition;
-            familyReelVelocity = 0f;
-            UpdateFamilyReelIconSprites();
-            ApplyFamilyReelVisuals();
-        }
-
-        private void NormalizeFamilyReelIndex()
-        {
-            var values = FamilyValues();
-            var normalized = values.Count + PositiveModulo(familyReelVirtualIndex, values.Count);
-            if (normalized == familyReelVirtualIndex)
-            {
-                return;
-            }
-
-            familyReelVirtualIndex = normalized;
-            familyReelTarget = FamilyReelTargetForIndex(familyReelVirtualIndex);
-            familyReelPosition = familyReelTarget;
-        }
-
-        private void UpdateFamilyReelIconSprites()
-        {
-            for (var index = 0; index < familyReelIcons.Count; index++)
-            {
-                var family = familyReelFamilies[index];
-                SetShapeIcon(familyReelIcons[index], FamilyShapeToken(family), FamilyColor(family));
-            }
-        }
-
-        private void ApplyFamilyReelVisuals()
-        {
-            if (familyReelContent == null)
-            {
-                return;
-            }
-
-            familyReelContent.anchoredPosition = new Vector2(0f, familyReelPosition);
-            var centerY = -FamilyReelViewportSize.y * 0.5f;
-            for (var index = 0; index < familyReelIcons.Count; index++)
-            {
-                var icon = familyReelIcons[index];
-                var rect = icon.rectTransform;
-                var visualY = familyReelPosition + rect.anchoredPosition.y;
-                var distanceFromCenter = Mathf.Abs(visualY - centerY);
-                var centerWeight = 1f - Mathf.Clamp01(distanceFromCenter / FamilyReelFadeDistance);
-                centerWeight = centerWeight * centerWeight * (3f - 2f * centerWeight);
-                var alpha = Mathf.Lerp(0.30f, 1f, centerWeight);
-                icon.color = WithAlpha(FamilyColor(familyReelFamilies[index]), alpha);
-                rect.localScale = Vector3.one;
-                rect.localRotation = Quaternion.identity;
-            }
-        }
-
-        private static List<SpellFamily> FamilyValues()
-        {
-            return Enum.GetValues(typeof(SpellFamily)).Cast<SpellFamily>().ToList();
-        }
-
-        private static int PositiveModulo(int value, int count)
-        {
-            return (value % count + count) % count;
-        }
-
-        private static float FamilyReelTargetForIndex(int virtualIndex)
-        {
-            return -FamilyReelViewportSize.y * 0.5f + FamilyReelTopPadding + virtualIndex * FamilySlotSpacing;
-        }
-
         private void CloseEditor()
         {
             if (editorRoot != null)
@@ -838,13 +632,6 @@ namespace MagicExamHall
                 capturePad = null!;
                 captureTemplatePreview = null!;
                 captureStrokePreview = null!;
-                familyReelContent = null!;
-                familyReelViewport = null!;
-                familyReelIcons.Clear();
-                familyReelFamilies.Clear();
-                familyReelPosition = 0f;
-                familyReelTarget = 0f;
-                familyReelVelocity = 0f;
             }
 
             if (editorShadow != null)
@@ -956,19 +743,6 @@ namespace MagicExamHall
                 SpellFamily.Water => new Color(0.12f, 0.36f, 0.9f, 0.98f),
                 SpellFamily.Life => new Color(0.22f, 0.66f, 0.36f, 0.98f),
                 _ => Color.gray
-            };
-        }
-
-        private static string FamilyShapeToken(SpellFamily family)
-        {
-            return family switch
-            {
-                SpellFamily.Wind => "wave",
-                SpellFamily.Earth => "diamond",
-                SpellFamily.Fire => "triangle",
-                SpellFamily.Water => "ellipse",
-                SpellFamily.Life => "cross",
-                _ => "line"
             };
         }
 

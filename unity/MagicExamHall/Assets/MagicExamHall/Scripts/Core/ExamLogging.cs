@@ -84,6 +84,21 @@ namespace MagicExamHall
         public int totalAttempts;
     }
 
+    [Serializable]
+    public sealed class QuestChecklistLog
+    {
+        public string sessionId = "";
+        public string floorId = "";
+        public string floorTitle = "";
+        public string reason = "";
+        public int completed;
+        public int total;
+        public int globalCompleted;
+        public int globalTotal;
+        public int elapsedMs;
+        public string items = "";
+    }
+
     public sealed class ExamLogger
     {
         public string OutputDirectory { get; }
@@ -91,6 +106,8 @@ namespace MagicExamHall
         private readonly string attemptsCsvPath;
         private readonly string surveyJsonPath;
         private readonly string surveyCsvPath;
+        private readonly string questChecklistJsonPath;
+        private readonly string questChecklistCsvPath;
 
         public ExamLogger(string sessionId)
         {
@@ -100,8 +117,11 @@ namespace MagicExamHall
             attemptsCsvPath = Path.Combine(OutputDirectory, "attempts.csv");
             surveyJsonPath = Path.Combine(OutputDirectory, "survey.jsonl");
             surveyCsvPath = Path.Combine(OutputDirectory, "survey.csv");
+            questChecklistJsonPath = Path.Combine(OutputDirectory, "quest-checklist.jsonl");
+            questChecklistCsvPath = Path.Combine(OutputDirectory, "quest-checklist.csv");
             EnsureAttemptHeader();
             EnsureSurveyHeader();
+            EnsureQuestChecklistHeader();
         }
 
         public void LogAttempt(AttemptLog log)
@@ -184,6 +204,22 @@ namespace MagicExamHall
                 log.totalAttempts) + Environment.NewLine, Encoding.UTF8);
         }
 
+        public void LogQuestChecklist(QuestChecklistLog log)
+        {
+            File.AppendAllText(questChecklistJsonPath, JsonUtility.ToJson(log) + Environment.NewLine, Encoding.UTF8);
+            File.AppendAllText(questChecklistCsvPath, string.Join(",",
+                Csv(log.sessionId),
+                Csv(log.floorId),
+                Csv(log.floorTitle),
+                Csv(log.reason),
+                log.completed,
+                log.total,
+                log.globalCompleted,
+                log.globalTotal,
+                log.elapsedMs,
+                Csv(log.items)) + Environment.NewLine, Encoding.UTF8);
+        }
+
         private void EnsureAttemptHeader()
         {
             if (!File.Exists(attemptsCsvPath))
@@ -200,6 +236,14 @@ namespace MagicExamHall
             if (!File.Exists(surveyCsvPath))
             {
                 File.WriteAllText(surveyCsvPath, "sessionId,clarity,fairness,feedbackHelpfulness,controlFeeling,immersion,comment,completedTrials,totalAttempts" + Environment.NewLine, Encoding.UTF8);
+            }
+        }
+
+        private void EnsureQuestChecklistHeader()
+        {
+            if (!File.Exists(questChecklistCsvPath))
+            {
+                File.WriteAllText(questChecklistCsvPath, "sessionId,floorId,floorTitle,reason,completed,total,globalCompleted,globalTotal,elapsedMs,items" + Environment.NewLine, Encoding.UTF8);
             }
         }
 

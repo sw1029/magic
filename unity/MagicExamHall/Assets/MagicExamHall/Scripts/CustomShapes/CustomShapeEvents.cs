@@ -94,15 +94,15 @@ namespace MagicExamHall
         {
             return kind switch
             {
-                CustomSpellEffectKind.Ice => new(kind, "얼음", "물 + 육각형", "물이 육각 결정으로 굳어 발판과 제압 효과를 만듭니다.", 28),
-                CustomSpellEffectKind.Electric => new(kind, "전기", "불꽃 + 직선", "불꽃이 직선 경로를 타고 전류처럼 뻗습니다.", 34),
-                CustomSpellEffectKind.Cleanse => new(kind, "정화", "물 + 원", "둥근 물막이 오염을 씻어 내고 상태를 안정시킵니다.", 18),
-                CustomSpellEffectKind.Focus => new(kind, "집중", "불꽃 + 별", "별 모양 초점이 다음 타격이 모일 지점을 밝혀 줍니다.", 24),
-                CustomSpellEffectKind.Flow => new(kind, "흐름", "바람 + 물결", "바람이 물결 경로를 따라 이동 흐름을 만듭니다.", 20),
-                CustomSpellEffectKind.Connection => new(kind, "연결", "생명 + 중괄호", "생명 마법이 떨어진 대상을 묶는 연결감을 만듭니다.", 22),
-                CustomSpellEffectKind.Stability => new(kind, "안정", "땅 + 사각형", "사각 구조물이 흔들리는 바닥을 받쳐 안정시킵니다.", 16),
-                CustomSpellEffectKind.LivingBridge => new(kind, "생명 다리", "생명 + 화살표 + 사각형", "생명 마법이 사각 발판을 뻗어 낭떠러지를 잇습니다.", 0),
-                CustomSpellEffectKind.WindPlatform => new(kind, "바람 발판", "바람 + 사각형", "바람이 사각 발판을 띄워 건너갈 길을 만듭니다.", 0),
+                CustomSpellEffectKind.Ice => new(kind, "얼음 결정", "물 + 육각형", "물이 얼음 결정으로 굳어 발판과 제압 효과를 만듭니다.", 28),
+                CustomSpellEffectKind.Electric => new(kind, "번개 직선", "불꽃 + 직선", "불꽃이 직선 경로를 타고 번개처럼 뻗습니다.", 34),
+                CustomSpellEffectKind.Cleanse => new(kind, "정화 물막", "물 + 둥근 물막", "둥근 물막이 오염을 씻어 내고 상태를 안정시킵니다.", 18),
+                CustomSpellEffectKind.Focus => new(kind, "불꽃 초점", "불꽃 + 별 초점", "별 모양 초점이 다음 타격이 모일 지점을 밝혀 줍니다.", 24),
+                CustomSpellEffectKind.Flow => new(kind, "바람 물결", "바람 + 물결", "바람이 물결 경로를 따라 이동 흐름을 만듭니다.", 20),
+                CustomSpellEffectKind.Connection => new(kind, "생명 연결", "생명 + 연결선", "생명력이 떨어진 대상을 묶어 연결합니다.", 22),
+                CustomSpellEffectKind.Stability => new(kind, "구멍 메우기", "땅 + 메움판", "사각 암반판이 깨진 바닥 구멍을 메워 길을 안정시킵니다.", 16),
+                CustomSpellEffectKind.LivingBridge => new(kind, "덩굴 다리", "생명 + 화살표 + 사각판", "덩굴이 화살 방향으로 뻗어 낭떠러지를 잇습니다.", 0),
+                CustomSpellEffectKind.WindPlatform => new(kind, "바람 발판", "바람 + 발판", "바람이 사각 발판을 띄워 건너갈 길을 만듭니다.", 0),
                 _ => new(CustomSpellEffectKind.None, "", "", "", 0)
             };
         }

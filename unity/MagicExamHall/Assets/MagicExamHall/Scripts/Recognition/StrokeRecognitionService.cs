@@ -17,6 +17,8 @@ namespace MagicExamHall
         public IReadOnlyList<CompiledSeal> activeSeals = Array.Empty<CompiledSeal>();
         public BaseRecognitionIntent baseIntent;
         public bool customShapesOnlyWhenSealActive;
+        public bool hasCastCenter;
+        public Vector2 castCenter;
         public float now;
     }
 
@@ -64,13 +66,14 @@ namespace MagicExamHall
 
             context ??= new RecognitionContext();
             var strokes = session.ToStrokeSamples();
-            var center = session.GetWorldCenter();
+            var center = context.hasCastCenter ? context.castCenter : session.GetWorldCenter();
             var strokeCount = strokes.Count;
             var seals = context.activeSeals ?? Array.Empty<CompiledSeal>();
             var hasActiveSeal = seals.Any(seal => context.now <= seal.expiresAt);
+            var targetSeal = SpellCastingService.FindAttachableSeal(seals, center, context.now);
             if (context.customShapesOnlyWhenSealActive && hasActiveSeal)
             {
-                var customOnlyBase = RecognizeBaseCandidate(strokes, context.baseIntent);
+                var customOnlyBase = RecognizeBaseCandidate(strokes, context.baseIntent, targetSeal?.baseFamily);
                 if (!customOnlyBase.spell.isCustomShape)
                 {
                     RejectNonCustomPostSealInput(customOnlyBase);
@@ -87,13 +90,11 @@ namespace MagicExamHall
                 };
             }
 
-            var targetSeal = SpellCastingService.FindAttachableSeal(seals, center, context.now);
-
             if (targetSeal != null)
             {
                 var overlayResult = OverlayRecognizer.Recognize(strokes, targetSeal);
                 PersonalizationStore.ApplyOverlayPersonalization(overlayResult, strokes);
-                var baseResult = RecognizeBaseCandidate(strokes, context.baseIntent);
+                var baseResult = RecognizeBaseCandidate(strokes, context.baseIntent, targetSeal.baseFamily);
                 if (baseResult.spell.status == RecognitionStatus.Recognized &&
                     baseResult.spell.recognizedFamily.HasValue &&
                     !SpellCastingService.ShouldPreferOverlayNearSeal(overlayResult))
@@ -164,11 +165,12 @@ namespace MagicExamHall
 
         private BaseRecognitionResult RecognizeBaseCandidate(
             List<List<StrokeSample>> strokes,
-            BaseRecognitionIntent intent)
+            BaseRecognitionIntent intent,
+            SpellFamily? preferredCustomFamily = null)
         {
             var baseResult = SpellRuntime.RecognizeBase(strokes, PrepareBaseIntent(intent));
             PersonalizationStore.ApplyBasePersonalization(baseResult.spell, strokes);
-            CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, CustomShapeStore);
+            CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, CustomShapeStore, preferredCustomFamily);
             return baseResult;
         }
 

@@ -67,6 +67,9 @@ namespace MagicExamHall
                 case PixelSpriteKind.Candle:
                     DrawCandle(texture, primary, secondary);
                     break;
+                case PixelSpriteKind.GuideArrow:
+                    DrawGuideArrow(texture, primary, secondary);
+                    break;
                 case PixelSpriteKind.RuneCircle:
                     DrawRuneCircle(texture, primary, secondary);
                     break;
@@ -84,6 +87,51 @@ namespace MagicExamHall
                     break;
                 case PixelSpriteKind.LifeRune:
                     DrawLifeRune(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.WaterHazard:
+                    DrawWaterHazard(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.IceBridge:
+                    DrawIceBridge(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.VineBridge:
+                    DrawVineBridge(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.EarthStep:
+                    DrawEarthStep(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.WindPlatformTile:
+                    DrawWindPlatformTile(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.CliffFace:
+                    DrawCliffFace(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.Portal:
+                    DrawPortal(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.Rubble:
+                    DrawRubble(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.ShapeLine:
+                    DrawShapeLine(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.ShapeArrow:
+                    DrawShapeArrow(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.ShapeRect:
+                    DrawShapeRect(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.ShapeEllipse:
+                    DrawShapeEllipse(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.ShapeHexagon:
+                    DrawShapeHexagon(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.ShapeBrace:
+                    DrawShapeBrace(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.ShapeCross:
+                    DrawShapeCross(texture, primary, secondary);
                     break;
             }
 
@@ -326,6 +374,32 @@ namespace MagicExamHall
             Set(texture, 15, 21, new Color(1f, 0.32f, 0.12f, 1f));
         }
 
+        private static void DrawGuideArrow(Texture2D texture, Color primary, Color secondary)
+        {
+            var outline = new Color(0.05f, 0.035f, 0.012f, 1f);
+            var glow = Mix(primary, Color.white, 0.38f);
+
+            for (var offset = -2; offset <= 2; offset++)
+            {
+                Line(texture, 6 + offset, 25, 23 + offset, 8, outline);
+                Line(texture, 6, 25 + offset, 23, 8 + offset, outline);
+            }
+
+            for (var offset = -1; offset <= 1; offset++)
+            {
+                Line(texture, 7 + offset, 24, 22 + offset, 9, primary);
+                Line(texture, 7, 24 + offset, 22, 9 + offset, primary);
+            }
+
+            Line(texture, 22, 9, 22, 18, outline);
+            Line(texture, 22, 9, 13, 9, outline);
+            Line(texture, 21, 10, 21, 17, secondary);
+            Line(texture, 21, 10, 14, 10, secondary);
+            Fill(texture, 18, 11, 4, 4, glow);
+            Set(texture, 22, 9, Color.white);
+            Set(texture, 21, 10, Color.white);
+        }
+
         private static void DrawRuneCircle(Texture2D texture, Color primary, Color secondary)
         {
             Ring(texture, 16, 16, 13, 12, new Color(primary.r, primary.g, primary.b, 0.62f));
@@ -474,6 +548,157 @@ namespace MagicExamHall
             // Root shadow at stem base
             Line(texture, 13, 5, 19, 5, deep);
             Set(texture, 16, 17, secondary);
+        }
+
+        private static void DrawWaterHazard(Texture2D texture, Color primary, Color secondary)
+        {
+            Fill(texture, 2, 7, 28, 18, Shade(primary, 0.72f));
+            for (var y = 8; y <= 24; y += 4)
+            {
+                Line(texture, 4, y, 10, y + 1, Mix(primary, Color.white, 0.28f));
+                Line(texture, 14, y + 1, 22, y, secondary);
+            }
+            Diamond(texture, 8, 14, 3, 2, Shade(secondary, 0.62f));
+            Diamond(texture, 23, 18, 2, 2, Shade(secondary, 0.58f));
+        }
+
+        private static void DrawIceBridge(Texture2D texture, Color primary, Color secondary)
+        {
+            Fill(texture, 2, 10, 28, 12, Mix(primary, Color.white, 0.22f));
+            Fill(texture, 2, 9, 28, 2, Color.white);
+            for (var x = 5; x < 29; x += 7)
+            {
+                Line(texture, x, 11, x + 4, 21, secondary);
+            }
+            Line(texture, 2, 22, 29, 22, Shade(primary, 0.64f));
+        }
+
+        private static void DrawVineBridge(Texture2D texture, Color primary, Color secondary)
+        {
+            Line(texture, 2, 16, 29, 15, Shade(primary, 0.72f));
+            Line(texture, 2, 18, 29, 17, primary);
+            for (var x = 5; x < 29; x += 5)
+            {
+                Line(texture, x, 12, x + 2, 20, secondary);
+                Diamond(texture, x + 1, 12, 2, 2, Mix(primary, Color.white, 0.2f));
+            }
+        }
+
+        private static void DrawEarthStep(Texture2D texture, Color primary, Color secondary)
+        {
+            Fill(texture, 3, 7, 26, 8, Shade(primary, 0.78f));
+            Fill(texture, 3, 15, 26, 7, primary);
+            Fill(texture, 3, 22, 26, 3, secondary);
+            for (var x = 5; x < 27; x += 7)
+            {
+                Line(texture, x, 9, x + 4, 13, Shade(secondary, 0.72f));
+            }
+        }
+
+        private static void DrawWindPlatformTile(Texture2D texture, Color primary, Color secondary)
+        {
+            Fill(texture, 4, 14, 24, 6, Mix(primary, Color.white, 0.12f));
+            Line(texture, 4, 13, 27, 13, Color.white);
+            Line(texture, 4, 20, 27, 20, Shade(primary, 0.65f));
+            Line(texture, 6, 8, 20, 8, secondary);
+            Line(texture, 12, 24, 26, 24, secondary);
+        }
+
+        private static void DrawShapeLine(Texture2D texture, Color primary, Color secondary)
+        {
+            Line(texture, 6, 22, 26, 10, Shade(primary, 0.72f));
+            Line(texture, 6, 23, 26, 11, primary);
+            Line(texture, 8, 24, 28, 12, secondary);
+        }
+
+        private static void DrawShapeArrow(Texture2D texture, Color primary, Color secondary)
+        {
+            Line(texture, 6, 23, 24, 9, primary);
+            Line(texture, 7, 24, 25, 10, Shade(primary, 0.72f));
+            Line(texture, 24, 9, 24, 17, secondary);
+            Line(texture, 24, 9, 16, 9, secondary);
+            Line(texture, 23, 10, 19, 18, Color.white);
+        }
+
+        private static void DrawShapeRect(Texture2D texture, Color primary, Color secondary)
+        {
+            Fill(texture, 7, 9, 19, 15, Shade(primary, 0.42f));
+            Line(texture, 7, 9, 25, 9, primary);
+            Line(texture, 25, 9, 25, 23, primary);
+            Line(texture, 25, 23, 7, 23, secondary);
+            Line(texture, 7, 23, 7, 9, secondary);
+            Line(texture, 10, 12, 22, 20, Mix(primary, Color.white, 0.30f));
+        }
+
+        private static void DrawShapeEllipse(Texture2D texture, Color primary, Color secondary)
+        {
+            Ellipse(texture, 16, 16, 12, 9, Shade(primary, 0.35f));
+            Ellipse(texture, 16, 16, 10, 7, secondary);
+            Ellipse(texture, 16, 16, 7, 4, new Color(0f, 0f, 0f, 0f));
+            Line(texture, 8, 11, 24, 11, Mix(primary, Color.white, 0.24f));
+            Line(texture, 8, 21, 24, 21, Shade(primary, 0.72f));
+        }
+
+        private static void DrawShapeHexagon(Texture2D texture, Color primary, Color secondary)
+        {
+            Line(texture, 12, 6, 20, 6, primary);
+            Line(texture, 20, 6, 27, 16, primary);
+            Line(texture, 27, 16, 20, 26, secondary);
+            Line(texture, 20, 26, 12, 26, secondary);
+            Line(texture, 12, 26, 5, 16, primary);
+            Line(texture, 5, 16, 12, 6, primary);
+            Line(texture, 11, 14, 21, 18, Mix(primary, Color.white, 0.32f));
+            Diamond(texture, 16, 16, 2, 2, Color.white);
+        }
+
+        private static void DrawShapeBrace(Texture2D texture, Color primary, Color secondary)
+        {
+            Line(texture, 11, 5, 8, 9, primary);
+            Line(texture, 8, 9, 8, 14, primary);
+            Line(texture, 8, 14, 5, 16, secondary);
+            Line(texture, 5, 16, 8, 18, secondary);
+            Line(texture, 8, 18, 8, 23, primary);
+            Line(texture, 8, 23, 11, 27, primary);
+            Line(texture, 21, 5, 24, 9, primary);
+            Line(texture, 24, 9, 24, 14, primary);
+            Line(texture, 24, 14, 27, 16, secondary);
+            Line(texture, 27, 16, 24, 18, secondary);
+            Line(texture, 24, 18, 24, 23, primary);
+            Line(texture, 24, 23, 21, 27, primary);
+            Line(texture, 12, 16, 20, 16, Mix(primary, Color.white, 0.35f));
+        }
+
+        private static void DrawShapeCross(Texture2D texture, Color primary, Color secondary)
+        {
+            Line(texture, 8, 8, 24, 24, primary);
+            Line(texture, 9, 8, 25, 24, secondary);
+            Line(texture, 24, 8, 8, 24, primary);
+            Line(texture, 25, 8, 9, 24, secondary);
+        }
+
+        private static void DrawCliffFace(Texture2D texture, Color primary, Color secondary)
+        {
+            Fill(texture, 2, 2, 28, 28, Shade(primary, 0.72f));
+            Line(texture, 7, 2, 12, 28, secondary);
+            Line(texture, 18, 3, 13, 29, Shade(secondary, 0.78f));
+            Diamond(texture, 22, 19, 4, 3, Mix(primary, Color.white, 0.16f));
+            Diamond(texture, 9, 9, 3, 2, Mix(primary, Color.white, 0.12f));
+        }
+
+        private static void DrawPortal(Texture2D texture, Color primary, Color secondary)
+        {
+            Ring(texture, 16, 16, 13, 8, Mix(primary, Color.white, 0.22f));
+            Ring(texture, 16, 16, 8, 5, secondary);
+            Fill(texture, 14, 6, 4, 20, Color.white);
+            Fill(texture, 7, 14, 18, 4, Mix(secondary, Color.white, 0.3f));
+        }
+
+        private static void DrawRubble(Texture2D texture, Color primary, Color secondary)
+        {
+            Diamond(texture, 8, 10, 4, 3, primary);
+            Diamond(texture, 18, 13, 6, 4, secondary);
+            Diamond(texture, 24, 8, 3, 2, Shade(primary, 0.72f));
+            Diamond(texture, 12, 22, 5, 3, Mix(primary, secondary, 0.5f));
         }
 
         private static void Clear(Texture2D texture)
@@ -625,6 +850,22 @@ namespace MagicExamHall
         WaterRune,
         WindRune,
         EarthRune,
-        LifeRune
+        LifeRune,
+        WaterHazard,
+        IceBridge,
+        VineBridge,
+        EarthStep,
+        WindPlatformTile,
+        CliffFace,
+        Portal,
+        Rubble,
+        GuideArrow,
+        ShapeLine,
+        ShapeArrow,
+        ShapeRect,
+        ShapeEllipse,
+        ShapeHexagon,
+        ShapeBrace,
+        ShapeCross
     }
 }

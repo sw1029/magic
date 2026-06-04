@@ -29,7 +29,8 @@ namespace MagicExamHall
         public static CustomShapeRecognitionResult Recognize(
             IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
             BaseRecognitionResult baseResult,
-            CustomShapeProfileStore store)
+            CustomShapeProfileStore store,
+            SpellFamily? preferredMappedFamily = null)
         {
             if (store == null || baseResult?.spell == null)
             {
@@ -48,9 +49,10 @@ namespace MagicExamHall
             var defaultSimilarity = Mathf.Clamp01(baseResult.spell.confidence);
             var best = store.Slots
                 .Where(slot => slot.IsOccupied)
-                .Select(slot => ScoreSlot(slot, drawable, normalized.cloud, features, defaultFamily, defaultSimilarity))
+                .Select(slot => ScoreSlot(slot, drawable, normalized.cloud, features, defaultFamily, defaultSimilarity, preferredMappedFamily))
                 .Where(result => result.customScore >= result.holdThreshold)
                 .OrderByDescending(result => result.accepted ? 2 : result.held ? 1 : 0)
+                .ThenByDescending(result => preferredMappedFamily.HasValue && result.slot.mappedFamily == preferredMappedFamily.Value ? 1 : 0)
                 .ThenByDescending(result => result.customScore)
                 .FirstOrDefault();
 
@@ -60,9 +62,10 @@ namespace MagicExamHall
         public static bool ApplyToBaseResult(
             BaseRecognitionResult baseResult,
             IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
-            CustomShapeProfileStore store)
+            CustomShapeProfileStore store,
+            SpellFamily? preferredMappedFamily = null)
         {
-            var result = Recognize(strokes, baseResult, store);
+            var result = Recognize(strokes, baseResult, store, preferredMappedFamily);
             if (result == null || baseResult?.spell == null)
             {
                 return false;
@@ -139,7 +142,8 @@ namespace MagicExamHall
             IReadOnlyList<Vector2> cloud,
             ShapeFeatures features,
             SpellFamily defaultFamily,
-            float defaultSimilarity)
+            float defaultSimilarity,
+            SpellFamily? preferredMappedFamily)
         {
             var goldScores = slot.goldCaptures
                 .Select(capture => ScoreCapture(capture, cloud, features))
@@ -158,7 +162,9 @@ namespace MagicExamHall
             var customScore = Mathf.Clamp01(goldScore * 0.58f + featureScore * 0.22f + autoScore * 0.15f + maturity * 0.05f);
             var acceptThreshold = Mathf.Clamp(0.73f - Mathf.Min(slot.autoCaptures.Count, 8) * 0.01f, 0.64f, 0.78f);
             var holdThreshold = Mathf.Clamp(acceptThreshold - 0.13f, 0.48f, 0.68f);
-            var conflict = defaultSimilarity >= 0.78f &&
+            var preferredSlot = preferredMappedFamily.HasValue && slot.mappedFamily == preferredMappedFamily.Value;
+            var conflict = !preferredSlot &&
+                           defaultSimilarity >= 0.78f &&
                            defaultFamily != slot.mappedFamily &&
                            customScore < defaultSimilarity + 0.08f;
             var accepted = customScore >= acceptThreshold && !conflict;

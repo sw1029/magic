@@ -114,7 +114,7 @@ MonoBehaviour:
   obstacles:
   - requiredGoalId: frozen_river
     requiredEffect: 1
-    title: 媛뺣Ъ
+    title: 강물
     center: {x: -2.55, y: -3.15}
     size: {x: 2.85, y: 1.05}
     resetPosition: {x: -5.0, y: -2.58}
@@ -125,10 +125,10 @@ MonoBehaviour:
     solutionSize: {x: 2.85, y: 0.34}
     lockedColor: {r: 0.05, g: 0.23, b: 0.38, a: 1}
     lockedSpriteKind: 15
-    lockedNote: 媛뺣Ъ? ?쇰┛ ??吏?섍컝 ???덉뒿?덈떎. 臾?臾몄뼇 ?꾩뿉 ?↔컖???꾪삎???뱀쑝?몄슂.
+    lockedNote: 강물이 길을 막고 있습니다. 물 문양 뒤에 얼음길 도형을 그려 지나갈 수 있게 하세요.
   - requiredGoalId: earth_stairs
     requiredEffect: 7
-    title: 源⑥쭊 援щ찉
+    title: 꺼진 구멍
     center: {x: 3.25, y: -3.15}
     size: {x: 2.35, y: 1.05}
     resetPosition: {x: 0.8, y: -2.58}
@@ -139,10 +139,10 @@ MonoBehaviour:
     solutionSize: {x: 2.35, y: 0.34}
     lockedColor: {r: 0.06, g: 0.038, b: 0.025, a: 1}
     lockedSpriteKind: 22
-    lockedNote: 諛붾떏??源⑥졇 援щ찉???ル젮 ?덉뒿?덈떎. ??臾몄뼇 ?꾩뿉 ?ш컖 硫붿??먯쓣 ?뱀뼱 鍮?怨듦컙??硫붿슦?몄슂.
+    lockedNote: 바닥이 꺼져 빈 구멍이 남았습니다. 땅 문양 뒤에 메움 도형을 그려 빈 공간을 메우세요.
   - requiredGoalId: living_bridge
     requiredEffect: 8
-    title: ??뼚?ъ?
+    title: 낭떠러지
     center: {x: 8.9, y: -3.15}
     size: {x: 3.25, y: 1.2}
     resetPosition: {x: 6.2, y: -2.58}
@@ -153,10 +153,10 @@ MonoBehaviour:
     solutionSize: {x: 3.25, y: 0.34}
     lockedColor: {r: 0.025, g: 0.03, b: 0.045, a: 1}
     lockedSpriteKind: 22
-    lockedNote: ?욎쓽 ??뼚?ъ???諛쒗뙋 ?놁씠??嫄대꼸 ???놁뒿?덈떎. ?앸챸 臾몄뼇 ?꾩뿉 ?붿궡?쒖? ?ш컖 諛쒗뙋 ?꾪삎???뱀쑝?몄슂.
+    lockedNote: 앞의 낭떠러지는 발판 없이는 건널 수 없습니다. 생명 문양 뒤에 덩굴 다리 도형을 그리세요.
   - requiredGoalId: wind_platform
     requiredEffect: 9
-    title: 鍮?怨듦컙
+    title: 먼 발판
     center: {x: 15.35, y: -3.15}
     size: {x: 2.65, y: 1.15}
     resetPosition: {x: 13.1, y: -2.58}
@@ -167,7 +167,7 @@ MonoBehaviour:
     solutionSize: {x: 2.65, y: 0.34}
     lockedColor: {r: 0.06, g: 0.12, b: 0.16, a: 1}
     lockedSpriteKind: 19
-    lockedNote: 留덉?留?鍮?怨듦컙? ???덈뒗 諛쒗뙋?쇰줈 嫄대꽇?덈떎. 諛붾엺 臾몄뼇 ?꾩뿉 ?ш컖???꾪삎???뱀쑝?몄슂.
+    lockedNote: 마지막 빈 공간은 떠오르는 발판으로 건너야 합니다. 바람 문양 뒤에 발판 도형을 그리세요.
   environmentEffects:
   - {fileID: 11400000, guid: 13a7550f56a84fe4b9a85932a2fce8e1, type: 2}
   - {fileID: 11400000, guid: 24b807c390f34e27822229e86d016c3c, type: 2}

@@ -71,9 +71,12 @@ namespace MagicExamHall
             var seals = context.activeSeals ?? Array.Empty<CompiledSeal>();
             var hasActiveSeal = seals.Any(seal => context.now <= seal.expiresAt);
             var targetSeal = SpellCastingService.FindAttachableSeal(seals, center, context.now);
+            var intentPreferredFamily = context.baseIntent?.IsActive == true
+                ? context.baseIntent.family
+                : (SpellFamily?)null;
             if (context.customShapesOnlyWhenSealActive && hasActiveSeal)
             {
-                var customOnlyBase = RecognizeBaseCandidate(strokes, context.baseIntent, targetSeal?.baseFamily);
+                var customOnlyBase = RecognizeBaseCandidate(strokes, context.baseIntent, targetSeal?.baseFamily ?? intentPreferredFamily);
                 if (!customOnlyBase.spell.isCustomShape)
                 {
                     RejectNonCustomPostSealInput(customOnlyBase);
@@ -122,7 +125,7 @@ namespace MagicExamHall
                 };
             }
 
-            var recognizedBase = RecognizeBaseCandidate(strokes, context.baseIntent);
+            var recognizedBase = RecognizeBaseCandidate(strokes, context.baseIntent, intentPreferredFamily);
             if (recognizedBase.spell.status == RecognitionStatus.Recognized && recognizedBase.spell.recognizedFamily.HasValue)
             {
                 return new StrokeRecognitionResult

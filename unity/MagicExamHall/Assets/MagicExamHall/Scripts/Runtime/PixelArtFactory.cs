@@ -620,8 +620,11 @@ namespace MagicExamHall
 
         private static void DrawShapeLine(Texture2D texture, Color primary, Color secondary)
         {
-            Line(texture, 6, 22, 26, 10, Shade(primary, 0.72f));
-            Line(texture, 6, 23, 26, 11, primary);
+            Line(texture, 5, 22, 27, 9, Shade(primary, 0.42f));
+            Line(texture, 5, 23, 27, 10, Shade(primary, 0.62f));
+            Line(texture, 6, 21, 26, 9, secondary);
+            Line(texture, 6, 22, 26, 10, Color.white);
+            Line(texture, 7, 23, 27, 11, primary);
             Line(texture, 8, 24, 28, 12, secondary);
         }
 

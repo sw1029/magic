@@ -172,6 +172,43 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void GeneratedBraceReferencePromotesLifeCustomCandidate()
+        {
+            var store = TempStore(out var path);
+            try
+            {
+                var gold = BraceReferenceStrokes(Vector2.zero);
+                Assert.That(
+                    store.TrySaveSlot(0, "life brace", "life|brace", "brace", new[] { "brace" }, SpellFamily.Life, gold, out var message),
+                    Is.True,
+                    message);
+
+                var strokes = BraceReferenceStrokes(new Vector2(5.4f, 2.55f));
+                var baseResult = SpellRuntime.RecognizeBase(strokes, new BaseRecognitionIntent
+                {
+                    family = SpellFamily.Life,
+                    goalId = "custom_life",
+                    source = "test",
+                    radius = 1f,
+                    strength = 1f
+                });
+
+                var applied = CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, store, SpellFamily.Life);
+
+                Assert.That(applied, Is.True);
+                Assert.That(baseResult.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+                Assert.That(baseResult.spell.isCustomShape, Is.True, baseResult.spell.feedbackReason);
+                Assert.That(baseResult.spell.customShapeToken, Is.EqualTo("brace"));
+                Assert.That(baseResult.spell.recognizedFamily, Is.EqualTo(SpellFamily.Life));
+                Assert.That(baseResult.spell.customScore, Is.GreaterThan(0.68f));
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        }
+
+        [Test]
         public void AcceptedCustomCandidateCarriesShapeEventMetadata()
         {
             var store = TempStore(out var path);
@@ -343,6 +380,32 @@ namespace MagicExamHall.Tests
                     new(start, 0f),
                     new(end, 0.1f)
                 }
+            };
+        }
+
+        private static IReadOnlyList<IReadOnlyList<StrokeSample>> BraceReferenceStrokes(Vector2 center)
+        {
+            var elapsed = 0f;
+            var points = new[]
+            {
+                new Vector2(0.66f, 0.88f),
+                new Vector2(0.42f, 0.76f),
+                new Vector2(0.48f, 0.58f),
+                new Vector2(0.30f, 0.50f),
+                new Vector2(0.48f, 0.42f),
+                new Vector2(0.42f, 0.24f),
+                new Vector2(0.66f, 0.12f)
+            };
+
+            return new List<IReadOnlyList<StrokeSample>>
+            {
+                points
+                    .Select(point =>
+                    {
+                        elapsed += 0.03f;
+                        return new StrokeSample((point - new Vector2(0.5f, 0.5f)) * 1.6f + center, elapsed);
+                    })
+                    .ToList()
             };
         }
 

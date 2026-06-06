@@ -13,6 +13,7 @@ namespace MagicExamHall
         public const float GameplayCameraOrthographicSize = 5.55f;
         public const int FinalFloorPassingGoalCount = 5;
         public const float StandardFloorAdvanceDelaySeconds = 1.4f;
+        public const float StageFloorAdvanceDelaySeconds = 2.6f;
         public const float FinalFloorPassReportDelaySeconds = 4.8f;
         public const float FinalFloorCompleteReportDelaySeconds = 1.9f;
         public const float DefaultSealFallbackDelaySeconds = 1.35f;
@@ -21,12 +22,25 @@ namespace MagicExamHall
         private const int ResultPanelCompactScreenWidth = 1100;
         private const float GoalIntentRadiusMultiplier = 1.35f;
         private const float GoalIntentRadiusPadding = 0.35f;
+        private const float EarlyTutorialSymbolActivationRadius = 1.85f;
+        private const float GoalProximityBubbleSeconds = 3.2f;
         private const float StageGatePlayerCenterVerticalPadding = 1.05f;
         private const int CustomReferenceFloorNumber = 2;
         private const float CustomReferenceShelfRadius = 1.85f;
         private const int MaxPlayerHealthHalfUnits = 6;
         private const float PlayerDamageInvulnerabilitySeconds = 1.05f;
         private const float PlayerDamageBlinkSeconds = 0.9f;
+        private const float QuestScrollWidth = 430f;
+        private const float QuestScrollExpandedHeight = 392f;
+        private const float QuestScrollCollapsedHeight = 88f;
+        private const float QuestScrollAnimationSeconds = 0.32f;
+        private const float QuestScrollBodyTopOffset = 76f;
+        private const float QuestScrollContentInset = 26f;
+        private const float QuestScrollContentWidth = QuestScrollWidth - QuestScrollContentInset * 2f;
+        private const float KeyboardMovementPulseSeconds = 0.18f;
+        private const float PlatformMoveSpeed = 5.4f;
+        private const float PlatformMoveAcceleration = 42f;
+        private const float PlatformJumpVelocity = 7.6f;
         private const string FirstFloorLetterBody =
             "수험생에게, 첫 번째 시험의 목표를 남깁니다.\n" +
             "1. 눈앞의 다섯 표식을 차례로 살피세요.\n" +
@@ -75,6 +89,7 @@ namespace MagicExamHall
         private readonly List<ElementalEntity> elementalEntities = new();
         private readonly List<HeartHealthGraphic> healthHearts = new();
         private readonly List<SpriteRenderer> playerBlinkRenderers = new();
+        private readonly List<SpriteAccentAnimation> spriteAccentAnimations = new();
         private readonly List<FloatingGuideArrow> shelfGuideArrows = new();
         private readonly List<StageGate> activeStageGates = new();
         private readonly List<GameObject> stageEntityObjects = new();
@@ -109,9 +124,15 @@ namespace MagicExamHall
         private RectTransform firstFloorLetterOverlay = null!;
         private RectTransform customReferenceBubble = null!;
         private RectTransform customReferencePanel = null!;
+        private RectTransform goalProximityBubble = null!;
         private RectTransform questScrollPanel = null!;
+        private RectTransform questScrollBodyRoot = null!;
+        private RectTransform questScrollBottomRoll = null!;
+        private CanvasGroup questScrollBodyGroup = null!;
         private Text customReferenceStatus = null!;
+        private Text goalProximityBubbleText = null!;
         private Button floorSkipButton = null!;
+        private Button questScrollToggleButton = null!;
         private Text hudTitle = null!;
         private Text hudCopy = null!;
         private Text floorProgress = null!;
@@ -121,12 +142,14 @@ namespace MagicExamHall
         private Text firstFloorLetterText = null!;
         private Text questTitleText = null!;
         private Text questScoreText = null!;
+        private Text questScrollToggleText = null!;
         private Text questStatusText = null!;
         private Text questProgressText = null!;
         private Button firstFloorLetterCloseButton = null!;
         private Text versionText = null!;
         private Font uiFont = null!;
         private QuestChecklistState currentQuestChecklist = null!;
+        private WorldStateGoal goalProximityBubbleGoal = null!;
         private string sessionId = "";
         private int trialCounter;
         private int playerHealthHalfUnits = MaxPlayerHealthHalfUnits;
@@ -142,7 +165,23 @@ namespace MagicExamHall
         private bool platformMotionActive;
         private bool firstFloorLetterShownThisSession;
         private bool questReferencePanelOpenedThisFloor;
+        private bool questScrollCollapsed;
+        private bool fallbackLeftHeld;
+        private bool fallbackRightHeld;
+        private bool fallbackDownHeld;
+        private bool fallbackUpHeld;
+        private float questScrollOpenAmount = 1f;
+        private float questScrollTargetOpenAmount = 1f;
+        private float fallbackLeftPulseUntil = -1f;
+        private float fallbackRightPulseUntil = -1f;
+        private float fallbackDownPulseUntil = -1f;
+        private float fallbackUpPulseUntil = -1f;
+        private float fallbackJumpPulseUntil = -1f;
+        private float platformHorizontalVelocity;
+        private float goalProximityBubbleUntil = -1f;
+        private float lastGoalProximityGuideDistance;
         private string customReferenceLastStatus = "";
+        private string lastGoalProximityGuideGoalId = "";
 
         public int CurrentFloorNumber => floorController?.CurrentFloorNumber ?? 1;
         public int FloorCount => floorController?.FloorCount ?? 5;
@@ -185,6 +224,7 @@ namespace MagicExamHall
         public int ActivePlayerBuffSlotCountForTests => buffQueues.Where(queue => queue.OwnerKind == BuffOwnerKind.Player).Sum(queue => queue.ActiveBuffCount);
         public int ActiveTargetBuffSlotCountForTests => buffQueues.Where(queue => queue.OwnerKind == BuffOwnerKind.Target).Sum(queue => queue.ActiveBuffCount);
         public int ActiveElementalEntityCountForTests => elementalEntities.Count(entity => entity != null);
+        public int ActiveSpriteAccentAnimationCountForTests => spriteAccentAnimations.Count(animation => animation.IsActive);
         public int LastElementalReactionCountForTests { get; private set; }
         public string LastElementalReactionSummaryForTests { get; private set; } = "";
         public string LastBuffLabelForTests { get; private set; } = "";
@@ -209,12 +249,22 @@ namespace MagicExamHall
         public bool IsCustomShapeEditorOpenForTests => customShapeBook?.IsEditorOpen ?? false;
         public bool IsCustomReferenceBubbleVisibleForTests => customReferenceBubble != null && customReferenceBubble.gameObject.activeInHierarchy;
         public bool IsCustomReferencePanelOpenForTests => customReferencePanel != null && customReferencePanel.gameObject.activeInHierarchy;
+        public bool IsGoalProximityBubbleVisibleForTests => goalProximityBubble != null && goalProximityBubble.gameObject.activeInHierarchy;
+        public string GoalProximityBubbleTextForTests => goalProximityBubbleText == null ? "" : goalProximityBubbleText.text;
+        public string LastGoalProximityGuideGoalIdForTests => lastGoalProximityGuideGoalId;
+        public float LastGoalProximityGuideDistanceForTests => lastGoalProximityGuideDistance;
         public int CustomReferenceCountForTests => CurrentCustomShapeReferences().Count;
         public string CustomReferenceStatusForTests => customReferenceLastStatus;
         public bool IsPlatformMotionActiveForTests => platformMotionActive;
         public Vector2 CurrentStageSafePositionForTests => safePosition;
         public Vector2 CustomReferenceShelfPositionForTests => CurrentCustomReferencePosition();
         public bool IsQuestScrollVisibleForTests => questScrollPanel != null && questScrollPanel.gameObject.activeInHierarchy;
+        public bool IsQuestScrollCollapsedForTests => questScrollCollapsed;
+        public bool IsQuestScrollBodyActiveForTests => questScrollBodyRoot != null && questScrollBodyRoot.gameObject.activeSelf;
+        public float QuestScrollOpenAmountForTests => questScrollOpenAmount;
+        public float QuestScrollPanelHeightForTests => questScrollPanel == null ? 0f : questScrollPanel.sizeDelta.y;
+        public float QuestScrollBodyAlphaForTests => questScrollBodyGroup == null ? 0f : questScrollBodyGroup.alpha;
+        public string QuestScrollToggleLabelForTests => questScrollToggleText == null ? "" : questScrollToggleText.text;
         public int QuestChecklistCompletedForTests => currentQuestChecklist?.CompletedCount ?? 0;
         public int QuestChecklistTotalForTests => currentQuestChecklist?.TotalCount ?? 0;
         public int QuestChecklistGlobalCompletedForTests => QuestChecklistGlobalCompleted(includeCurrent: true);
@@ -264,9 +314,12 @@ namespace MagicExamHall
         {
             customShapeBook?.Tick();
             TickCustomReferenceShelf();
+            TickGoalProximityBubble();
             if (IsFirstFloorLetterVisibleForTests || customShapeBook?.BlocksGameplayInput == true || IsCustomReferencePanelOpenForTests)
             {
+                ClearMovementInputFallback();
                 velocity = Vector2.zero;
+                platformHorizontalVelocity = 0f;
                 if (platformMotionActive && playerBody != null)
                 {
                     playerBody.linearVelocity = new Vector2(0f, playerBody.linearVelocity.y);
@@ -282,6 +335,7 @@ namespace MagicExamHall
             TickSeals();
             TickPulses();
             TickShelfGuideArrows();
+            TickSpriteAccentAnimations();
             TickDefaultBarriers();
             TickDamagePopups();
             TickBuffQueues();
@@ -290,8 +344,21 @@ namespace MagicExamHall
             TickPlayerBlink();
             TickFloorAdvance();
             TickQuestChecklist();
+            TickQuestScrollAnimation();
             magicNote.Tick(Time.deltaTime);
             UpdateHud();
+        }
+
+        private void OnGUI()
+        {
+            var current = Event.current;
+            if (current == null ||
+                (current.type != EventType.KeyDown && current.type != EventType.KeyUp))
+            {
+                return;
+            }
+
+            CaptureKeyboardFallback(current.keyCode, current.type == EventType.KeyDown);
         }
 
         private void TickGameplayCancelInput()
@@ -403,6 +470,26 @@ namespace MagicExamHall
                 playerBody.position = worldPosition;
                 playerBody.linearVelocity = Vector2.zero;
             }
+
+            platformHorizontalVelocity = 0f;
+        }
+
+        public void SetMovementInputFallbackForTests(
+            bool leftHeld,
+            bool rightHeld,
+            bool downHeld,
+            bool upHeld,
+            bool jumpPressed = false)
+        {
+            fallbackLeftHeld = leftHeld;
+            fallbackRightHeld = rightHeld;
+            fallbackDownHeld = downHeld;
+            fallbackUpHeld = upHeld;
+            fallbackLeftPulseUntil = leftHeld ? Time.unscaledTime + KeyboardMovementPulseSeconds : -1f;
+            fallbackRightPulseUntil = rightHeld ? Time.unscaledTime + KeyboardMovementPulseSeconds : -1f;
+            fallbackDownPulseUntil = downHeld ? Time.unscaledTime + KeyboardMovementPulseSeconds : -1f;
+            fallbackUpPulseUntil = upHeld ? Time.unscaledTime + KeyboardMovementPulseSeconds : -1f;
+            fallbackJumpPulseUntil = jumpPressed ? Time.unscaledTime + KeyboardMovementPulseSeconds : -1f;
         }
 
         private Vector2 CurrentMagicCastOrigin(Vector2 fallback)
@@ -413,6 +500,16 @@ namespace MagicExamHall
         public Vector2 StageGoalPositionForTests(string goalId)
         {
             return activeGoals.FirstOrDefault(goal => string.Equals(goal.id, goalId, StringComparison.OrdinalIgnoreCase))?.position ?? Vector2.zero;
+        }
+
+        public Vector3 SpriteAccentScaleForTests(string objectName)
+        {
+            return spriteAccentAnimations.FirstOrDefault(animation => animation.Name == objectName)?.CurrentScale ?? Vector3.zero;
+        }
+
+        public Vector2 SpriteAccentPositionForTests(string objectName)
+        {
+            return spriteAccentAnimations.FirstOrDefault(animation => animation.Name == objectName)?.CurrentPosition ?? Vector2.zero;
         }
 
         public Vector2 StageObstacleCenterForTests(string goalId)
@@ -639,11 +736,16 @@ namespace MagicExamHall
                 var canvasObject = new GameObject("Exam Canvas");
                 canvasObject.AddComponent<RectTransform>();
                 canvas = canvasObject.AddComponent<Canvas>();
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                var scaler = canvasObject.AddComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1280, 720);
-                canvasObject.AddComponent<GraphicRaycaster>();
+            }
+
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvas.GetComponent<CanvasScaler>() ?? canvas.gameObject.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1280, 720);
+            scaler.matchWidthOrHeight = 0.5f;
+            if (canvas.GetComponent<GraphicRaycaster>() == null)
+            {
+                canvas.gameObject.AddComponent<GraphicRaycaster>();
             }
 
             if (FindFirstObjectByType<EventSystem>() == null)
@@ -712,6 +814,7 @@ namespace MagicExamHall
                 SkipCurrentFloorForDebug);
 
             BuildCustomReferenceUi();
+            BuildGoalProximityBubbleUi();
             BuildFirstFloorLetterUi();
         }
 
@@ -739,34 +842,152 @@ namespace MagicExamHall
 
         private void BuildQuestScrollUi()
         {
-            questScrollPanel = CreatePanel("Quest Scroll Panel", canvas.transform, new Vector2(-18f, -18f), new Vector2(360f, 332f), Anchor.TopRight, new Color(0.80f, 0.64f, 0.42f, 0.97f));
-            AddPanelBorder(questScrollPanel, new Color(0.42f, 0.24f, 0.10f, 0.96f), 2.5f);
-            CreateImage("Quest Scroll Top Roll", questScrollPanel, new Vector2(22f, -12f), new Vector2(316f, 26f), Anchor.TopLeft, new Color(0.94f, 0.76f, 0.46f, 0.98f)).raycastTarget = false;
-            CreateImage("Quest Scroll Bottom Roll", questScrollPanel, new Vector2(22f, 12f), new Vector2(316f, 26f), Anchor.BottomLeft, new Color(0.55f, 0.34f, 0.16f, 0.96f)).raycastTarget = false;
-            CreateImage("Quest Scroll Left Cap", questScrollPanel, new Vector2(10f, -12f), new Vector2(24f, 26f), Anchor.TopLeft, new Color(0.64f, 0.39f, 0.18f, 0.98f)).raycastTarget = false;
-            CreateImage("Quest Scroll Right Cap", questScrollPanel, new Vector2(-10f, -12f), new Vector2(24f, 26f), Anchor.TopRight, new Color(0.64f, 0.39f, 0.18f, 0.98f)).raycastTarget = false;
+            questScrollPanel = CreatePanel("Quest Scroll Panel", canvas.transform, new Vector2(-18f, -18f), new Vector2(QuestScrollWidth, QuestScrollExpandedHeight), Anchor.TopRight, new Color(0.88f, 0.69f, 0.42f, 0.995f));
+            questScrollPanel.gameObject.AddComponent<RectMask2D>();
+            AddPanelBorder(questScrollPanel, new Color(0.38f, 0.20f, 0.07f, 0.98f), 3.2f);
+            CreateImage("Quest Scroll Readability Paper", questScrollPanel, new Vector2(16f, -52f), new Vector2(QuestScrollWidth - 32f, QuestScrollExpandedHeight - 82f), Anchor.TopLeft, new Color(0.92f, 0.74f, 0.46f, 0.88f)).raycastTarget = false;
+            CreateImage("Quest Scroll Top Roll", questScrollPanel, new Vector2(24f, -12f), new Vector2(382f, 30f), Anchor.TopLeft, new Color(0.96f, 0.78f, 0.46f, 0.995f)).raycastTarget = false;
+            var bottomRoll = CreateImage("Quest Scroll Bottom Roll", questScrollPanel, new Vector2(24f, 14f), new Vector2(382f, 30f), Anchor.BottomLeft, new Color(0.52f, 0.30f, 0.12f, 0.98f));
+            bottomRoll.raycastTarget = false;
+            questScrollBottomRoll = bottomRoll.rectTransform;
+            CreateImage("Quest Scroll Left Cap", questScrollPanel, new Vector2(10f, -12f), new Vector2(28f, 30f), Anchor.TopLeft, new Color(0.60f, 0.34f, 0.13f, 0.99f)).raycastTarget = false;
+            CreateImage("Quest Scroll Right Cap", questScrollPanel, new Vector2(-10f, -12f), new Vector2(28f, 30f), Anchor.TopRight, new Color(0.60f, 0.34f, 0.13f, 0.99f)).raycastTarget = false;
 
-            questTitleText = CreateText("Quest Scroll Title", questScrollPanel, "퀘스트", 17, FontStyle.Bold, new Vector2(22f, -39f), new Vector2(210f, 28f), Anchor.TopLeft);
-            questTitleText.color = new Color(0.20f, 0.10f, 0.04f, 1f);
+            questTitleText = CreateText("Quest Scroll Title", questScrollPanel, "퀘스트", 21, FontStyle.Bold, new Vector2(26f, -42f), new Vector2(258f, 34f), Anchor.TopLeft);
+            ApplyQuestScrollReadableText(questTitleText, new Color(0.15f, 0.070f, 0.025f, 1f), emphasized: true);
             questTitleText.alignment = TextAnchor.MiddleLeft;
             questTitleText.raycastTarget = false;
 
-            questScoreText = CreateText("Quest Scroll Score", questScrollPanel, "", 12, FontStyle.Bold, new Vector2(-22f, -42f), new Vector2(100f, 24f), Anchor.TopRight);
-            questScoreText.color = new Color(0.27f, 0.13f, 0.05f, 0.9f);
+            questScoreText = CreateText("Quest Scroll Score", questScrollPanel, "", 14, FontStyle.Bold, new Vector2(-100f, -45f), new Vector2(74f, 28f), Anchor.TopRight);
+            ApplyQuestScrollReadableText(questScoreText, new Color(0.17f, 0.075f, 0.025f, 1f), emphasized: false);
             questScoreText.alignment = TextAnchor.MiddleRight;
             questScoreText.raycastTarget = false;
 
-            CreateImage("Quest Log Divider", questScrollPanel, new Vector2(22f, -232f), new Vector2(316f, 2f), Anchor.TopLeft, new Color(0.38f, 0.20f, 0.08f, 0.46f)).raycastTarget = false;
-            questStatusText = CreateText("Quest Status Text", questScrollPanel, "", 11, FontStyle.Bold, new Vector2(22f, -240f), new Vector2(316f, 42f), Anchor.TopLeft);
-            questStatusText.color = new Color(0.18f, 0.09f, 0.035f, 0.95f);
+            questScrollToggleButton = CreateButton(
+                "Quest Scroll Toggle Button",
+                questScrollPanel,
+                "접기",
+                14,
+                FontStyle.Bold,
+                new Vector2(-24f, -45f),
+                new Vector2(62f, 28f),
+                Anchor.TopRight,
+                new Color(0.52f, 0.26f, 0.095f, 0.96f),
+                ToggleQuestScrollCollapsed);
+            questScrollToggleButton.GetComponent<Image>().raycastTarget = true;
+            questScrollToggleText = questScrollToggleButton.GetComponentInChildren<Text>();
+            if (questScrollToggleText != null)
+            {
+                questScrollToggleText.color = new Color(0.98f, 0.86f, 0.60f, 1f);
+            }
+
+            questScrollBodyRoot = CreatePanel("Quest Scroll Body", questScrollPanel, new Vector2(0f, -QuestScrollBodyTopOffset), new Vector2(QuestScrollWidth, QuestScrollExpandedHeight - QuestScrollBodyTopOffset), Anchor.TopLeft, new Color(0.80f, 0.64f, 0.42f, 0f));
+            questScrollBodyRoot.GetComponent<Image>().raycastTarget = false;
+            questScrollBodyRoot.pivot = new Vector2(0f, 1f);
+            questScrollBodyGroup = questScrollBodyRoot.gameObject.AddComponent<CanvasGroup>();
+
+            CreateImage("Quest Log Divider", questScrollBodyRoot, new Vector2(QuestScrollContentInset, -208f), new Vector2(QuestScrollContentWidth, 2.5f), Anchor.TopLeft, new Color(0.33f, 0.16f, 0.055f, 0.62f)).raycastTarget = false;
+            questStatusText = CreateText("Quest Status Text", questScrollBodyRoot, "", 13, FontStyle.Bold, new Vector2(QuestScrollContentInset, -218f), new Vector2(QuestScrollContentWidth, 58f), Anchor.TopLeft);
+            ApplyQuestScrollReadableText(questStatusText, new Color(0.13f, 0.055f, 0.020f, 1f), emphasized: false);
             questStatusText.alignment = TextAnchor.UpperLeft;
             questStatusText.verticalOverflow = VerticalWrapMode.Truncate;
             questStatusText.raycastTarget = false;
 
-            questProgressText = CreateText("Quest Progress Text", questScrollPanel, "", 11, FontStyle.Bold, new Vector2(22f, -286f), new Vector2(316f, 24f), Anchor.TopLeft);
-            questProgressText.color = new Color(0.27f, 0.13f, 0.05f, 0.92f);
+            questProgressText = CreateText("Quest Progress Text", questScrollBodyRoot, "", 13, FontStyle.Bold, new Vector2(QuestScrollContentInset, -282f), new Vector2(QuestScrollContentWidth, 28f), Anchor.TopLeft);
+            ApplyQuestScrollReadableText(questProgressText, new Color(0.16f, 0.070f, 0.025f, 1f), emphasized: false);
             questProgressText.alignment = TextAnchor.MiddleLeft;
             questProgressText.raycastTarget = false;
+
+            ApplyQuestScrollAnimationState();
+        }
+
+        private static void ApplyQuestScrollReadableText(Text text, Color color, bool emphasized)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.color = color;
+            text.lineSpacing = 1.06f;
+
+            var shadow = text.gameObject.GetComponent<Shadow>() ?? text.gameObject.AddComponent<Shadow>();
+            shadow.effectColor = emphasized
+                ? new Color(0.98f, 0.78f, 0.42f, 0.42f)
+                : new Color(0.98f, 0.78f, 0.42f, 0.30f);
+            shadow.effectDistance = emphasized ? new Vector2(1.2f, -1.2f) : new Vector2(0.8f, -0.8f);
+            shadow.useGraphicAlpha = true;
+        }
+
+        private void ToggleQuestScrollCollapsed()
+        {
+            SetQuestScrollCollapsed(!questScrollCollapsed);
+        }
+
+        private void SetQuestScrollCollapsed(bool collapsed, bool immediate = false)
+        {
+            questScrollCollapsed = collapsed;
+            questScrollTargetOpenAmount = collapsed ? 0f : 1f;
+            if (!collapsed && questScrollBodyRoot != null)
+            {
+                questScrollBodyRoot.gameObject.SetActive(true);
+            }
+
+            if (immediate)
+            {
+                questScrollOpenAmount = questScrollTargetOpenAmount;
+            }
+
+            ApplyQuestScrollAnimationState();
+        }
+
+        private void TickQuestScrollAnimation()
+        {
+            if (questScrollPanel == null || Mathf.Approximately(questScrollOpenAmount, questScrollTargetOpenAmount))
+            {
+                return;
+            }
+
+            var step = Time.unscaledDeltaTime / Mathf.Max(0.01f, QuestScrollAnimationSeconds);
+            questScrollOpenAmount = Mathf.MoveTowards(questScrollOpenAmount, questScrollTargetOpenAmount, step);
+            ApplyQuestScrollAnimationState();
+        }
+
+        private void ApplyQuestScrollAnimationState()
+        {
+            if (questScrollPanel == null)
+            {
+                return;
+            }
+
+            var eased = questScrollOpenAmount * questScrollOpenAmount * (3f - 2f * questScrollOpenAmount);
+            questScrollPanel.sizeDelta = new Vector2(
+                QuestScrollWidth,
+                Mathf.Lerp(QuestScrollCollapsedHeight, QuestScrollExpandedHeight, eased));
+
+            if (questScrollBodyRoot != null)
+            {
+                var shouldShowBody = eased > 0.01f || questScrollTargetOpenAmount > 0f;
+                questScrollBodyRoot.gameObject.SetActive(shouldShowBody);
+                questScrollBodyRoot.localScale = new Vector3(1f, Mathf.Lerp(0.08f, 1f, eased), 1f);
+            }
+
+            if (questScrollBodyGroup != null)
+            {
+                questScrollBodyGroup.alpha = eased;
+                questScrollBodyGroup.interactable = eased > 0.96f;
+                questScrollBodyGroup.blocksRaycasts = eased > 0.96f;
+            }
+
+            if (questScrollBottomRoll != null)
+            {
+                questScrollBottomRoll.sizeDelta = new Vector2(382f, Mathf.Lerp(38f, 30f, eased));
+            }
+
+            if (questScrollToggleText != null)
+            {
+                questScrollToggleText.text = questScrollCollapsed ? "펴기" : "접기";
+            }
         }
 
         private void BuildFirstFloorLetterUi()
@@ -875,13 +1096,16 @@ namespace MagicExamHall
             customReferencePanel = CreatePanel(
                 "Custom Reference Panel",
                 canvas.transform,
-                Vector2.zero,
-                new Vector2(760f, 610f),
-                Anchor.Center,
+                new Vector2(18f, -118f),
+                new Vector2(560f, 410f),
+                Anchor.TopLeft,
                 new Color(0.025f, 0.035f, 0.055f, 0.98f));
             AddPanelBorder(customReferencePanel, new Color(0.65f, 0.78f, 0.95f, 0.82f), 2f);
             var title = CreateText("Custom Reference Panel Title", customReferencePanel, "커스텀 도형 레퍼런스", 23, FontStyle.Bold, new Vector2(24f, -18f), new Vector2(500f, 34f), Anchor.TopLeft);
             title.color = new Color(0.95f, 0.99f, 1f, 1f);
+            title.fontSize = 21;
+            title.rectTransform.anchoredPosition = new Vector2(22f, -16f);
+            title.rectTransform.sizeDelta = new Vector2(392f, 32f);
             CreateButton(
                 "Custom Reference Panel Close Button",
                 customReferencePanel,
@@ -900,8 +1124,8 @@ namespace MagicExamHall
                 "",
                 14,
                 FontStyle.Bold,
-                new Vector2(24f, 22f),
-                new Vector2(712f, 24f),
+                new Vector2(22f, 20f),
+                new Vector2(516f, 24f),
                 Anchor.BottomLeft);
             customReferenceStatus.color = new Color(0.80f, 0.92f, 1f, 0.92f);
             customReferencePanel.gameObject.SetActive(false);
@@ -909,18 +1133,18 @@ namespace MagicExamHall
 
         private void CreateCustomReferenceCard(CustomShapeReferenceDefinition reference, int index)
         {
-            var y = -64f - index * 60f;
+            var y = -58f - index * 56f;
             var card = CreatePanel(
                 $"Custom Reference Card {reference.family}",
                 customReferencePanel,
-                new Vector2(24f, y),
-                new Vector2(712f, 52f),
+                new Vector2(22f, y),
+                new Vector2(516f, 48f),
                 Anchor.TopLeft,
                 new Color(0.045f, 0.065f, 0.095f, 0.96f));
             customReferenceCards.Add(card.gameObject);
             AddPanelBorder(card, new Color(1f, 1f, 1f, 0.12f), 1f);
             var familyColor = FamilyColor(reference.family);
-            var swatch = CreateImage($"Custom Reference Swatch {reference.family}", card, new Vector2(10f, -9f), new Vector2(40f, 40f), Anchor.TopLeft, new Color(familyColor.r, familyColor.g, familyColor.b, 0.70f));
+            var swatch = CreateImage($"Custom Reference Swatch {reference.family}", card, new Vector2(10f, -8f), new Vector2(36f, 36f), Anchor.TopLeft, new Color(familyColor.r, familyColor.g, familyColor.b, 0.70f));
             swatch.sprite = CustomShapeSpriteFactory.CreateShapeSprite(reference.shapeToken, 2);
             swatch.preserveAspect = true;
             var label = CreateText(
@@ -929,8 +1153,8 @@ namespace MagicExamHall
                 ReferenceShapeTitle(reference),
                 15,
                 FontStyle.Bold,
-                new Vector2(62f, -8f),
-                new Vector2(250f, 22f),
+                new Vector2(58f, -7f),
+                new Vector2(184f, 21f),
                 Anchor.TopLeft);
             label.color = Color.Lerp(familyColor, Color.white, 0.55f);
             var summary = CreateText(
@@ -939,8 +1163,8 @@ namespace MagicExamHall
                 ReferenceShapeSummary(reference),
                 12,
                 FontStyle.Normal,
-                new Vector2(62f, -31f),
-                new Vector2(470f, 18f),
+                new Vector2(58f, -29f),
+                new Vector2(322f, 17f),
                 Anchor.TopLeft);
             summary.color = new Color(0.82f, 0.88f, 0.94f, 0.90f);
             var capturedReference = reference;
@@ -950,8 +1174,8 @@ namespace MagicExamHall
                 "들여오기",
                 13,
                 FontStyle.Bold,
-                new Vector2(592f, -8f),
-                new Vector2(104f, 38f),
+                new Vector2(404f, -7f),
+                new Vector2(92f, 34f),
                 Anchor.TopLeft,
                 new Color(0.10f, 0.24f, 0.38f, 0.98f),
                 () =>
@@ -1072,11 +1296,11 @@ namespace MagicExamHall
             }
 
             questTitleText.text = $"층 {currentQuestChecklist.floorNumber} 퀘스트";
-            var y = -74f;
+            var y = -10f;
             for (var index = 0; index < currentQuestChecklist.entries.Count; index++)
             {
                 questChecklistViews.Add(CreateQuestChecklistRow(currentQuestChecklist.entries[index], index, y));
-                y -= 31f;
+                y -= 38f;
             }
         }
 
@@ -1084,22 +1308,22 @@ namespace MagicExamHall
         {
             var row = CreatePanel(
                 $"Quest Checklist Row {index + 1}",
-                questScrollPanel,
-                new Vector2(22f, y),
-                new Vector2(316f, 28f),
+                questScrollBodyRoot == null ? questScrollPanel : questScrollBodyRoot,
+                new Vector2(QuestScrollContentInset, y),
+                new Vector2(QuestScrollContentWidth, 34f),
                 Anchor.TopLeft,
-                new Color(0.74f, 0.55f, 0.32f, 0.18f));
+                new Color(0.82f, 0.60f, 0.34f, 0.32f));
             row.GetComponent<Image>().raycastTarget = false;
 
             var box = CreateImage(
                 $"Quest Checkbox {index + 1}",
                 row,
-                new Vector2(4f, -4f),
-                new Vector2(20f, 20f),
+                new Vector2(5f, -5f),
+                new Vector2(24f, 24f),
                 Anchor.TopLeft,
-                new Color(0.92f, 0.78f, 0.52f, 0.55f));
+                new Color(0.96f, 0.82f, 0.54f, 0.72f));
             box.raycastTarget = false;
-            AddPanelBorder(box.rectTransform, new Color(0.32f, 0.17f, 0.07f, 0.9f), 1.4f);
+            AddPanelBorder(box.rectTransform, new Color(0.27f, 0.12f, 0.035f, 0.96f), 1.7f);
 
             var checkObject = new GameObject($"Quest Checkmark {index + 1}");
             checkObject.transform.SetParent(box.transform, false);
@@ -1109,6 +1333,7 @@ namespace MagicExamHall
             checkRect.pivot = new Vector2(0.5f, 0.5f);
             checkRect.offsetMin = new Vector2(1.5f, 1.5f);
             checkRect.offsetMax = new Vector2(-1.5f, -1.5f);
+            checkObject.AddComponent<CanvasRenderer>();
             var check = checkObject.AddComponent<QuestCheckMarkGraphic>();
             check.color = new Color(0.82f, 0.04f, 0.035f, 0.98f);
             check.raycastTarget = false;
@@ -1118,12 +1343,12 @@ namespace MagicExamHall
                 $"Quest Checklist Label {index + 1}",
                 row,
                 entry.definition.label,
-                12,
+                15,
                 FontStyle.Bold,
-                new Vector2(33f, -2f),
-                new Vector2(274f, 24f),
+                new Vector2(39f, -2f),
+                new Vector2(QuestScrollContentWidth - 46f, 30f),
                 Anchor.TopLeft);
-            label.color = new Color(0.18f, 0.09f, 0.035f, 0.96f);
+            ApplyQuestScrollReadableText(label, new Color(0.12f, 0.050f, 0.016f, 1f), emphasized: false);
             label.alignment = TextAnchor.MiddleLeft;
             label.verticalOverflow = VerticalWrapMode.Truncate;
             label.raycastTarget = false;
@@ -1289,9 +1514,15 @@ namespace MagicExamHall
             finalTrueEnding = false;
             reportPanel.gameObject.SetActive(false);
             resultPanel.gameObject.SetActive(false);
+            if (resultText != null)
+            {
+                resultText.text = "";
+            }
+
             floorSkipButton.gameObject.SetActive(true);
             questScrollPanel.gameObject.SetActive(true);
             CloseCustomReferenceUi();
+            HideGoalProximityBubble();
             ClearFloorObjects();
             floorController.Load(index);
             questReferencePanelOpenedThisFloor = false;
@@ -1308,6 +1539,10 @@ namespace MagicExamHall
             activeHazards.AddRange(floorController.Current.hazards.Select(hazard => hazard.Clone()));
             BuildFloorArt(floorController.Current);
             BeginQuestChecklistForCurrentFloor();
+            SetQuestScrollCollapsed(floorController.Current.number == 3, immediate: true);
+            TickQuestChecklist(forceRefresh: true);
+            UpdateHud();
+            UpdateResultPanelLayout();
             magicNote.Show(BuildFloorEntryNote(floorController.Current));
             if (floorController.Current.number == 1 && !firstFloorLetterShownThisSession)
             {
@@ -1362,6 +1597,7 @@ namespace MagicExamHall
             playerBody.simulated = enabled;
             playerCollider.enabled = enabled;
             playerBody.linearVelocity = Vector2.zero;
+            platformHorizontalVelocity = 0f;
             velocity = Vector2.zero;
             if (!enabled && mainCamera != null)
             {
@@ -1412,6 +1648,94 @@ namespace MagicExamHall
             customReferenceBubble.anchoredPosition = WorldToCanvasPosition(shelfPosition + new Vector2(0.88f, 1.22f));
         }
 
+        private void BuildGoalProximityBubbleUi()
+        {
+            goalProximityBubble = CreatePanel(
+                "Goal Proximity Bubble",
+                canvas.transform,
+                Vector2.zero,
+                new Vector2(246f, 78f),
+                Anchor.Center,
+                new Color(0.045f, 0.055f, 0.070f, 0.96f));
+            AddPanelBorder(goalProximityBubble, new Color(1f, 0.82f, 0.34f, 0.78f), 2f);
+            var tail = CreateImage("Goal Proximity Bubble Tail", goalProximityBubble, new Vector2(108f, -60f), new Vector2(26f, 26f), Anchor.TopLeft, new Color(0.045f, 0.055f, 0.070f, 0.96f));
+            tail.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            tail.raycastTarget = false;
+
+            goalProximityBubbleText = CreateText(
+                "Goal Proximity Bubble Text",
+                goalProximityBubble,
+                "가까이 이동\n이 표식 옆에서 그리세요",
+                13,
+                FontStyle.Bold,
+                new Vector2(14f, -10f),
+                new Vector2(218f, 56f),
+                Anchor.TopLeft);
+            goalProximityBubbleText.alignment = TextAnchor.MiddleCenter;
+            goalProximityBubbleText.color = new Color(1f, 0.93f, 0.66f, 1f);
+            goalProximityBubbleText.raycastTarget = false;
+            goalProximityBubble.gameObject.SetActive(false);
+        }
+
+        private void TickGoalProximityBubble()
+        {
+            if (goalProximityBubble == null)
+            {
+                return;
+            }
+
+            var shouldShow = goalProximityBubbleGoal != null &&
+                             !goalProximityBubbleGoal.completed &&
+                             Time.time < goalProximityBubbleUntil &&
+                             !HasEndingReport &&
+                             !IsFirstFloorLetterVisibleForTests &&
+                             customShapeBook?.BlocksGameplayInput != true &&
+                             !IsCustomReferencePanelOpenForTests;
+            goalProximityBubble.gameObject.SetActive(shouldShow);
+            if (!shouldShow)
+            {
+                return;
+            }
+
+            var bob = Mathf.Sin(Time.time * 5.2f) * 0.06f;
+            goalProximityBubble.anchoredPosition = WorldToCanvasPosition(goalProximityBubbleGoal.position + new Vector2(0f, 1.18f + bob));
+            goalProximityBubble.localScale = Vector3.one * (1f + Mathf.Sin(Time.time * 7.4f) * 0.025f);
+            if (resultPanel == null || !resultPanel.gameObject.activeInHierarchy)
+            {
+                goalProximityBubble.SetAsLastSibling();
+            }
+        }
+
+        private void ShowGoalProximityBubble(WorldStateGoal goal, float distance, float radius)
+        {
+            if (goal == null)
+            {
+                return;
+            }
+
+            goalProximityBubbleGoal = goal;
+            goalProximityBubbleUntil = Time.time + GoalProximityBubbleSeconds;
+            lastGoalProximityGuideGoalId = goal.id;
+            lastGoalProximityGuideDistance = distance;
+            if (goalProximityBubbleText != null)
+            {
+                goalProximityBubbleText.text = $"{goal.title} 가까이 이동\n표식 바로 옆에서 그리세요";
+            }
+
+            pulses.Add(new ParticlePulse(goal.position, goal.color, weak: true, scaleMultiplier: 0.88f, durationSeconds: 0.85f, sortingOrder: 34));
+            TickGoalProximityBubble();
+        }
+
+        private void HideGoalProximityBubble()
+        {
+            goalProximityBubbleGoal = null;
+            goalProximityBubbleUntil = -1f;
+            if (goalProximityBubble != null)
+            {
+                goalProximityBubble.gameObject.SetActive(false);
+            }
+        }
+
         private Vector2 CurrentCustomReferencePosition()
         {
             return activeStageDefinition == null ? WestBookcasePosition : activeStageDefinition.customReferencePosition;
@@ -1437,6 +1761,7 @@ namespace MagicExamHall
 
             RebuildCustomReferenceCards();
             customReferencePanel.gameObject.SetActive(true);
+            customReferencePanel.SetAsLastSibling();
             questReferencePanelOpenedThisFloor = true;
             TickQuestChecklist(forceRefresh: true);
             if (customReferenceBubble != null)
@@ -1649,13 +1974,15 @@ namespace MagicExamHall
             CreateWorldSprite("Center Runner", new Vector2(0f, 0.12f), Vector3.one, floor.rugColor, floor.accentColor, PixelSpriteKind.Rug, -5, true, new Vector2(2.2f, 7.6f), floorRoot.transform);
             CreateWorldSprite("West Bookcase", WestBookcasePosition, Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
             CreateWorldSprite("East Bookcase", new Vector2(7.25f, 1.1f), Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
-            if (floor.number <= CustomReferenceFloorNumber)
+            if (floor.number == CustomReferenceFloorNumber)
             {
                 CreateBookcaseGuideArrow("West Bookcase Guide Arrow", WestBookcasePosition, floor.accentColor, emphasized: true, floorRoot.transform);
-                CreateBookcaseGuideArrow("East Bookcase Guide Arrow", new Vector2(7.25f, 1.1f), floor.accentColor, emphasized: floor.number == 1, floorRoot.transform);
+                CreateBookcaseGuideArrow("East Bookcase Guide Arrow", new Vector2(7.25f, 1.1f), floor.accentColor, emphasized: false, floorRoot.transform);
             }
-            CreateWorldSprite("Northwest Candle", new Vector2(-6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
-            CreateWorldSprite("Northeast Candle", new Vector2(6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
+            var northwestCandle = CreateWorldSprite("Northwest Candle", new Vector2(-6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
+            var northeastCandle = CreateWorldSprite("Northeast Candle", new Vector2(6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
+            RegisterSpriteAccent(northwestCandle, SpriteAccentAnimationKind.CandleFlicker, 0.15f);
+            RegisterSpriteAccent(northeastCandle, SpriteAccentAnimationKind.CandleFlicker, 1.04f);
 
             if (floor.number == 3)
             {
@@ -1666,6 +1993,7 @@ namespace MagicExamHall
                 BuildFloorFourCombatArt(floorRoot.transform);
             }
 
+            var goalIndex = 0;
             foreach (var goal in activeGoals)
             {
                 var body = CreateWorldSprite(goal.title, goal.position, Vector3.one * goal.visualScale, goal.color, Color.white, goal.kind, 3, false, Vector2.one, floorRoot.transform);
@@ -1676,6 +2004,8 @@ namespace MagicExamHall
                     body.transform.localScale *= 1.45f;
                 }
                 goal.label = CreateGoalLabel(goal, floorRoot.transform);
+                RegisterSpriteAccent(body, SpriteAccentAnimationKind.RuneIdle, goalIndex * 0.53f);
+                goalIndex++;
             }
 
             foreach (var hazard in activeHazards)
@@ -1705,7 +2035,7 @@ namespace MagicExamHall
                 AddStageGate(obstacle, parent);
             }
 
-            CreateWorldSprite(
+            var exitPortal = CreateWorldSprite(
                 "Stage Exit Portal",
                 new Vector2(definition.stageMax.x - 1.35f, 0.1f),
                 Vector3.one * 1.2f,
@@ -1716,6 +2046,7 @@ namespace MagicExamHall
                 false,
                 Vector2.one,
                 parent);
+            RegisterSpriteAccent(exitPortal, SpriteAccentAnimationKind.PortalShimmer, 0.32f);
         }
 
         private void CreateBookcaseGuideArrow(string name, Vector2 bookcasePosition, Color accentColor, bool emphasized, Transform parent)
@@ -1747,6 +2078,36 @@ namespace MagicExamHall
             }
         }
 
+        private void RegisterSpriteAccent(GameObject body, SpriteAccentAnimationKind kind, float phase, bool replaceExisting = true)
+        {
+            if (body == null)
+            {
+                return;
+            }
+
+            if (replaceExisting)
+            {
+                spriteAccentAnimations.RemoveAll(animation => animation.TargetEquals(body));
+            }
+
+            spriteAccentAnimations.Add(new SpriteAccentAnimation(body, kind, phase));
+        }
+
+        private void TickSpriteAccentAnimations()
+        {
+            for (var index = spriteAccentAnimations.Count - 1; index >= 0; index--)
+            {
+                var animation = spriteAccentAnimations[index];
+                if (!animation.IsActive)
+                {
+                    spriteAccentAnimations.RemoveAt(index);
+                    continue;
+                }
+
+                animation.Tick(Time.time, Time.deltaTime);
+            }
+        }
+
         private void CreateStageBackdrop(FloorStageDefinition definition, Transform parent)
         {
             var center = (definition.stageMin + definition.stageMax) * 0.5f;
@@ -1757,9 +2118,35 @@ namespace MagicExamHall
             CreateWorldSprite("Crossing Distant Cliff Face", new Vector2(center.x, 1.75f), Vector3.one, new Color(0.070f, 0.066f, 0.082f, 1f), new Color(0.18f, 0.16f, 0.18f, 1f), PixelSpriteKind.CliffFace, -9, true, new Vector2(size.x, 1.20f), parent);
             CreateWorldSprite("Crossing North Wall", new Vector2(center.x, definition.stageMax.y - 0.55f), Vector3.one, new Color(0.20f, 0.19f, 0.23f), floorController.Current.accentColor, PixelSpriteKind.WallTrim, -5, true, new Vector2(size.x, 1.1f), parent);
             CreateWorldSprite("Crossing South Trim", new Vector2(center.x, definition.stageMin.y + 0.22f), Vector3.one, new Color(0.16f, 0.14f, 0.13f), new Color(0.45f, 0.36f, 0.22f), PixelSpriteKind.WallTrim, -2, true, new Vector2(size.x, 0.42f), parent);
+            CreateStageRouteBoundaryCues(definition, parent);
             CreateWorldSprite("Crossing Reference Bookcase", definition.customReferencePosition, Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floorController.Current.accentColor, PixelSpriteKind.Bookshelf, 2, false, Vector2.one, parent);
             CreateBookcaseGuideArrow("Crossing Reference Bookcase Guide Arrow", definition.customReferencePosition, floorController.Current.accentColor, emphasized: true, parent);
-            CreateWorldSprite("Crossing West Torch", definition.customReferencePosition + new Vector2(1.6f, 1.1f), Vector3.one * 0.78f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 4, false, Vector2.one, parent);
+            var crossingTorch = CreateWorldSprite("Crossing West Torch", definition.customReferencePosition + new Vector2(1.6f, 1.1f), Vector3.one * 0.78f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 4, false, Vector2.one, parent);
+            RegisterSpriteAccent(crossingTorch, SpriteAccentAnimationKind.CandleFlicker, 1.72f);
+        }
+
+        private void CreateStageRouteBoundaryCues(FloorStageDefinition definition, Transform parent)
+        {
+            if (definition == null)
+            {
+                return;
+            }
+
+            var center = (definition.stageMin + definition.stageMax) * 0.5f;
+            var size = definition.stageMax - definition.stageMin;
+            var upperLipY = -1.78f;
+            var upperWallTopY = definition.stageMax.y - 0.82f;
+            var upperWallHeight = Mathf.Max(0.24f, upperWallTopY - upperLipY);
+            var lowerLipY = definition.stageMin.y + 0.72f;
+            var lowerBottomY = definition.stageMin.y + 0.10f;
+            var lowerWallHeight = Mathf.Max(0.20f, lowerLipY - lowerBottomY);
+
+            CreateWorldSprite("Crossing Route Upper Cliff Mass", new Vector2(center.x, (upperWallTopY + upperLipY) * 0.5f), Vector3.one, new Color(0.060f, 0.058f, 0.073f, 1f), new Color(0.18f, 0.16f, 0.17f, 1f), PixelSpriteKind.CliffFace, -9, true, new Vector2(size.x, upperWallHeight), parent);
+            CreateWorldSprite("Crossing Route Upper Guard Wall", new Vector2(center.x, upperLipY), Vector3.one, new Color(0.18f, 0.16f, 0.15f, 1f), new Color(0.54f, 0.43f, 0.28f, 1f), PixelSpriteKind.WallTrim, -1, true, new Vector2(size.x, 0.22f), parent);
+            CreateWorldSprite("Crossing Route Upper Foot Shadow", new Vector2(center.x, upperLipY - 0.17f), Vector3.one, new Color(0.035f, 0.032f, 0.038f, 1f), new Color(0.14f, 0.12f, 0.11f, 1f), PixelSpriteKind.WallTrim, -3, true, new Vector2(size.x, 0.10f), parent);
+            CreateWorldSprite("Crossing Route Lower Drop Wall", new Vector2(center.x, (lowerLipY + lowerBottomY) * 0.5f), Vector3.one, new Color(0.028f, 0.027f, 0.035f, 1f), new Color(0.13f, 0.105f, 0.085f, 1f), PixelSpriteKind.CliffFace, -7, true, new Vector2(size.x, lowerWallHeight), parent);
+            CreateWorldSprite("Crossing Route Lower Warning Edge", new Vector2(center.x, lowerLipY), Vector3.one, new Color(0.20f, 0.16f, 0.12f, 1f), new Color(0.66f, 0.45f, 0.24f, 1f), PixelSpriteKind.WallTrim, -1, true, new Vector2(size.x, 0.12f), parent);
+            CreateWorldSprite("Crossing Route Lower Abyss Rim Shadow", new Vector2(center.x, lowerLipY - 0.22f), Vector3.one, new Color(0.012f, 0.013f, 0.020f, 1f), new Color(0.060f, 0.052f, 0.050f, 1f), PixelSpriteKind.WallTrim, -6, true, new Vector2(size.x, 0.16f), parent);
         }
 
         private GameObject CreateStageProp(StagePropDefinition prop, Transform parent)
@@ -1860,14 +2247,18 @@ namespace MagicExamHall
             if (id == "frozen_river")
             {
                 CreateVerticalObstacleCutaway("River Vertical Channel", obstacle, parent, PixelSpriteKind.WaterHazard, new Color(0.012f, 0.070f, 0.120f, 1f), new Color(0.18f, 0.36f, 0.66f, 1f), new Color(0.060f, 0.064f, 0.075f, 1f), new Color(0.22f, 0.19f, 0.15f, 1f), new Color(0.56f, 0.86f, 1f, 1f));
+                CreateObstacleNoBypassCues("River", obstacle, parent, new Color(0.052f, 0.058f, 0.070f, 1f), new Color(0.18f, 0.17f, 0.16f, 1f), new Color(0.46f, 0.78f, 1f, 1f));
                 CreateWorldSprite("River Lower Drop Shadow", obstacle.center + new Vector2(0f, -0.58f), Vector3.one, new Color(0.004f, 0.018f, 0.034f, 1f), new Color(0.035f, 0.11f, 0.20f, 1f), PixelSpriteKind.CliffFace, -8, true, obstacle.size + new Vector2(0.42f, 0.82f), parent);
-                CreateWorldSprite("River Deep Center", obstacle.center + new Vector2(0f, -0.10f), Vector3.one, new Color(0.02f, 0.12f, 0.22f, 1f), new Color(0.20f, 0.44f, 0.82f, 1f), PixelSpriteKind.WaterHazard, -4, true, obstacle.size + new Vector2(0.20f, 0.20f), parent);
+                var riverDeep = CreateWorldSprite("River Deep Center", obstacle.center + new Vector2(0f, -0.10f), Vector3.one, new Color(0.02f, 0.12f, 0.22f, 1f), new Color(0.20f, 0.44f, 0.82f, 1f), PixelSpriteKind.WaterHazard, -4, true, obstacle.size + new Vector2(0.20f, 0.20f), parent);
+                RegisterSpriteAccent(riverDeep, SpriteAccentAnimationKind.WaterFlow, 0.22f);
                 CreateWorldSprite("River Bank Left Cliff Face", obstacle.center + new Vector2(-obstacle.size.x * 0.52f, -0.20f), Vector3.one, new Color(0.075f, 0.070f, 0.080f, 1f), new Color(0.22f, 0.19f, 0.15f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.26f, obstacle.size.y + 0.56f), parent);
                 CreateWorldSprite("River Bank Right Cliff Face", obstacle.center + new Vector2(obstacle.size.x * 0.52f, -0.20f), Vector3.one, new Color(0.075f, 0.070f, 0.080f, 1f), new Color(0.22f, 0.19f, 0.15f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.26f, obstacle.size.y + 0.56f), parent);
                 CreateWorldSprite("River Whitewater Edge North", obstacle.center + new Vector2(0f, obstacle.size.y * 0.42f), Vector3.one, new Color(0.72f, 0.92f, 1f, 1f), new Color(0.24f, 0.48f, 0.86f, 1f), PixelSpriteKind.WallTrim, -1, true, new Vector2(obstacle.size.x + 0.28f, 0.12f), parent);
                 CreateWorldSprite("River Whitewater Edge South", obstacle.center + new Vector2(0f, -obstacle.size.y * 0.42f), Vector3.one, new Color(0.42f, 0.74f, 1f, 1f), new Color(0.08f, 0.25f, 0.46f, 1f), PixelSpriteKind.WallTrim, -1, true, new Vector2(obstacle.size.x + 0.18f, 0.10f), parent);
-                CreateWorldSprite("River Flow Streak A", obstacle.center + new Vector2(-0.42f, 0.10f), Vector3.one, new Color(0.50f, 0.82f, 1f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.70f, 0.10f), parent);
-                CreateWorldSprite("River Flow Streak B", obstacle.center + new Vector2(0.38f, -0.28f), Vector3.one, new Color(0.34f, 0.62f, 0.92f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.56f, 0.08f), parent);
+                var riverFlowA = CreateWorldSprite("River Flow Streak A", obstacle.center + new Vector2(-0.42f, 0.10f), Vector3.one, new Color(0.50f, 0.82f, 1f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.70f, 0.10f), parent);
+                var riverFlowB = CreateWorldSprite("River Flow Streak B", obstacle.center + new Vector2(0.38f, -0.28f), Vector3.one, new Color(0.34f, 0.62f, 0.92f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.56f, 0.08f), parent);
+                RegisterSpriteAccent(riverFlowA, SpriteAccentAnimationKind.WaterFlow, 0.78f);
+                RegisterSpriteAccent(riverFlowB, SpriteAccentAnimationKind.WaterFlow, 1.44f);
                 CreateStageRim("River Bank Warning", obstacle.center, obstacle.size + new Vector2(0.18f, 0.10f), new Color(0.56f, 0.86f, 1f, 1f), parent);
                 return;
             }
@@ -1875,6 +2266,7 @@ namespace MagicExamHall
             if (id == "earth_stairs")
             {
                 CreateVerticalObstacleCutaway("Broken Floor Vertical Rupture", obstacle, parent, PixelSpriteKind.CliffFace, new Color(0.010f, 0.007f, 0.005f, 1f), new Color(0.090f, 0.055f, 0.032f, 1f), new Color(0.135f, 0.095f, 0.065f, 1f), new Color(0.70f, 0.48f, 0.26f, 1f), new Color(0.86f, 0.58f, 0.28f, 1f));
+                CreateObstacleNoBypassCues("Broken Floor", obstacle, parent, new Color(0.075f, 0.052f, 0.036f, 1f), new Color(0.46f, 0.31f, 0.18f, 1f), new Color(0.86f, 0.58f, 0.28f, 1f));
                 CreateWorldSprite("Broken Floor Lower Void", obstacle.center + new Vector2(0f, -0.58f), Vector3.one, new Color(0.006f, 0.004f, 0.004f, 1f), new Color(0.050f, 0.032f, 0.022f, 1f), PixelSpriteKind.CliffFace, -8, true, obstacle.size + new Vector2(0.58f, 0.90f), parent);
                 CreateWorldSprite("Broken Floor Pit Shadow", obstacle.center + new Vector2(0f, -0.15f), Vector3.one, new Color(0.025f, 0.018f, 0.014f, 1f), new Color(0.11f, 0.075f, 0.05f, 1f), PixelSpriteKind.Rubble, -5, true, obstacle.size + new Vector2(0.36f, 0.22f), parent);
                 CreateWorldSprite("Broken Floor Inner Void", obstacle.center + new Vector2(0f, -0.02f), Vector3.one, new Color(0.012f, 0.008f, 0.006f, 1f), new Color(0.09f, 0.055f, 0.032f, 1f), PixelSpriteKind.CliffFace, -3, true, obstacle.size + new Vector2(-0.18f, -0.12f), parent);
@@ -1890,6 +2282,7 @@ namespace MagicExamHall
             if (id == "living_bridge")
             {
                 CreateVerticalObstacleCutaway("Chasm Vertical Shaft", obstacle, parent, PixelSpriteKind.CliffFace, new Color(0.004f, 0.005f, 0.012f, 1f), new Color(0.050f, 0.052f, 0.075f, 1f), new Color(0.090f, 0.070f, 0.095f, 1f), new Color(0.36f, 0.27f, 0.44f, 1f), new Color(0.64f, 0.34f, 0.95f, 1f));
+                CreateObstacleNoBypassCues("Chasm", obstacle, parent, new Color(0.048f, 0.044f, 0.060f, 1f), new Color(0.27f, 0.21f, 0.32f, 1f), new Color(0.64f, 0.34f, 0.95f, 1f));
                 CreateWorldSprite("Chasm Far Abyss", obstacle.center + new Vector2(0f, -0.88f), Vector3.one, new Color(0.002f, 0.003f, 0.008f, 1f), new Color(0.025f, 0.026f, 0.040f, 1f), PixelSpriteKind.CliffFace, -9, true, obstacle.size + new Vector2(0.90f, 1.95f), parent);
                 CreateWorldSprite("Chasm Depth", obstacle.center + new Vector2(0f, -0.45f), Vector3.one, new Color(0.010f, 0.012f, 0.020f, 1f), new Color(0.06f, 0.07f, 0.11f, 1f), PixelSpriteKind.Rubble, -7, true, obstacle.size + new Vector2(0.50f, 1.25f), parent);
                 CreateWorldSprite("Chasm Left Cliff Wall", obstacle.center + new Vector2(-obstacle.size.x * 0.54f, -0.36f), Vector3.one, new Color(0.075f, 0.060f, 0.078f, 1f), new Color(0.36f, 0.27f, 0.44f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.34f, obstacle.size.y + 1.02f), parent);
@@ -1897,21 +2290,26 @@ namespace MagicExamHall
                 CreateStageRim("Chasm Warning", obstacle.center, obstacle.size + new Vector2(0.34f, 0.22f), new Color(0.64f, 0.34f, 0.95f, 1f), parent);
                 CreateWorldSprite("Chasm North Broken Lip", obstacle.center + new Vector2(0f, obstacle.size.y * 0.52f), Vector3.one, new Color(0.16f, 0.12f, 0.14f, 1f), new Color(0.50f, 0.36f, 0.55f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(obstacle.size.x + 0.55f, 0.28f), parent);
                 CreateWorldSprite("Chasm South Broken Lip", obstacle.center + new Vector2(0f, -obstacle.size.y * 0.52f), Vector3.one, new Color(0.10f, 0.08f, 0.10f, 1f), new Color(0.42f, 0.30f, 0.48f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(obstacle.size.x + 0.55f, 0.24f), parent);
-                CreateWorldSprite("Chasm Bottom Mist", obstacle.center + new Vector2(0.18f, -obstacle.size.y * 0.62f), Vector3.one, new Color(0.12f, 0.14f, 0.20f, 1f), new Color(0.32f, 0.30f, 0.44f, 1f), PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.78f, 0.10f), parent);
+                var chasmMist = CreateWorldSprite("Chasm Bottom Mist", obstacle.center + new Vector2(0.18f, -obstacle.size.y * 0.62f), Vector3.one, new Color(0.12f, 0.14f, 0.20f, 1f), new Color(0.32f, 0.30f, 0.44f, 1f), PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.78f, 0.10f), parent);
+                RegisterSpriteAccent(chasmMist, SpriteAccentAnimationKind.MistDrift, 0.46f);
                 return;
             }
 
             if (id == "wind_platform")
             {
                 CreateVerticalObstacleCutaway("Wind Gap Vertical Shaft", obstacle, parent, PixelSpriteKind.CliffFace, new Color(0.006f, 0.018f, 0.024f, 1f), new Color(0.070f, 0.145f, 0.175f, 1f), new Color(0.055f, 0.074f, 0.080f, 1f), new Color(0.24f, 0.36f, 0.40f, 1f), new Color(0.76f, 0.94f, 1f, 1f));
+                CreateObstacleNoBypassCues("Wind Gap", obstacle, parent, new Color(0.036f, 0.058f, 0.064f, 1f), new Color(0.18f, 0.30f, 0.34f, 1f), new Color(0.76f, 0.94f, 1f, 1f));
                 CreateWorldSprite("Wind Gap Lower Depth", obstacle.center + new Vector2(0f, -0.62f), Vector3.one, new Color(0.006f, 0.014f, 0.018f, 1f), new Color(0.052f, 0.12f, 0.14f, 1f), PixelSpriteKind.CliffFace, -9, true, obstacle.size + new Vector2(0.55f, 1.10f), parent);
                 CreateWorldSprite("Wind Gap Void", obstacle.center + new Vector2(0f, -0.16f), Vector3.one, new Color(0.018f, 0.032f, 0.038f, 1f), new Color(0.11f, 0.22f, 0.27f, 1f), PixelSpriteKind.Rubble, -7, true, obstacle.size + new Vector2(0.28f, 0.42f), parent);
                 CreateWorldSprite("Wind Gap Left Drop Face", obstacle.center + new Vector2(-obstacle.size.x * 0.52f, -0.20f), Vector3.one, new Color(0.055f, 0.074f, 0.080f, 1f), new Color(0.24f, 0.36f, 0.40f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.26f, obstacle.size.y + 0.62f), parent);
                 CreateWorldSprite("Wind Gap Right Drop Face", obstacle.center + new Vector2(obstacle.size.x * 0.52f, -0.20f), Vector3.one, new Color(0.055f, 0.074f, 0.080f, 1f), new Color(0.24f, 0.36f, 0.40f, 1f), PixelSpriteKind.CliffFace, -2, true, new Vector2(0.26f, obstacle.size.y + 0.62f), parent);
                 CreateStageRim("Wind Gap Warning", obstacle.center, obstacle.size + new Vector2(0.22f, 0.18f), new Color(0.76f, 0.94f, 1f, 1f), parent);
-                CreateWorldSprite("Wind Guide Upper", obstacle.center + new Vector2(-0.15f, obstacle.size.y * 0.30f), Vector3.one, new Color(0.54f, 0.80f, 0.92f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.88f, 0.18f), parent);
-                CreateWorldSprite("Wind Guide Lower", obstacle.center + new Vector2(0.22f, -obstacle.size.y * 0.24f), Vector3.one, new Color(0.38f, 0.62f, 0.74f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.70f, 0.14f), parent);
-                CreateWorldSprite("Wind Gap Mist", obstacle.center + new Vector2(0.06f, -obstacle.size.y * 0.55f), Vector3.one, new Color(0.33f, 0.58f, 0.68f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.82f, 0.10f), parent);
+                var windGuideUpper = CreateWorldSprite("Wind Guide Upper", obstacle.center + new Vector2(-0.15f, obstacle.size.y * 0.30f), Vector3.one, new Color(0.54f, 0.80f, 0.92f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.88f, 0.18f), parent);
+                var windGuideLower = CreateWorldSprite("Wind Guide Lower", obstacle.center + new Vector2(0.22f, -obstacle.size.y * 0.24f), Vector3.one, new Color(0.38f, 0.62f, 0.74f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.70f, 0.14f), parent);
+                var windGapMist = CreateWorldSprite("Wind Gap Mist", obstacle.center + new Vector2(0.06f, -obstacle.size.y * 0.55f), Vector3.one, new Color(0.33f, 0.58f, 0.68f, 1f), Color.white, PixelSpriteKind.WindPlatformTile, -1, true, new Vector2(obstacle.size.x * 0.82f, 0.10f), parent);
+                RegisterSpriteAccent(windGuideUpper, SpriteAccentAnimationKind.MistDrift, 1.08f);
+                RegisterSpriteAccent(windGuideLower, SpriteAccentAnimationKind.MistDrift, 1.64f);
+                RegisterSpriteAccent(windGapMist, SpriteAccentAnimationKind.MistDrift, 2.18f);
             }
         }
 
@@ -1939,6 +2337,25 @@ namespace MagicExamHall
             CreateWorldSprite($"{name} Right Wall", center + new Vector2(width * 0.5f, 0f), Vector3.one, wallPrimary, wallSecondary, PixelSpriteKind.CliffFace, -6, true, new Vector2(0.30f, height + 0.36f), parent);
             CreateWorldSprite($"{name} Upper Break", new Vector2(obstacle.center.x, topY), Vector3.one, wallSecondary, rimColor, PixelSpriteKind.WallTrim, -5, true, new Vector2(width + 0.45f, 0.22f), parent);
             CreateWorldSprite($"{name} Lower Break", new Vector2(obstacle.center.x, bottomY), Vector3.one, wallPrimary, rimColor, PixelSpriteKind.WallTrim, -5, true, new Vector2(width + 0.35f, 0.18f), parent);
+        }
+
+        private void CreateObstacleNoBypassCues(string name, StageObstacleDefinition obstacle, Transform parent, Color wallPrimary, Color wallSecondary, Color rimColor)
+        {
+            var stage = activeStageDefinition ?? FloorStageDefinition.CreateFallbackFloorThree();
+            var topY = Mathf.Min(stage.stageMax.y - 1.15f, obstacle.center.y + 3.10f);
+            var bottomY = Mathf.Max(stage.stageMin.y + 0.35f, obstacle.center.y - obstacle.size.y * 0.72f);
+            var stageTopY = stage.stageMax.y - 0.82f;
+            var stageBottomY = stage.stageMin.y + 0.10f;
+            var width = obstacle.size.x + 0.92f;
+            var upperHeight = Mathf.Max(0.24f, stageTopY - topY);
+            var lowerHeight = Mathf.Max(0.20f, bottomY - stageBottomY);
+            var shadedWall = Color.Lerp(wallPrimary, Color.black, 0.18f);
+            var brightRim = Color.Lerp(rimColor, Color.white, 0.26f);
+
+            CreateWorldSprite($"{name} No Bypass Upper Wall", new Vector2(obstacle.center.x, (stageTopY + topY) * 0.5f), Vector3.one, shadedWall, wallSecondary, PixelSpriteKind.CliffFace, -8, true, new Vector2(width, upperHeight), parent);
+            CreateWorldSprite($"{name} No Bypass Upper Lip", new Vector2(obstacle.center.x, topY + 0.10f), Vector3.one, wallSecondary, brightRim, PixelSpriteKind.WallTrim, -2, true, new Vector2(width + 0.34f, 0.16f), parent);
+            CreateWorldSprite($"{name} No Bypass Lower Drop", new Vector2(obstacle.center.x, (bottomY + stageBottomY) * 0.5f), Vector3.one, Color.Lerp(wallPrimary, Color.black, 0.32f), wallSecondary, PixelSpriteKind.CliffFace, -8, true, new Vector2(width, lowerHeight), parent);
+            CreateWorldSprite($"{name} No Bypass Lower Lip", new Vector2(obstacle.center.x, bottomY - 0.08f), Vector3.one, wallPrimary, brightRim, PixelSpriteKind.WallTrim, -2, true, new Vector2(width + 0.26f, 0.14f), parent);
         }
 
         private void CreateStageRim(string name, Vector2 center, Vector2 size, Color color, Transform parent)
@@ -2387,6 +2804,7 @@ namespace MagicExamHall
 
         private void ShowBaseResultSummary(BaseRecognitionResult result, string title, string resultSummary)
         {
+            SetQuestScrollCollapsed(true, immediate: true);
             UpdateResultPanelLayout();
             var family = result.spell.recognizedFamily.HasValue
                 ? SpellLabels.Korean(result.spell.recognizedFamily.Value)
@@ -2410,10 +2828,12 @@ namespace MagicExamHall
                 $"이유: {ShortLine(result.spell.feedbackReason, ResultLineLength(52, 42))}\n" +
                 $"다음: {ShortLine(resultSummary, ResultLineLength(56, 46))}";
             resultPanel.gameObject.SetActive(true);
+            resultPanel.SetAsLastSibling();
         }
 
         private void ShowOverlayResultSummary(OverlayRecognitionResult result, CompiledSeal seal, string title, string resultSummary)
         {
+            SetQuestScrollCollapsed(true, immediate: true);
             UpdateResultPanelLayout();
             var op = result.recognizedOperator.HasValue ? SpellLabels.Korean(result.recognizedOperator.Value) : "미확정";
             resultText.text =
@@ -2423,6 +2843,7 @@ namespace MagicExamHall
                 $"크기 {result.scaleRatio:0.00}x  위치 {AnchorLabel(result.anchorZone)}\n" +
                 $"다음: {ShortLine(resultSummary, ResultLineLength(56, 46))}";
             resultPanel.gameObject.SetActive(true);
+            resultPanel.SetAsLastSibling();
         }
 
         private void ShowOverlayNoSealResultSummary(OverlayRecognitionResult result, string title, string resultSummary)
@@ -2503,6 +2924,11 @@ namespace MagicExamHall
             var resolution = floorGoals.ResolveBase(activeGoals, family, center, result?.spell?.isCustomShape == true);
             if (resolution.kind == GoalResolutionKind.Completed)
             {
+                if (TryBuildEarlyTutorialSymbolDistanceEffect(resolution.goal, center, family, out var blockedEffect))
+                {
+                    return blockedEffect;
+                }
+
                 ActivateGoal(resolution.goal, resolution.worldEffect);
                 return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id);
             }
@@ -2524,6 +2950,11 @@ namespace MagicExamHall
 
             if (resolution.kind == GoalResolutionKind.BaseOffTarget)
             {
+                if (TryBuildEarlyTutorialSymbolDistanceEffect(resolution.targetGoal, center, family, out var blockedEffect))
+                {
+                    return blockedEffect;
+                }
+
                 return new GoalEffect(BuildBaseOffTargetGoalNote(family, resolution.targetGoal, resolution.distance, resolution.radius), resolution.worldEffect);
             }
 
@@ -2539,6 +2970,11 @@ namespace MagicExamHall
             var resolution = floorGoals.ResolveBase(activeGoals, seal.baseFamily, center, true, customEffect.kind);
             if (resolution.kind == GoalResolutionKind.Completed)
             {
+                if (TryBuildEarlyTutorialSymbolDistanceEffect(resolution.goal, center, seal.baseFamily, out var blockedEffect))
+                {
+                    return blockedEffect;
+                }
+
                 ActivateGoal(resolution.goal, customEffect.kind.ToString().ToLowerInvariant(), spell);
                 return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id);
             }
@@ -2552,6 +2988,11 @@ namespace MagicExamHall
 
             if (resolution.kind == GoalResolutionKind.BaseOffTarget)
             {
+                if (TryBuildEarlyTutorialSymbolDistanceEffect(resolution.targetGoal, center, seal.baseFamily, out var blockedEffect))
+                {
+                    return blockedEffect;
+                }
+
                 return new GoalEffect(BuildBaseOffTargetGoalNote(seal.baseFamily, resolution.targetGoal, resolution.distance, resolution.radius), resolution.worldEffect);
             }
 
@@ -2759,6 +3200,47 @@ namespace MagicExamHall
                 : $"속성 반응: {LastElementalReactionSummaryForTests}";
         }
 
+        private bool TryBuildEarlyTutorialSymbolDistanceEffect(WorldStateGoal goal, Vector2 center, SpellFamily family, out GoalEffect effect)
+        {
+            effect = default;
+            if (!RequiresEarlyTutorialSymbolProximity(goal))
+            {
+                return false;
+            }
+
+            var origin = player == null ? center : (Vector2)player.position;
+            var radius = Mathf.Min(goal.radius, EarlyTutorialSymbolActivationRadius);
+            var distance = Vector2.Distance(origin, goal.position);
+            if (distance <= radius)
+            {
+                return false;
+            }
+
+            var note = BuildEarlyTutorialSymbolDistanceNote(family, goal, distance, radius);
+            CurrentAssistLevel = 1;
+            LastHintText = note;
+            endingReport.RecordHintShown(1);
+            ShowGoalProximityBubble(goal, distance, radius);
+            effect = new GoalEffect(note, "symbol_distance_blocked");
+            return true;
+        }
+
+        private bool RequiresEarlyTutorialSymbolProximity(WorldStateGoal goal)
+        {
+            return goal != null &&
+                   floorController != null &&
+                   floorController.Current.number <= CustomReferenceFloorNumber &&
+                   goal.requiredBase.HasValue &&
+                   !goal.requiredCustomSpell.HasValue;
+        }
+
+        private string BuildEarlyTutorialSymbolDistanceNote(SpellFamily family, WorldStateGoal target, float distance, float radius)
+        {
+            return
+                $"{SpellLabels.Korean(family)} 마법은 보였지만 {target.title} 표식에서 너무 멉니다.\n" +
+                $"{target.title} 바로 옆으로 이동한 뒤 다시 그리세요. 현재 거리 {distance:0.0}, 목표 반경 {radius:0.0}.";
+        }
+
         private static Color ElementalReactionColor(ElementalReactionKind reactionKind)
         {
             return reactionKind switch
@@ -2884,6 +3366,11 @@ namespace MagicExamHall
         private void ActivateGoal(WorldStateGoal goal, string effect, SpellResult spell = null)
         {
             goal.completed = true;
+            if (ReferenceEquals(goalProximityBubbleGoal, goal))
+            {
+                HideGoalProximityBubble();
+            }
+
             if (goal.renderer != null)
             {
                 goal.renderer.sprite = PixelArtFactory.CreateSprite($"{goal.title} Active", Color.white, goal.color, goal.kind);
@@ -2892,6 +3379,7 @@ namespace MagicExamHall
             if (goal.body != null)
             {
                 goal.body.transform.localScale *= 1.15f;
+                RegisterSpriteAccent(goal.body, SpriteAccentAnimationKind.RuneActive, 0.21f);
             }
             if (goal.label != null)
             {
@@ -2903,6 +3391,8 @@ namespace MagicExamHall
             endingReport.RecordDiscovery(goal.id, effect);
             pulses.Add(new ParticlePulse(goal.position, goal.color));
             TickQuestChecklist(forceRefresh: true);
+            UpdateHud();
+            UpdateResultPanelLayout();
         }
 
         private void ApplyGoalReaction(WorldStateGoal goal, SpellResult spell = null)
@@ -3201,6 +3691,7 @@ namespace MagicExamHall
 
             stageEffectObjects.Add(body);
             floorObjects.Add(body);
+            RegisterSpriteAccent(body, SpriteAccentAnimationKind.StageEffectGlow, stageEffectObjects.Count * 0.37f);
         }
 
         private static void ResolveStageEffectSpan(StageObstacleDefinition obstacle, StageEntityDefinition entity, out Vector2 center, out Vector2 size)
@@ -3468,7 +3959,7 @@ namespace MagicExamHall
                 }
 
                 magicNote.Show(BuildFloorCompletionNote());
-                pendingAdvanceAt = Time.time + StandardFloorAdvanceDelaySeconds;
+                pendingAdvanceAt = Time.time + CurrentFloorAdvanceDelaySeconds();
                 return;
             }
 
@@ -3494,6 +3985,13 @@ namespace MagicExamHall
 
             magicNote.Show(BuildFloorCompletionNote());
             pendingAdvanceAt = Time.time + FinalFloorPassReportDelaySeconds;
+        }
+
+        private float CurrentFloorAdvanceDelaySeconds()
+        {
+            return floorController?.Current.number == 3
+                ? StageFloorAdvanceDelaySeconds
+                : StandardFloorAdvanceDelaySeconds;
         }
 
         private string BuildFloorCompletionNote()
@@ -3591,43 +4089,128 @@ namespace MagicExamHall
             }
 
             var inputX = ReadHorizontalMovementInput();
+            platformHorizontalVelocity = Mathf.MoveTowards(
+                platformHorizontalVelocity,
+                inputX * PlatformMoveSpeed,
+                PlatformMoveAcceleration * Time.deltaTime);
+
             var bodyVelocity = playerBody.linearVelocity;
-            bodyVelocity.x = Mathf.MoveTowards(bodyVelocity.x, inputX * 4.6f, 36f * Time.deltaTime);
+            bodyVelocity.x = 0f;
             if (ReadJumpPressed() && IsPlatformGrounded())
             {
-                bodyVelocity.y = 7.6f;
+                bodyVelocity.y = PlatformJumpVelocity;
             }
 
             playerBody.linearVelocity = bodyVelocity;
+            if (Mathf.Abs(platformHorizontalVelocity) > 0.001f)
+            {
+                var position = playerBody.position;
+                position.x += platformHorizontalVelocity * Time.deltaTime;
+                playerBody.position = position;
+                if (player != null)
+                {
+                    player.position = position;
+                }
+            }
+
             ClampPlatformPlayer();
             TickPlatformCamera();
         }
 
-        private static Vector2 ReadMovementInput()
+        private Vector2 ReadMovementInput()
         {
             return BuildMovementInput(
                 Input.GetAxisRaw("Horizontal"),
                 Input.GetAxisRaw("Vertical"),
-                Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow),
-                Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow),
-                Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow),
-                Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow));
+                Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow) || IsFallbackActive(fallbackLeftHeld, fallbackLeftPulseUntil),
+                Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow) || IsFallbackActive(fallbackRightHeld, fallbackRightPulseUntil),
+                Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow) || IsFallbackActive(fallbackDownHeld, fallbackDownPulseUntil),
+                Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow) || IsFallbackActive(fallbackUpHeld, fallbackUpPulseUntil));
         }
 
-        private static float ReadHorizontalMovementInput()
+        private float ReadHorizontalMovementInput()
         {
             return ResolveAxisWithKeys(
                 Input.GetAxisRaw("Horizontal"),
-                Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow),
-                Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow));
+                Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow) || IsFallbackActive(fallbackLeftHeld, fallbackLeftPulseUntil),
+                Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow) || IsFallbackActive(fallbackRightHeld, fallbackRightPulseUntil));
         }
 
-        private static bool ReadJumpPressed()
+        private bool ReadJumpPressed()
         {
+            var fallbackJumpPressed = IsFallbackActive(false, fallbackJumpPulseUntil);
+            if (fallbackJumpPressed)
+            {
+                fallbackJumpPulseUntil = -1f;
+            }
+
             return Input.GetButtonDown("Jump") ||
                    Input.GetKeyDown(KeyCode.Space) ||
                    Input.GetKeyDown(KeyCode.W) ||
-                   Input.GetKeyDown(KeyCode.UpArrow);
+                   Input.GetKeyDown(KeyCode.UpArrow) ||
+                   fallbackJumpPressed;
+        }
+
+        private void CaptureKeyboardFallback(KeyCode keyCode, bool pressed)
+        {
+            switch (keyCode)
+            {
+                case KeyCode.LeftArrow:
+                case KeyCode.A:
+                    SetFallbackKey(ref fallbackLeftHeld, ref fallbackLeftPulseUntil, pressed);
+                    break;
+                case KeyCode.RightArrow:
+                case KeyCode.D:
+                    SetFallbackKey(ref fallbackRightHeld, ref fallbackRightPulseUntil, pressed);
+                    break;
+                case KeyCode.DownArrow:
+                case KeyCode.S:
+                    SetFallbackKey(ref fallbackDownHeld, ref fallbackDownPulseUntil, pressed);
+                    break;
+                case KeyCode.UpArrow:
+                case KeyCode.W:
+                    SetFallbackKey(ref fallbackUpHeld, ref fallbackUpPulseUntil, pressed);
+                    if (pressed)
+                    {
+                        fallbackJumpPulseUntil = Time.unscaledTime + KeyboardMovementPulseSeconds;
+                    }
+
+                    break;
+                case KeyCode.Space:
+                    if (pressed)
+                    {
+                        fallbackJumpPulseUntil = Time.unscaledTime + KeyboardMovementPulseSeconds;
+                    }
+
+                    break;
+            }
+        }
+
+        private void ClearMovementInputFallback()
+        {
+            fallbackLeftHeld = false;
+            fallbackRightHeld = false;
+            fallbackDownHeld = false;
+            fallbackUpHeld = false;
+            fallbackLeftPulseUntil = -1f;
+            fallbackRightPulseUntil = -1f;
+            fallbackDownPulseUntil = -1f;
+            fallbackUpPulseUntil = -1f;
+            fallbackJumpPulseUntil = -1f;
+        }
+
+        private static void SetFallbackKey(ref bool held, ref float pulseUntil, bool pressed)
+        {
+            held = pressed;
+            if (pressed)
+            {
+                pulseUntil = Time.unscaledTime + KeyboardMovementPulseSeconds;
+            }
+        }
+
+        private static bool IsFallbackActive(bool held, float pulseUntil)
+        {
+            return held || Time.unscaledTime <= pulseUntil;
         }
 
         private static Vector2 BuildMovementInput(
@@ -3723,6 +4306,7 @@ namespace MagicExamHall
             }
 
             velocity = Vector2.zero;
+            platformHorizontalVelocity = 0f;
         }
 
         private void TickStageGates()
@@ -4501,6 +5085,7 @@ namespace MagicExamHall
                 queue.Destroy();
             }
             buffQueues.Clear();
+            spriteAccentAnimations.Clear();
             elementalEntities.Clear();
             shelfGuideArrows.Clear();
             activeStageGates.Clear();
@@ -4629,7 +5214,7 @@ namespace MagicExamHall
         {
             var stageLabel = floorController?.Current.number == 3;
             var visualRequirement = floorController != null && floorController.Current.number <= 3;
-            var labelSize = stageLabel ? new Vector2(198f, 54f) : new Vector2(220f, 64f);
+            var labelSize = stageLabel ? new Vector2(210f, 66f) : new Vector2(220f, 88f);
             var canvasObject = new GameObject($"{goal.title} Goal Label");
             canvasObject.transform.SetParent(parent, false);
             canvasObject.transform.position = goal.position + (stageLabel ? new Vector2(0f, 0.78f) : new Vector2(0f, -0.86f));
@@ -4641,14 +5226,27 @@ namespace MagicExamHall
             rect.sizeDelta = labelSize;
             canvasObject.transform.localScale = Vector3.one * (stageLabel ? 0.014f : 0.016f);
 
-            var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, labelSize, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, 0.86f));
+            var backgroundAlpha = visualRequirement ? 0.16f : 0.86f;
+            var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, labelSize, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, backgroundAlpha));
             background.raycastTarget = false;
             var textPosition = visualRequirement
-                ? new Vector2(0f, stageLabel ? 10f : 12f)
+                ? new Vector2(0f, stageLabel ? 15f : 24f)
                 : Vector2.zero;
             var textSize = visualRequirement
-                ? new Vector2(labelSize.x - 12f, stageLabel ? 26f : 30f)
+                ? new Vector2(labelSize.x - 12f, stageLabel ? 28f : 32f)
                 : labelSize;
+            if (visualRequirement)
+            {
+                var titleBacking = CreateImage(
+                    "Goal Label Title Backing",
+                    canvasObject.transform,
+                    textPosition,
+                    new Vector2(textSize.x - 18f, stageLabel ? 30f : 34f),
+                    Anchor.Center,
+                    new Color(0.006f, 0.010f, 0.018f, stageLabel ? 0.54f : 0.58f));
+                titleBacking.raycastTarget = false;
+            }
+
             var text = CreateText("Goal Label Text", canvasObject.transform, visualRequirement ? goal.title : goal.OpenLabel, stageLabel ? 22 : 24, FontStyle.Bold, textPosition, textSize, Anchor.Center);
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.Lerp(goal.color, Color.white, 0.45f);
@@ -4671,18 +5269,19 @@ namespace MagicExamHall
                 return;
             }
 
-            var iconSize = stageLabel ? 18f : 21f;
-            var plusWidth = stageLabel ? 9f : 11f;
-            var gap = stageLabel ? 3f : 4f;
+            var iconSize = stageLabel ? 24f : 32f;
+            var plusWidth = stageLabel ? 13f : 18f;
+            var gap = stageLabel ? 4f : 6f;
             var totalWidth = glyphs.Count * iconSize + Mathf.Max(0, glyphs.Count - 1) * (plusWidth + gap * 2f);
             var row = CreatePanel(
                 $"Goal Requirement Icon Row {goal.id}",
                 parent,
-                new Vector2(0f, stageLabel ? -14f : -17f),
-                new Vector2(totalWidth + 8f, iconSize + 4f),
+                new Vector2(0f, stageLabel ? -16f : -22f),
+                new Vector2(totalWidth + (stageLabel ? 10f : 16f), iconSize + (stageLabel ? 8f : 12f)),
                 Anchor.Center,
-                new Color(0f, 0f, 0f, 0f));
+                new Color(0.005f, 0.008f, 0.015f, stageLabel ? 0.68f : 0.78f));
             row.GetComponent<Image>().raycastTarget = false;
+            AddPanelBorder(row, Color.Lerp(goal.color, Color.white, 0.28f), stageLabel ? 1.2f : 1.6f);
 
             var x = -totalWidth * 0.5f + iconSize * 0.5f;
             for (var index = 0; index < glyphs.Count; index++)
@@ -4693,7 +5292,7 @@ namespace MagicExamHall
                         $"Goal Requirement Plus {goal.id} {index}",
                         row,
                         "+",
-                        stageLabel ? 16 : 18,
+                        stageLabel ? 20 : 26,
                         FontStyle.Bold,
                         new Vector2(x - iconSize * 0.5f - gap - plusWidth * 0.5f, 0f),
                         new Vector2(plusWidth, iconSize),
@@ -4805,8 +5404,8 @@ namespace MagicExamHall
 
         private static GoalRequirementGlyph ShapeRequirementGlyph(string token, Color fallbackColor)
         {
-            var primary = Color.Lerp(fallbackColor, Color.white, 0.18f);
-            var secondary = Color.Lerp(fallbackColor, Color.white, 0.58f);
+            var primary = new Color(0.96f, 0.96f, 0.96f, 1f);
+            var secondary = new Color(0.68f, 0.68f, 0.68f, 1f);
             return new GoalRequirementGlyph(ShapeTokenSpriteKind(token), primary, secondary);
         }
 
@@ -4849,6 +5448,7 @@ namespace MagicExamHall
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
+            body.AddComponent<CanvasRenderer>();
             var border = body.AddComponent<CustomShapeRectBorder>();
             border.color = color;
             border.thickness = thickness;
@@ -5275,6 +5875,109 @@ namespace MagicExamHall
         {
             public BaseRecognitionResult baseResult = null;
             public OverlayRecognitionResult overlayResult = null;
+        }
+
+        private enum SpriteAccentAnimationKind
+        {
+            RuneIdle,
+            RuneActive,
+            CandleFlicker,
+            WaterFlow,
+            MistDrift,
+            PortalShimmer,
+            StageEffectGlow
+        }
+
+        private sealed class SpriteAccentAnimation
+        {
+            private readonly GameObject body;
+            private readonly SpriteRenderer renderer;
+            private readonly SpriteAccentAnimationKind kind;
+            private readonly Vector3 baseScale;
+            private readonly Vector2 anchor;
+            private readonly Color baseColor;
+            private readonly Quaternion baseRotation;
+            private readonly float phase;
+
+            public SpriteAccentAnimation(GameObject body, SpriteAccentAnimationKind kind, float phase)
+            {
+                this.body = body;
+                this.kind = kind;
+                this.phase = phase;
+                renderer = body == null ? null : body.GetComponent<SpriteRenderer>();
+                baseScale = body == null ? Vector3.one : body.transform.localScale;
+                anchor = body == null ? Vector2.zero : body.transform.position;
+                baseColor = renderer == null ? Color.white : renderer.color;
+                baseRotation = body == null ? Quaternion.identity : body.transform.rotation;
+            }
+
+            public bool IsActive => body != null;
+            public string Name => body == null ? "" : body.name;
+            public Vector3 CurrentScale => body == null ? Vector3.zero : body.transform.localScale;
+            public Vector2 CurrentPosition => body == null ? Vector2.zero : body.transform.position;
+
+            public bool TargetEquals(GameObject target)
+            {
+                return body == target;
+            }
+
+            public void Tick(float time, float deltaTime)
+            {
+                if (body == null)
+                {
+                    return;
+                }
+
+                var slow = Mathf.Sin(time * 2.05f + phase);
+                var fast = Mathf.Sin(time * 8.6f + phase * 1.7f);
+                var alpha = 1f;
+                var scale = baseScale;
+                var position = anchor;
+                var rotation = baseRotation;
+
+                switch (kind)
+                {
+                    case SpriteAccentAnimationKind.RuneIdle:
+                        scale = baseScale * (1f + slow * 0.028f);
+                        alpha = 0.86f + (slow + 1f) * 0.07f;
+                        break;
+                    case SpriteAccentAnimationKind.RuneActive:
+                        scale = baseScale * (1.015f + slow * 0.045f);
+                        alpha = 0.94f + (slow + 1f) * 0.03f;
+                        break;
+                    case SpriteAccentAnimationKind.CandleFlicker:
+                        scale = baseScale * (1f + slow * 0.030f + fast * 0.018f);
+                        alpha = 0.78f + (fast + 1f) * 0.10f + (slow + 1f) * 0.04f;
+                        break;
+                    case SpriteAccentAnimationKind.WaterFlow:
+                        position = anchor + new Vector2(Mathf.Sin(time * 1.15f + phase) * 0.075f, Mathf.Sin(time * 2.3f + phase) * 0.018f);
+                        scale = new Vector3(baseScale.x * (1f + slow * 0.025f), baseScale.y, baseScale.z);
+                        alpha = 0.76f + (slow + 1f) * 0.10f;
+                        break;
+                    case SpriteAccentAnimationKind.MistDrift:
+                        position = anchor + new Vector2(Mathf.Sin(time * 0.88f + phase) * 0.115f, Mathf.Sin(time * 1.46f + phase) * 0.028f);
+                        scale = baseScale * (1f + slow * 0.035f);
+                        alpha = 0.54f + (slow + 1f) * 0.13f;
+                        break;
+                    case SpriteAccentAnimationKind.PortalShimmer:
+                        scale = baseScale * (1f + slow * 0.042f);
+                        rotation = baseRotation * Quaternion.Euler(0f, 0f, Mathf.Sin(time * 1.55f + phase) * 2.4f);
+                        alpha = 0.86f + (slow + 1f) * 0.07f;
+                        break;
+                    case SpriteAccentAnimationKind.StageEffectGlow:
+                        scale = baseScale * (1f + slow * 0.030f);
+                        alpha = 0.70f + (slow + 1f) * 0.12f;
+                        break;
+                }
+
+                body.transform.position = position;
+                body.transform.localScale = scale;
+                body.transform.rotation = rotation;
+                if (renderer != null)
+                {
+                    renderer.color = new Color(baseColor.r, baseColor.g, baseColor.b, Mathf.Clamp01(baseColor.a * alpha));
+                }
+            }
         }
 
         private sealed class FloatingGuideArrow

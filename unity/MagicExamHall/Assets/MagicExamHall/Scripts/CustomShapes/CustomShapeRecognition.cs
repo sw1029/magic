@@ -160,9 +160,14 @@ namespace MagicExamHall
             var featureScore = ScoreFeatureSimilarity(features, AverageCaptureFeatures(slot));
             var maturity = Mathf.Clamp01((slot.goldCaptures.Count + slot.autoCaptures.Count) / 6f);
             var customScore = Mathf.Clamp01(goldScore * 0.58f + featureScore * 0.22f + autoScore * 0.15f + maturity * 0.05f);
-            var acceptThreshold = Mathf.Clamp(0.73f - Mathf.Min(slot.autoCaptures.Count, 8) * 0.01f, 0.64f, 0.78f);
-            var holdThreshold = Mathf.Clamp(acceptThreshold - 0.13f, 0.48f, 0.68f);
             var preferredSlot = preferredMappedFamily.HasValue && slot.mappedFamily == preferredMappedFamily.Value;
+            var acceptThreshold = Mathf.Clamp(0.73f - Mathf.Min(slot.autoCaptures.Count, 8) * 0.01f, 0.64f, 0.78f);
+            if (preferredSlot)
+            {
+                acceptThreshold = Mathf.Clamp(acceptThreshold - 0.07f, 0.62f, 0.78f);
+            }
+
+            var holdThreshold = Mathf.Clamp(acceptThreshold - 0.13f, 0.48f, 0.68f);
             var conflict = !preferredSlot &&
                            defaultSimilarity >= 0.78f &&
                            defaultFamily != slot.mappedFamily &&
@@ -212,8 +217,13 @@ namespace MagicExamHall
             }
 
             var normalized = Normalize(strokes);
-            var distance = PointCloudDistance(cloud, normalized.cloud);
-            var cloudScore = Mathf.Clamp01(1f - distance / 0.72f);
+            var orderedDistance = Mathf.Min(
+                PointCloudDistance(cloud, normalized.cloud),
+                PointCloudDistance(cloud, normalized.cloud, reverseRight: true));
+            var orderedCloudScore = Mathf.Clamp01(1f - orderedDistance / 0.72f);
+            var unorderedDistance = SymmetricNearestPointDistance(cloud, normalized.cloud);
+            var unorderedCloudScore = Mathf.Clamp01(1f - unorderedDistance / 0.42f);
+            var cloudScore = Mathf.Max(orderedCloudScore, unorderedCloudScore * 0.96f);
             var featureScore = ScoreFeatureSimilarity(features, ShapeFeatures.From(strokes, normalized));
             return Mathf.Clamp01(cloudScore * 0.74f + featureScore * 0.26f);
         }
@@ -350,7 +360,7 @@ namespace MagicExamHall
             return output;
         }
 
-        private static float PointCloudDistance(IReadOnlyList<Vector2> left, IReadOnlyList<Vector2> right)
+        private static float PointCloudDistance(IReadOnlyList<Vector2> left, IReadOnlyList<Vector2> right, bool reverseRight = false)
         {
             if (left.Count == 0 || right.Count == 0)
             {
@@ -361,10 +371,38 @@ namespace MagicExamHall
             var total = 0f;
             for (var index = 0; index < count; index++)
             {
-                total += Vector2.Distance(left[index], right[index]);
+                var rightIndex = reverseRight ? right.Count - 1 - index : index;
+                total += Vector2.Distance(left[index], right[rightIndex]);
             }
 
             return total / count;
+        }
+
+        private static float SymmetricNearestPointDistance(IReadOnlyList<Vector2> left, IReadOnlyList<Vector2> right)
+        {
+            if (left.Count == 0 || right.Count == 0)
+            {
+                return 1f;
+            }
+
+            return (AverageNearestPointDistance(left, right) + AverageNearestPointDistance(right, left)) * 0.5f;
+        }
+
+        private static float AverageNearestPointDistance(IReadOnlyList<Vector2> source, IReadOnlyList<Vector2> target)
+        {
+            var total = 0f;
+            for (var sourceIndex = 0; sourceIndex < source.Count; sourceIndex++)
+            {
+                var nearestSqr = float.MaxValue;
+                for (var targetIndex = 0; targetIndex < target.Count; targetIndex++)
+                {
+                    nearestSqr = Mathf.Min(nearestSqr, (source[sourceIndex] - target[targetIndex]).sqrMagnitude);
+                }
+
+                total += Mathf.Sqrt(nearestSqr);
+            }
+
+            return total / source.Count;
         }
 
         private static int CountCorners(IReadOnlyList<StrokeSample> stroke)

@@ -9,6 +9,7 @@ namespace MagicExamHall
         public PixelSpriteKind kind = PixelSpriteKind.Target;
         public Color primary = Color.white;
         public Color secondary = Color.gray;
+        public Color rendererTint = Color.white;
         public int sortingOrder;
         public bool tiled;
         public Vector2 tiledSize = Vector2.one;
@@ -45,7 +46,7 @@ namespace MagicExamHall
             var spriteRenderer = GetComponent<SpriteRenderer>();
             spriteRenderer.sprite = PixelArtFactory.CreateSprite(name, primary, secondary, kind);
             spriteRenderer.sharedMaterial = PixelMaterialProvider.SpriteMaterial;
-            spriteRenderer.color = Color.white;
+            spriteRenderer.color = rendererTint;
             spriteRenderer.sortingOrder = sortingOrder;
             spriteRenderer.drawMode = tiled ? SpriteDrawMode.Tiled : SpriteDrawMode.Simple;
             if (tiled)

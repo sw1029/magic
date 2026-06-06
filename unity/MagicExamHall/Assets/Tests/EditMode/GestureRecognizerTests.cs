@@ -522,6 +522,106 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void SpellCastingServiceUsesInjectedRecognitionBoundary()
+        {
+            var service = new SpellCastingService(
+                new StubBaseRecognizer(SpellFamily.Water),
+                new StubOverlayRecognizer(OverlayOperator.ElectricFork));
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeLine(-0.5f, -0.5f, 0.5f, 0.5f, 0f)
+            };
+
+            var baseOutcome = service.Process(strokes, new Vector2(2f, -1f), strokes.Count, new List<CompiledSeal>(), 10f);
+
+            Assert.That(baseOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded));
+            Assert.That(baseOutcome.createdSeal.baseFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(baseOutcome.createdSeal.worldCenter, Is.EqualTo(new Vector2(2f, -1f)));
+
+            var overlayOutcome = service.Process(
+                strokes,
+                baseOutcome.createdSeal.worldCenter,
+                strokes.Count,
+                new List<CompiledSeal> { baseOutcome.createdSeal },
+                10.2f);
+
+            Assert.That(overlayOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.OverlaySucceeded));
+            Assert.That(overlayOutcome.targetSeal, Is.SameAs(baseOutcome.createdSeal));
+            Assert.That(baseOutcome.createdSeal.overlayStack, Does.Contain(OverlayOperator.ElectricFork));
+        }
+
+        [Test]
+        public void SpellCastingServiceProcessesExplicitRecognitionHandoffs()
+        {
+            var service = new SpellCastingService();
+            var baseHandoff = SpellRecognitionHandoff.Base(
+                RecognitionStatus.Recognized,
+                SpellFamily.Water,
+                SpellFamily.Water,
+                new Vector2(1.5f, -0.5f),
+                0.96f,
+                PerfectQuality(),
+                worldScale: 1.4f,
+                strokeCount: 2,
+                sourceId: "external-base");
+
+            var baseOutcome = service.ProcessHandoff(baseHandoff, new List<CompiledSeal>(), 0f);
+
+            Assert.That(baseOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded));
+            Assert.That(baseOutcome.createdSeal.baseFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(baseOutcome.createdSeal.worldCenter, Is.EqualTo(new Vector2(1.5f, -0.5f)));
+
+            var overlayHandoff = SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.IceBar,
+                baseOutcome.createdSeal.worldCenter,
+                0.94f,
+                0.91f,
+                targetSealId: baseOutcome.createdSeal.sealId,
+                sourceId: "external-overlay");
+
+            var overlayOutcome = service.ProcessHandoff(
+                overlayHandoff,
+                new List<CompiledSeal> { baseOutcome.createdSeal },
+                0.2f);
+
+            Assert.That(overlayOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.OverlaySucceeded));
+            Assert.That(overlayOutcome.targetSeal, Is.SameAs(baseOutcome.createdSeal));
+            Assert.That(baseOutcome.createdSeal.overlayStack, Does.Contain(OverlayOperator.IceBar));
+        }
+
+        [Test]
+        public void OverlayHandoffRequiresActiveAttachableSeal()
+        {
+            var service = new SpellCastingService();
+            var noSealHandoff = SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.SoulDot,
+                Vector2.zero,
+                0.95f,
+                0.95f);
+
+            var noSeal = service.ProcessHandoff(noSealHandoff, new List<CompiledSeal>(), 0f);
+
+            Assert.That(noSeal.kind, Is.EqualTo(SpellCastOutcomeKind.OverlayNoActiveSeal));
+
+            var seal = CreateWorldSeal();
+            var farHandoff = SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.SoulDot,
+                seal.worldCenter + Vector2.right * (SpellCastingService.AttachRadiusFor(seal) + 0.5f),
+                0.95f,
+                0.95f,
+                targetSealId: seal.sealId);
+
+            var detached = service.ProcessHandoff(farHandoff, new List<CompiledSeal> { seal }, 0.2f);
+
+            Assert.That(detached.kind, Is.EqualTo(SpellCastOutcomeKind.DetachedOverlay));
+            Assert.That(detached.targetSeal, Is.SameAs(seal));
+            Assert.That(seal.overlayStack, Is.Empty);
+        }
+
+        [Test]
         public void SpellCastingServiceExposesAttachLookupForInputAdapters()
         {
             var seal = CreateWorldSeal();
@@ -636,6 +736,18 @@ namespace MagicExamHall.Tests
                 .ToList();
         }
 
+        private static QualityVector PerfectQuality()
+        {
+            return new QualityVector
+            {
+                closure = 1f,
+                smoothness = 1f,
+                tempo = 1f,
+                stability = 1f,
+                rotationBias = 0f
+            };
+        }
+
         private static void AssertLastAttemptCsvFields(ExamLogger logger, bool success, bool hintShown, int assistLevel, bool assisted)
         {
             var csvPath = System.IO.Path.Combine(logger.OutputDirectory, "attempts.csv");
@@ -646,6 +758,59 @@ namespace MagicExamHall.Tests
             Assert.That(fields[^3], Is.EqualTo(hintShown ? "true" : "false"));
             Assert.That(fields[^2], Is.EqualTo(assistLevel.ToString()));
             Assert.That(fields[^1], Is.EqualTo(assisted ? "true" : "false"));
+        }
+
+        private sealed class StubBaseRecognizer : IBaseGestureRecognizer
+        {
+            private readonly SpellFamily family;
+
+            public StubBaseRecognizer(SpellFamily family)
+            {
+                this.family = family;
+            }
+
+            public BaseRecognitionResult RecognizeBase(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)
+            {
+                return new BaseRecognitionResult
+                {
+                    spell = new SpellResult
+                    {
+                        status = RecognitionStatus.Recognized,
+                        recognizedFamily = family,
+                        targetFamily = family,
+                        confidence = 0.99f,
+                        quality = PerfectQuality(),
+                        feedbackReason = "stub base",
+                        nextHint = "stub next",
+                        success = true
+                    },
+                    worldScale = 1.25f,
+                    bufferStrokeCount = strokes.Count
+                };
+            }
+        }
+
+        private sealed class StubOverlayRecognizer : IOverlayGestureRecognizer
+        {
+            private readonly OverlayOperator op;
+
+            public StubOverlayRecognizer(OverlayOperator op)
+            {
+                this.op = op;
+            }
+
+            public OverlayRecognitionResult RecognizeOverlay(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes, CompiledSeal seal)
+            {
+                return new OverlayRecognitionResult
+                {
+                    status = RecognitionStatus.Recognized,
+                    recognizedOperator = op,
+                    score = 0.98f,
+                    shapeConfidence = 0.98f,
+                    scaleRatio = 0.24f,
+                    feedbackReason = "stub overlay"
+                };
+            }
         }
     }
 }

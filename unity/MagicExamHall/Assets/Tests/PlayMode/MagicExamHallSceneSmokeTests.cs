@@ -579,6 +579,60 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator ExternalRecognitionHandoffDrivesWorldProgression()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            var noSeal = controller.SubmitRecognitionHandoff(SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.IceBar,
+                new Vector2(-0.65f, 3f),
+                0.95f,
+                0.95f,
+                sourceId: "external-overlay-before-base"));
+            yield return null;
+
+            Assert.That(noSeal.kind, Is.EqualTo(SpellCastOutcomeKind.OverlayNoActiveSeal));
+            Assert.That(controller.TrialCountForTests, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("base seal"));
+
+            var baseOutcome = controller.SubmitRecognitionHandoff(SpellRecognitionHandoff.Base(
+                RecognitionStatus.Recognized,
+                SpellFamily.Fire,
+                SpellFamily.Fire,
+                new Vector2(-5.5f, 2.6f),
+                0.97f,
+                PerfectQuality(),
+                worldScale: 1.35f,
+                sourceId: "external-fire-base"));
+            yield return null;
+
+            Assert.That(baseOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded));
+            Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
+            var seal = controller.GetActiveSealSnapshots().Single();
+            Assert.That(seal.baseFamily, Is.EqualTo(SpellFamily.Fire));
+
+            var overlayOutcome = controller.SubmitRecognitionHandoff(SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.IceBar,
+                seal.worldCenter,
+                0.95f,
+                0.95f,
+                targetSealId: seal.sealId,
+                sourceId: "external-ice-overlay"));
+            yield return null;
+
+            Assert.That(overlayOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.OverlaySucceeded));
+            Assert.That(controller.LastOverlayStack, Does.Contain(OverlayOperator.IceBar));
+            Assert.That(controller.TrialCountForTests, Is.EqualTo(3));
+        }
+
+        [UnityTest]
         public IEnumerator ActiveSealWorldInputRejectsNonCustomFollowupCandidates()
         {
             SceneManager.LoadScene("MagicExamHall");
@@ -1562,6 +1616,18 @@ namespace MagicExamHall.Tests
         {
             controller.CastSyntheticBaseForTests(baseFamily, worldCenter);
             return controller.CastRawBaseForTests(controller.CustomReferenceStrokesForTests(referenceFamily, worldCenter), worldCenter);
+        }
+
+        private static QualityVector PerfectQuality()
+        {
+            return new QualityVector
+            {
+                closure = 1f,
+                smoothness = 1f,
+                tempo = 1f,
+                stability = 1f,
+                rotationBias = 0f
+            };
         }
 
         private static List<List<StrokeSample>> Offset(List<List<StrokeSample>> strokes, Vector2 center, float canonicalCenter)

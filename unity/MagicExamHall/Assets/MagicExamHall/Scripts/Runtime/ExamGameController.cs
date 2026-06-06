@@ -343,6 +343,18 @@ namespace MagicExamHall
             return ApplySubmittedSpellOutcome(spellCasting.ProcessOverlayResult(result, nearestSeal.seal, worldCenter, strokes.Count)).overlayResult;
         }
 
+        public SpellCastOutcome SubmitRecognitionHandoff(SpellRecognitionHandoff handoff)
+        {
+            if (handoff == null)
+            {
+                throw new ArgumentNullException(nameof(handoff));
+            }
+
+            var outcome = spellCasting.ProcessHandoff(handoff, seals.Select(view => view.seal).ToList(), Time.time);
+            ApplySubmittedSpellOutcome(outcome);
+            return outcome;
+        }
+
         public void CompleteCurrentFloorForTests()
         {
             foreach (var goal in activeGoals)
@@ -2217,6 +2229,7 @@ namespace MagicExamHall
                 SpellCastOutcomeKind.OverlayFailed => ApplyOverlayFailure(outcome),
                 SpellCastOutcomeKind.OverlayDuplicate => ApplyOverlayDuplicate(outcome),
                 SpellCastOutcomeKind.OverlayStackFull => ApplyOverlayStackFull(outcome),
+                SpellCastOutcomeKind.OverlayNoActiveSeal => ApplyOverlayNoActiveSeal(outcome),
                 SpellCastOutcomeKind.OverlaySucceeded => ApplyOverlaySuccess(outcome),
                 SpellCastOutcomeKind.DetachedOverlay => ApplyDetachedOverlay(outcome),
                 _ => throw new ArgumentOutOfRangeException(nameof(outcome.kind), outcome.kind, "Unhandled spell cast outcome.")
@@ -2337,6 +2350,25 @@ namespace MagicExamHall
             return new ProcessedSpell { overlayResult = result };
         }
 
+        private ProcessedSpell ApplyOverlayNoActiveSeal(SpellCastOutcome outcome)
+        {
+            var result = outcome.overlayResult;
+            result.status = RecognitionStatus.Invalid;
+            if (string.IsNullOrWhiteSpace(result.feedbackReason))
+            {
+                result.feedbackReason = "활성 base seal이 없습니다.";
+            }
+
+            CurrentAssistLevel = 1;
+            LastHintText = "먼저 base 문양으로 seal을 만든 뒤, 그 원 안쪽이나 가장자리 바로 옆에 장식을 붙여 보세요.";
+            endingReport.RecordHintShown(1);
+            magicNote.Show($"노트: {result.feedbackReason}\n다음: {LastHintText}");
+            ShowOverlayNoSealResultSummary(result, "overlay 부착 실패", LastHintText);
+            pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
+            LogOverlayNoSealAttempt(result, outcome.center, outcome.strokeCount, "overlay_no_active_seal");
+            return new ProcessedSpell { overlayResult = result };
+        }
+
         private ProcessedSpell ApplyDetachedOverlay(SpellCastOutcome outcome)
         {
             var result = outcome.overlayResult;
@@ -2389,6 +2421,19 @@ namespace MagicExamHall
                 $"대상 seal: {ShortLine(seal.Label, ResultLineLength(30, 24))}\n" +
                 $"판정 {StatusLabel(result.status)}  점수 {Percent(result.score)}  모양 {Percent(result.shapeConfidence)}\n" +
                 $"크기 {result.scaleRatio:0.00}x  위치 {AnchorLabel(result.anchorZone)}\n" +
+                $"다음: {ShortLine(resultSummary, ResultLineLength(56, 46))}";
+            resultPanel.gameObject.SetActive(true);
+        }
+
+        private void ShowOverlayNoSealResultSummary(OverlayRecognitionResult result, string title, string resultSummary)
+        {
+            UpdateResultPanelLayout();
+            var op = result.recognizedOperator.HasValue ? SpellLabels.Korean(result.recognizedOperator.Value) : "미확정";
+            resultText.text =
+                $"{title}: {op}\n" +
+                $"대상 seal: 없음\n" +
+                $"판정 {StatusLabel(result.status)}  점수 {Percent(result.score)}  모양 {Percent(result.shapeConfidence)}\n" +
+                $"이유: {ShortLine(result.feedbackReason, ResultLineLength(52, 42))}\n" +
                 $"다음: {ShortLine(resultSummary, ResultLineLength(56, 46))}";
             resultPanel.gameObject.SetActive(true);
         }
@@ -4350,6 +4395,41 @@ namespace MagicExamHall
                 hintShown = hintState?.hintShown ?? !success,
                 assistLevel = hintState?.AssistLevelNumber ?? (success ? 0 : 1),
                 assisted = hintState?.assisted ?? false
+            });
+        }
+
+        private void LogOverlayNoSealAttempt(OverlayRecognitionResult result, Vector2 center, int strokeCount, string worldEffect)
+        {
+            logger.LogAttempt(new AttemptLog
+            {
+                sessionId = sessionId,
+                trialId = trialCounter.ToString(CultureInfo.InvariantCulture),
+                targetFamily = "",
+                recognizedFamily = result.OperatorText,
+                phase = SpellPhase.Overlay.ToString(),
+                baseFamily = "",
+                overlayStack = "",
+                sealId = "",
+                floorId = floorController.Current.number.ToString(CultureInfo.InvariantCulture),
+                targetObject = worldEffect,
+                worldEffect = worldEffect,
+                status = result.status.ToString(),
+                confidence = result.score,
+                closure = 0f,
+                smoothness = result.shapeConfidence,
+                tempo = 0f,
+                stability = 0f,
+                rotationBias = result.scaleRatio,
+                worldX = center.x,
+                worldY = center.y,
+                bufferStrokeCount = strokeCount,
+                attemptIndex = trialCounter,
+                elapsedMs = Mathf.RoundToInt((Time.time - floorStartedAt) * 1000f),
+                feedbackViewed = true,
+                success = false,
+                hintShown = true,
+                assistLevel = CurrentAssistLevel,
+                assisted = false
             });
         }
 

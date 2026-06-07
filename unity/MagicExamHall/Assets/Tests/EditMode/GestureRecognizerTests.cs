@@ -74,6 +74,37 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void SplitSoulDotCandidateFailsSpecificGate()
+        {
+            var seal = CreateWorldSeal();
+            var canonical = OverlayRecognizer.CreateCanonicalSamples(OverlayOperator.SoulDot, seal.worldCenter, seal.worldScale * 0.12f);
+            var strokes = SplitSingleStroke(canonical);
+
+            var result = OverlayRecognizer.Recognize(strokes, seal);
+
+            Assert.That(result.status, Is.EqualTo(RecognitionStatus.Invalid));
+            Assert.That(result.success, Is.False);
+            Assert.That(result.recognizedOperator, Is.EqualTo(OverlayOperator.SoulDot));
+            Assert.That(result.feedbackReason, Does.Contain("한 번에").And.Contain("집중"));
+        }
+
+        [TestCase(OverlayOperator.IceBar, "수평선")]
+        [TestCase(OverlayOperator.VoidCut, "대각선")]
+        public void SplitLineOverlayCandidatesFailSpecificGate(OverlayOperator op, string expectedHint)
+        {
+            var seal = CreateWorldSeal();
+            var canonical = OverlayRecognizer.CreateCanonicalSamples(op, seal.worldCenter, seal.worldScale * 0.24f);
+            var strokes = SplitSingleStroke(canonical);
+
+            var result = OverlayRecognizer.Recognize(strokes, seal);
+
+            Assert.That(result.status, Is.EqualTo(RecognitionStatus.Invalid));
+            Assert.That(result.success, Is.False);
+            Assert.That(result.recognizedOperator, Is.EqualTo(op));
+            Assert.That(result.feedbackReason, Does.Contain("한 획").And.Contain(expectedHint));
+        }
+
+        [Test]
         public void DefaultSealLifetimeLeavesOverlaySetupTime()
         {
             var seal = CreateWorldSeal();
@@ -553,6 +584,17 @@ namespace MagicExamHall.Tests
             }
 
             return seal;
+        }
+
+        private static List<List<StrokeSample>> SplitSingleStroke(List<List<StrokeSample>> strokes)
+        {
+            Assert.That(strokes.Count, Is.EqualTo(1));
+            var splitIndex = strokes[0].Count / 2;
+            return new List<List<StrokeSample>>
+            {
+                strokes[0].Take(splitIndex).ToList(),
+                strokes[0].Skip(splitIndex).ToList()
+            };
         }
 
         private static List<List<StrokeSample>> Offset(List<List<StrokeSample>> strokes, Vector2 center, float canonicalCenter)

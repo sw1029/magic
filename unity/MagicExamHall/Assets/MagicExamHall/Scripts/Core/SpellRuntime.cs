@@ -194,6 +194,21 @@ namespace MagicExamHall
                 };
             }
 
+            if (!OverlaySpecificGate(top.op, strokes.Count, features))
+            {
+                return new OverlayRecognitionResult
+                {
+                    status = RecognitionStatus.Invalid,
+                    recognizedOperator = top.op,
+                    score = top.score,
+                    shapeConfidence = top.shapeConfidence,
+                    scaleRatio = features.scaleRatio,
+                    scaleHint = scaleHint,
+                    anchorZone = top.anchorZone,
+                    feedbackReason = BuildOverlayGateReason(top.op)
+                };
+            }
+
             var strongShapeMatch = top.score >= 0.72f && top.shapeConfidence >= 0.74f;
             if (top.score >= 0.68f && top.shapeConfidence >= 0.48f && (margin >= 0.02f || strongShapeMatch))
             {
@@ -353,6 +368,42 @@ namespace MagicExamHall
             return ambiguous
                 ? "장식 후보가 겹쳐 아직 seal에 붙이지 않았습니다. 한 번에 한 가지 장식만 더 단순하게 그려 보세요."
                 : "장식의 모양과 위치가 seal 기준과 충분히 맞지 않았습니다.";
+        }
+
+        private static bool OverlaySpecificGate(OverlayOperator op, int strokeCount, OverlayFeatures features)
+        {
+            switch (op)
+            {
+                case OverlayOperator.SoulDot:
+                    return strokeCount == 1 &&
+                        features.closure >= 0.56f &&
+                        features.circularity >= 0.48f &&
+                        features.scaleRatio >= 0.025f &&
+                        features.scaleRatio <= 0.22f;
+                case OverlayOperator.IceBar:
+                case OverlayOperator.VoidCut:
+                    return strokeCount == 1 && features.straightness >= 0.62f;
+                case OverlayOperator.SteelBrace:
+                case OverlayOperator.ElectricFork:
+                case OverlayOperator.MartialAxis:
+                    return strokeCount <= 2 && features.corners >= 1;
+                default:
+                    return true;
+            }
+        }
+
+        private static string BuildOverlayGateReason(OverlayOperator op)
+        {
+            return op switch
+            {
+                OverlayOperator.SoulDot => "집중 장식은 seal 중심에 작은 원 또는 점처럼 한 번에 닫아 그려야 합니다. 두 줄만 그은 모양은 집중으로 확정하지 않습니다.",
+                OverlayOperator.IceBar => "얼음 장식은 한 획의 곧은 수평선으로 그려야 합니다.",
+                OverlayOperator.VoidCut => "절단 장식은 한 획의 곧은 대각선으로 그려야 합니다.",
+                OverlayOperator.SteelBrace => "보강 장식은 꺾인 ㄷ자 형태가 분명해야 합니다.",
+                OverlayOperator.ElectricFork => "번개 장식은 갈라지는 꺾임이 분명해야 합니다.",
+                OverlayOperator.MartialAxis => "축 장식은 중심을 지나는 십자 축 형태가 분명해야 합니다.",
+                _ => "장식의 핵심 형태가 충분히 맞지 않았습니다."
+            };
         }
 
         private static bool ScaleIsFarOutside(float scaleRatio, OverlayScore top)

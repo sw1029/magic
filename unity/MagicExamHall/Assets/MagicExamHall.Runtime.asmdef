@@ -1,7 +1,10 @@
 {
   "name": "MagicExamHall.Runtime",
   "rootNamespace": "MagicExamHall",
-  "references": [],
+  "references": [
+    "Unity.RenderPipelines.Universal.2D.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

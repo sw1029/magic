@@ -2,7 +2,9 @@
   "name": "MagicExamHall.EditModeTests",
   "rootNamespace": "MagicExamHall.Tests",
   "references": [
-    "MagicExamHall.Runtime"
+    "MagicExamHall.Runtime",
+    "Unity.RenderPipelines.Universal.2D.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime"
   ],
   "includePlatforms": [
     "Editor"

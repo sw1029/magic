@@ -6,11 +6,13 @@ namespace MagicExamHall
     public static class PixelArtFactory
     {
         private const int Size = 32;
-        private const float PixelsPerUnit = 16f;
         private const string ExternalSpriteRoot = "Sprites/";
 
-        private static readonly Dictionary<PixelSpriteKind, Sprite> ExternalCache = new();
-        private static readonly HashSet<PixelSpriteKind> ExternalMissCache = new();
+        public const int NoVariantIndex = -1;
+        public const float SpritePixelsPerUnit = 16f;
+
+        private static readonly Dictionary<(PixelSpriteKind kind, int variantIndex), Sprite> ExternalCache = new();
+        private static readonly HashSet<(PixelSpriteKind kind, int variantIndex)> ExternalMissCache = new();
 
         /// <summary>
         /// Creates or loads a sprite for the given kind. If a PNG exists at
@@ -24,12 +26,30 @@ namespace MagicExamHall
         /// </summary>
         public static Sprite CreateSprite(string name, Color primary, Color secondary, PixelSpriteKind kind)
         {
-            var external = LoadExternalSprite(kind);
+            return CreateSprite(name, primary, secondary, kind, NoVariantIndex);
+        }
+
+        /// <summary>
+        /// Creates or loads a sprite variant. Variant PNGs are searched first
+        /// as <c>Resources/Sprites/&lt;Kind&gt;_&lt;Variant&gt;.png</c>, then
+        /// <c>Resources/Sprites/&lt;Kind&gt;/&lt;Variant&gt;.png</c>. If the
+        /// specific variant is missing, the base <c>&lt;Kind&gt;.png</c> is
+        /// used before falling back to the procedural drawer.
+        /// </summary>
+        public static Sprite CreateSprite(string name, Color primary, Color secondary, PixelSpriteKind kind, int variantIndex)
+        {
+            var external = LoadExternalSprite(kind, variantIndex);
             if (external != null)
             {
                 return external;
             }
 
+            var texture = CreateProceduralTexture(name, primary, secondary, kind, variantIndex);
+            return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), SpritePixelsPerUnit);
+        }
+
+        public static Texture2D CreateProceduralTexture(string name, Color primary, Color secondary, PixelSpriteKind kind, int variantIndex = NoVariantIndex)
+        {
             var texture = new Texture2D(Size, Size, TextureFormat.RGBA32, false)
             {
                 name = $"{name} Texture",
@@ -38,6 +58,7 @@ namespace MagicExamHall
             };
 
             Clear(texture);
+            var normalizedVariant = NormalizeVariantIndex(kind, variantIndex);
             switch (kind)
             {
                 case PixelSpriteKind.Player:
@@ -107,10 +128,19 @@ namespace MagicExamHall
                     DrawRug(texture, primary, secondary);
                     break;
                 case PixelSpriteKind.Bookshelf:
-                    DrawBookshelf(texture, primary, secondary);
+                    DrawBookshelf(texture, primary, secondary, normalizedVariant);
                     break;
                 case PixelSpriteKind.Candle:
-                    DrawCandle(texture, primary, secondary);
+                    DrawCandle(texture, primary, secondary, normalizedVariant);
+                    break;
+                case PixelSpriteKind.FloorGuard:
+                    DrawFloorGuard(texture, primary, secondary, normalizedVariant);
+                    break;
+                case PixelSpriteKind.WallCorner:
+                    DrawWallCorner(texture, primary, secondary, normalizedVariant);
+                    break;
+                case PixelSpriteKind.Pillar:
+                    DrawPillar(texture, primary, secondary, normalizedVariant);
                     break;
                 case PixelSpriteKind.RuneCircle:
                     DrawRuneCircle(texture, primary, secondary);
@@ -133,7 +163,56 @@ namespace MagicExamHall
             }
 
             texture.Apply();
-            return Sprite.Create(texture, new Rect(0, 0, Size, Size), new Vector2(0.5f, 0.5f), PixelsPerUnit);
+            return texture;
+        }
+
+        public static int GetVariantCount(PixelSpriteKind kind)
+        {
+            return kind switch
+            {
+                PixelSpriteKind.Bookshelf => 3,
+                PixelSpriteKind.Candle => 3,
+                PixelSpriteKind.FloorGuard => 4,
+                PixelSpriteKind.WallCorner => 4,
+                PixelSpriteKind.Pillar => 2,
+                _ => 1
+            };
+        }
+
+        public static int SelectDeterministicVariant(PixelSpriteKind kind, int floorNumber, Vector2 position, string salt = "")
+        {
+            var count = GetVariantCount(kind);
+            if (count <= 1)
+            {
+                return NoVariantIndex;
+            }
+
+            unchecked
+            {
+                var hash = 2166136261u;
+                hash = (hash ^ (uint)(int)kind) * 16777619u;
+                hash = (hash ^ (uint)Mathf.RoundToInt(position.x * 100f)) * 16777619u;
+                hash = (hash ^ (uint)Mathf.RoundToInt(position.y * 100f)) * 16777619u;
+                hash = (hash ^ (uint)floorNumber) * 16777619u;
+                for (var index = 0; index < salt.Length; index++)
+                {
+                    hash = (hash ^ (uint)salt[index]) * 16777619u;
+                }
+
+                return (int)(hash % (uint)count);
+            }
+        }
+
+        public static int SelectDeterministicVariantAvoiding(PixelSpriteKind kind, int floorNumber, Vector2 position, string salt, int avoidVariant)
+        {
+            var count = GetVariantCount(kind);
+            var variant = SelectDeterministicVariant(kind, floorNumber, position, salt);
+            if (count > 1 && avoidVariant >= 0 && variant == NormalizeVariantIndex(kind, avoidVariant))
+            {
+                variant = (variant + 1) % count;
+            }
+
+            return variant;
         }
 
         /// <summary>
@@ -143,41 +222,46 @@ namespace MagicExamHall
         /// Call <see cref="ResetExternalSpriteCache"/> from editor reload hooks
         /// or tests when the art needs to be re-discovered.
         /// </summary>
-        private static Sprite LoadExternalSprite(PixelSpriteKind kind)
+        private static Sprite LoadExternalSprite(PixelSpriteKind kind, int variantIndex)
         {
-            if (ExternalCache.TryGetValue(kind, out var cached))
+            var key = (kind, variantIndex);
+            if (ExternalCache.TryGetValue(key, out var cached))
             {
                 return cached;
             }
 
-            if (ExternalMissCache.Contains(kind))
+            if (ExternalMissCache.Contains(key))
             {
                 return null;
             }
 
-            var path = ExternalSpriteRoot + kind;
-            var sprite = Resources.Load<Sprite>(path);
-            if (sprite == null)
+            foreach (var path in ExternalSpritePaths(kind, variantIndex))
             {
-                var texture = Resources.Load<Texture2D>(path);
-                if (texture == null)
+                var sprite = Resources.Load<Sprite>(path);
+                if (sprite == null)
                 {
-                    ExternalMissCache.Add(kind);
-                    return null;
+                    var texture = Resources.Load<Texture2D>(path);
+                    if (texture == null)
+                    {
+                        continue;
+                    }
+
+                    texture.filterMode = FilterMode.Point;
+                    texture.wrapMode = TextureWrapMode.Clamp;
+                    sprite = Sprite.Create(
+                        texture,
+                        new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f),
+                        SpritePixelsPerUnit);
+                    sprite.name = ResourceNameFrom(path);
                 }
 
-                texture.filterMode = FilterMode.Point;
-                texture.wrapMode = TextureWrapMode.Clamp;
-                sprite = Sprite.Create(
-                    texture,
-                    new Rect(0, 0, texture.width, texture.height),
-                    new Vector2(0.5f, 0.5f),
-                    PixelsPerUnit);
-                sprite.name = kind.ToString();
+                ExternalCache[key] = sprite;
+                return sprite;
             }
 
-            ExternalCache[kind] = sprite;
-            return sprite;
+            ExternalMissCache.Add(key);
+            return null;
         }
 
         /// <summary>
@@ -188,6 +272,39 @@ namespace MagicExamHall
         {
             ExternalCache.Clear();
             ExternalMissCache.Clear();
+        }
+
+        private static IEnumerable<string> ExternalSpritePaths(PixelSpriteKind kind, int variantIndex)
+        {
+            if (variantIndex >= 0)
+            {
+                yield return $"{ExternalSpriteRoot}{kind}_{variantIndex}";
+                yield return $"{ExternalSpriteRoot}{kind}/{variantIndex}";
+            }
+
+            yield return ExternalSpriteRoot + kind;
+        }
+
+        private static string ResourceNameFrom(string path)
+        {
+            var slash = path.LastIndexOf('/');
+            return slash >= 0 ? path[(slash + 1)..] : path;
+        }
+
+        private static int NormalizeVariantIndex(PixelSpriteKind kind, int variantIndex)
+        {
+            var count = GetVariantCount(kind);
+            if (count <= 1)
+            {
+                return NoVariantIndex;
+            }
+
+            return PositiveModulo(variantIndex < 0 ? 0 : variantIndex, count);
+        }
+
+        private static int PositiveModulo(int value, int divisor)
+        {
+            return ((value % divisor) + divisor) % divisor;
         }
 
         private static void DrawPlayer(Texture2D texture, Color skin, Color robe)
@@ -423,14 +540,15 @@ namespace MagicExamHall
             Fill(texture, 29, 0, 3, Size, new Color(0f, 0f, 0f, 0.25f));
         }
 
-        private static void DrawBookshelf(Texture2D texture, Color wood, Color accent)
+        private static void DrawBookshelf(Texture2D texture, Color wood, Color accent, int variant)
         {
             var outline = new Color(0.04f, 0.025f, 0.018f, 1f);
+            var shelfDark = Shade(wood, 0.55f);
             Fill(texture, 5, 4, 22, 24, outline);
             Fill(texture, 6, 5, 20, 22, wood);
-            Fill(texture, 7, 8, 18, 2, Shade(wood, 0.55f));
-            Fill(texture, 7, 16, 18, 2, Shade(wood, 0.55f));
-            Fill(texture, 7, 24, 18, 2, Shade(wood, 0.55f));
+            Fill(texture, 7, 8, 18, 2, shelfDark);
+            Fill(texture, 7, 16, 18, 2, shelfDark);
+            Fill(texture, 7, 24, 18, 2, shelfDark);
             var colors = new[]
             {
                 accent,
@@ -443,29 +561,172 @@ namespace MagicExamHall
             {
                 for (var i = 0; i < 7; i++)
                 {
+                    if (variant == 1 && (shelf + i) % 3 == 0)
+                    {
+                        continue;
+                    }
+
+                    if (variant == 2 && shelf == 1 && i is >= 2 and <= 4)
+                    {
+                        continue;
+                    }
+
                     var color = colors[(shelf + i) % colors.Length];
                     Fill(texture, 8 + i * 2, 10 + shelf * 8, 1, 5, color);
                     Set(texture, 8 + i * 2, 14 + shelf * 8, Shade(color, 0.6f));
                 }
             }
+
+            if (variant == 1)
+            {
+                Fill(texture, 8, 12, 6, 2, new Color(0.82f, 0.72f, 0.48f, 1f));
+                Line(texture, 16, 20, 23, 22, Shade(wood, 0.32f));
+                Fill(texture, 18, 25, 5, 1, new Color(0.77f, 0.68f, 0.46f, 1f));
+            }
+            else if (variant == 2)
+            {
+                Diamond(texture, 16, 19, 4, 4, outline);
+                Diamond(texture, 16, 20, 3, 3, accent);
+                Set(texture, 16, 21, Color.white);
+                Fill(texture, 10, 25, 4, 2, new Color(0.42f, 0.20f, 0.72f, 1f));
+                Fill(texture, 18, 25, 4, 2, new Color(0.22f, 0.58f, 0.72f, 1f));
+            }
         }
 
-        private static void DrawCandle(Texture2D texture, Color metal, Color flame)
+        private static void DrawCandle(Texture2D texture, Color metal, Color flame, int variant)
         {
             var outline = new Color(0.04f, 0.035f, 0.03f, 1f);
             Ellipse(texture, 16, 4, 7, 2, new Color(0f, 0f, 0f, 0.3f));
-            Fill(texture, 14, 5, 4, 14, outline);
-            Fill(texture, 15, 6, 2, 12, metal);
-            Fill(texture, 10, 12, 12, 2, outline);
-            Fill(texture, 11, 13, 10, 1, Shade(metal, 1.15f));
-            Fill(texture, 9, 9, 3, 6, outline);
-            Fill(texture, 20, 9, 3, 6, outline);
-            Fill(texture, 10, 10, 1, 4, metal);
-            Fill(texture, 21, 10, 1, 4, metal);
-            Diamond(texture, 16, 22, 4, 6, Shade(flame, 0.85f));
-            Diamond(texture, 16, 23, 2, 4, Mix(flame, Color.white, 0.45f));
-            Set(texture, 16, 25, Color.white);
-            Set(texture, 15, 21, new Color(1f, 0.32f, 0.12f, 1f));
+            if (variant == 1)
+            {
+                DrawCandleStem(texture, 11, 5, 4, 10, metal, flame, outline);
+                DrawCandleStem(texture, 16, 5, 4, 16, metal, flame, outline);
+                DrawCandleStem(texture, 21, 5, 4, 12, metal, flame, outline);
+                Fill(texture, 9, 10, 15, 2, outline);
+                Fill(texture, 10, 11, 13, 1, Shade(metal, 1.12f));
+            }
+            else if (variant == 2)
+            {
+                DrawCandleStem(texture, 12, 5, 5, 8, metal, flame, outline);
+                DrawCandleStem(texture, 18, 5, 4, 11, Shade(metal, 1.08f), flame, outline);
+                Fill(texture, 11, 5, 11, 2, outline);
+                Fill(texture, 12, 6, 9, 1, Shade(metal, 0.78f));
+                Set(texture, 20, 10, Shade(metal, 1.3f));
+                Set(texture, 13, 8, Shade(metal, 1.3f));
+            }
+            else
+            {
+                DrawCandleStem(texture, 16, 5, 4, 14, metal, flame, outline);
+                Fill(texture, 10, 12, 12, 2, outline);
+                Fill(texture, 11, 13, 10, 1, Shade(metal, 1.15f));
+                DrawCandleStem(texture, 10, 9, 3, 6, metal, flame, outline);
+                DrawCandleStem(texture, 21, 9, 3, 6, metal, flame, outline);
+            }
+        }
+
+        private static void DrawCandleStem(Texture2D texture, int centerX, int baseY, int width, int height, Color metal, Color flame, Color outline)
+        {
+            Fill(texture, centerX - width / 2, baseY, width, height, outline);
+            Fill(texture, centerX - width / 2 + 1, baseY + 1, Mathf.Max(1, width - 2), Mathf.Max(1, height - 2), metal);
+            var flameY = baseY + height + 3;
+            Diamond(texture, centerX, flameY, 4, 6, Shade(flame, 0.85f));
+            Diamond(texture, centerX, flameY + 1, 2, 4, Mix(flame, Color.white, 0.45f));
+            Set(texture, centerX, flameY + 3, Color.white);
+            Set(texture, centerX - 1, flameY - 1, new Color(1f, 0.32f, 0.12f, 1f));
+        }
+
+        private static void DrawFloorGuard(Texture2D texture, Color primary, Color accent, int variant)
+        {
+            var outline = new Color(0.035f, 0.035f, 0.045f, 1f);
+            var metal = Shade(primary, 0.78f);
+            var light = Mix(primary, Color.white, 0.25f);
+            Fill(texture, 4, 6, 24, 20, outline);
+            Fill(texture, 5, 7, 22, 18, metal);
+            Fill(texture, 6, 22, 20, 2, light);
+            Fill(texture, 6, 8, 20, 2, Shade(primary, 0.52f));
+            Line(texture, 7, 12, 24, 12, Shade(primary, 0.58f));
+            Line(texture, 7, 18, 24, 18, Shade(primary, 0.58f));
+
+            switch (variant)
+            {
+                case 1:
+                    Line(texture, 10, 22, 15, 16, outline);
+                    Line(texture, 15, 16, 13, 10, outline);
+                    Line(texture, 20, 20, 24, 15, Shade(primary, 0.42f));
+                    break;
+                case 2:
+                    Ring(texture, 16, 16, 6, 5, new Color(accent.r, accent.g, accent.b, 0.82f));
+                    Line(texture, 16, 10, 16, 22, accent);
+                    Line(texture, 10, 16, 22, 16, accent);
+                    Set(texture, 16, 16, Color.white);
+                    break;
+                case 3:
+                    Ellipse(texture, 15, 15, 8, 6, new Color(0.02f, 0.018f, 0.014f, 0.62f));
+                    Line(texture, 9, 12, 22, 19, new Color(0.86f, 0.36f, 0.16f, 1f));
+                    Set(texture, 20, 19, Color.white);
+                    break;
+            }
+        }
+
+        private static void DrawWallCorner(Texture2D texture, Color primary, Color accent, int variant)
+        {
+            var outline = new Color(0.035f, 0.032f, 0.045f, 1f);
+            var stone = Shade(primary, 0.82f);
+            Fill(texture, 4, 4, 9, 24, outline);
+            Fill(texture, 4, 19, 24, 9, outline);
+            Fill(texture, 6, 6, 5, 20, stone);
+            Fill(texture, 6, 21, 20, 5, stone);
+            Fill(texture, 11, 21, 4, 5, Shade(primary, 0.55f));
+            Fill(texture, 6, 15, 5, 4, Shade(primary, 0.55f));
+            Set(texture, 9, 24, Mix(primary, Color.white, 0.22f));
+            Set(texture, 20, 24, Mix(primary, Color.white, 0.16f));
+
+            switch (variant)
+            {
+                case 1:
+                    Line(texture, 8, 24, 14, 19, outline);
+                    Line(texture, 8, 17, 11, 12, outline);
+                    break;
+                case 2:
+                    Diamond(texture, 9, 23, 3, 2, accent);
+                    Diamond(texture, 9, 12, 2, 3, accent);
+                    Set(texture, 9, 23, Color.white);
+                    break;
+                case 3:
+                    Fill(texture, 7, 8, 3, 2, Shade(primary, 0.48f));
+                    Fill(texture, 17, 22, 5, 2, Shade(primary, 0.48f));
+                    Line(texture, 5, 27, 27, 5, new Color(0f, 0f, 0f, 0.22f));
+                    break;
+            }
+        }
+
+        private static void DrawPillar(Texture2D texture, Color primary, Color accent, int variant)
+        {
+            var outline = new Color(0.035f, 0.032f, 0.045f, 1f);
+            var stone = Shade(primary, 0.86f);
+            Ellipse(texture, 16, 5, 8, 2, new Color(0f, 0f, 0f, 0.28f));
+            Fill(texture, 8, 5, 16, 4, outline);
+            Fill(texture, 10, 6, 12, 2, Shade(primary, 0.62f));
+            Fill(texture, 10, 8, 12, 18, outline);
+            Fill(texture, 12, 9, 8, 16, stone);
+            Fill(texture, 15, 9, 2, 16, Mix(primary, Color.white, 0.2f));
+            Fill(texture, 7, 25, 18, 4, outline);
+            Fill(texture, 9, 26, 14, 2, Shade(primary, 0.62f));
+
+            if (variant == 1)
+            {
+                Line(texture, 12, 12, 20, 20, accent);
+                Line(texture, 12, 20, 20, 12, accent);
+                Ring(texture, 16, 16, 5, 4, new Color(accent.r, accent.g, accent.b, 0.52f));
+                Set(texture, 16, 16, Color.white);
+            }
+            else
+            {
+                Fill(texture, 11, 13, 10, 2, Shade(primary, 0.58f));
+                Fill(texture, 11, 19, 10, 2, Shade(primary, 0.58f));
+                Set(texture, 13, 16, accent);
+                Set(texture, 19, 16, accent);
+            }
         }
 
         private static void DrawRuneCircle(Texture2D texture, Color primary, Color secondary)
@@ -789,6 +1050,9 @@ namespace MagicExamHall
         MentorWatcherFrown,
         MentorArchivistNeutral,
         MentorArchivistHappy,
-        MentorArchivistFrown
+        MentorArchivistFrown,
+        FloorGuard,
+        WallCorner,
+        Pillar
     }
 }

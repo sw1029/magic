@@ -129,6 +129,9 @@ namespace MagicExamHall.Tests
                 PixelSpriteKind.Rug,
                 PixelSpriteKind.Bookshelf,
                 PixelSpriteKind.Candle,
+                PixelSpriteKind.FloorGuard,
+                PixelSpriteKind.WallCorner,
+                PixelSpriteKind.Pillar,
                 PixelSpriteKind.RuneCircle,
                 PixelSpriteKind.FireRune,
                 PixelSpriteKind.WaterRune,
@@ -149,6 +152,57 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void PixelArtFactorySelectsDeterministicPropVariants()
+        {
+            var position = new Vector2(2.25f, -1.5f);
+            var first = PixelArtFactory.SelectDeterministicVariant(PixelSpriteKind.FloorGuard, 5, position, "south guard");
+            var second = PixelArtFactory.SelectDeterministicVariant(PixelSpriteKind.FloorGuard, 5, position, "south guard");
+            var avoided = PixelArtFactory.SelectDeterministicVariantAvoiding(PixelSpriteKind.FloorGuard, 5, position, "south guard", first);
+
+            Assert.That(first, Is.EqualTo(second));
+            Assert.That(first, Is.InRange(0, PixelArtFactory.GetVariantCount(PixelSpriteKind.FloorGuard) - 1));
+            Assert.That(avoided, Is.InRange(0, PixelArtFactory.GetVariantCount(PixelSpriteKind.FloorGuard) - 1));
+            Assert.That(avoided, Is.Not.EqualTo(first));
+        }
+
+        [Test]
+        public void PixelArtFactoryFallsBackToBaseSpriteWhenVariantPngIsMissing()
+        {
+            PixelArtFactory.ResetExternalSpriteCache();
+
+            var sprite = PixelArtFactory.CreateSprite("missing bookshelf variant", Color.magenta, Color.green, PixelSpriteKind.Bookshelf, 99);
+
+            Assert.That(sprite, Is.Not.Null);
+            Assert.That(sprite.texture.name, Does.StartWith(PixelSpriteKind.Bookshelf.ToString()));
+        }
+
+        [Test]
+        public void PixelArtFactoryCreatesProceduralPropVariants()
+        {
+            var propKinds = new[]
+            {
+                PixelSpriteKind.Bookshelf,
+                PixelSpriteKind.Candle,
+                PixelSpriteKind.FloorGuard,
+                PixelSpriteKind.WallCorner,
+                PixelSpriteKind.Pillar
+            };
+
+            foreach (var kind in propKinds)
+            {
+                for (var variant = 0; variant < PixelArtFactory.GetVariantCount(kind); variant++)
+                {
+                    var texture = PixelArtFactory.CreateProceduralTexture($"procedural-{kind}-{variant}", Color.magenta, Color.green, kind, variant);
+
+                    Assert.That(texture, Is.Not.Null, $"{kind} {variant}");
+                    Assert.That(texture.width, Is.EqualTo(32), $"{kind} {variant}");
+                    Assert.That(texture.height, Is.EqualTo(32), $"{kind} {variant}");
+                    Assert.That(texture.name, Does.StartWith($"procedural-{kind}-{variant}"), $"{kind} {variant}");
+                }
+            }
+        }
+
+        [Test]
         public void PixelArtFactoryCreatesProceduralMentorSprites()
         {
             PixelArtFactory.ResetExternalSpriteCache();
@@ -162,6 +216,54 @@ namespace MagicExamHall.Tests
                 Assert.That(sprite.texture.height, Is.EqualTo(32), kind.ToString());
                 Assert.That(sprite.texture.name, Does.StartWith($"procedural-sentinel-{kind}"), kind.ToString());
             }
+        }
+
+        [Test]
+        public void PlayerSpriteLibraryLoadsBundledAnimationFrames()
+        {
+            PlayerSpriteLibrary.ResetCache();
+
+            var spriteSet = PlayerSpriteLibrary.Load(Color.magenta, Color.green);
+
+            Assert.That(spriteSet.HasExternalFrames, Is.True);
+            foreach (var facing in new[] { PlayerFacing.Down, PlayerFacing.Up, PlayerFacing.Left, PlayerFacing.Right })
+            {
+                Assert.That(spriteSet.GetFrameCount(PlayerAnimationState.Idle, facing), Is.EqualTo(2), facing.ToString());
+                Assert.That(spriteSet.GetFrameCount(PlayerAnimationState.Walk, facing), Is.EqualTo(4), facing.ToString());
+                AssertPlayerFrame(spriteSet.GetFrame(PlayerAnimationState.Idle, facing, 0), $"idle {facing}");
+                AssertPlayerFrame(spriteSet.GetFrame(PlayerAnimationState.Walk, facing, 3), $"walk {facing}");
+            }
+
+            Assert.That(spriteSet.GetFrameCount(PlayerAnimationState.CastCharge, PlayerFacing.Down), Is.EqualTo(3));
+            Assert.That(spriteSet.GetFrameCount(PlayerAnimationState.CastRelease, PlayerFacing.Down), Is.EqualTo(2));
+            AssertPlayerFrame(spriteSet.GetFrame(PlayerAnimationState.CastCharge, PlayerFacing.Down, 2), "cast charge");
+            AssertPlayerFrame(spriteSet.GetFrame(PlayerAnimationState.CastRelease, PlayerFacing.Down, 1), "cast release");
+        }
+
+        [Test]
+        public void PlayerSpriteSetFallsBackWhenAnimationFramesAreMissing()
+        {
+            PixelArtFactory.ResetExternalSpriteCache();
+
+            var spriteSet = PlayerSpriteLibrary.CreateFallbackSet(Color.magenta, Color.green);
+            var fallback = spriteSet.GetFrame(PlayerAnimationState.Walk, PlayerFacing.Left, 3);
+
+            Assert.That(spriteSet.HasExternalFrames, Is.False);
+            Assert.That(fallback, Is.Not.Null);
+            Assert.That(fallback.texture.width, Is.EqualTo(32));
+            Assert.That(fallback.texture.height, Is.EqualTo(32));
+        }
+
+        [Test]
+        public void FloorAutotileRendererBuildsCardinalMasks()
+        {
+            Assert.That(FloorAutotileRenderer.BuildMask(null, 1, 1, 3, 3), Is.EqualTo(15));
+            Assert.That(FloorAutotileRenderer.BuildMask(null, 0, 0, 3, 3), Is.EqualTo(3));
+            Assert.That(FloorAutotileRenderer.BuildMask(null, 2, 2, 3, 3), Is.EqualTo(12));
+
+            bool CrossMask(int x, int y, int width, int height) => x == 1 || y == 1;
+            Assert.That(FloorAutotileRenderer.BuildMask(CrossMask, 1, 1, 3, 3), Is.EqualTo(15));
+            Assert.That(FloorAutotileRenderer.BuildMask(CrossMask, 0, 1, 3, 3), Is.EqualTo(2));
         }
 
         [Test]
@@ -184,6 +286,22 @@ namespace MagicExamHall.Tests
             {
                 UnityEngine.Object.DestroyImmediate(body);
             }
+        }
+
+        [Test]
+        public void PixelMaterialProviderPrefersUrp2DSpriteMaterial()
+        {
+            var material = PixelMaterialProvider.SpriteMaterial;
+
+            Assert.That(material, Is.Not.Null);
+            Assert.That(material.shader.name, Does.StartWith("Universal Render Pipeline/2D/Sprite-"));
+        }
+
+        private static void AssertPlayerFrame(Sprite sprite, string context)
+        {
+            Assert.That(sprite, Is.Not.Null, context);
+            Assert.That(sprite.texture.width, Is.EqualTo(PlayerSpriteLibrary.FrameWidth), context);
+            Assert.That(sprite.texture.height, Is.EqualTo(PlayerSpriteLibrary.FrameHeight), context);
         }
 
         [Test]

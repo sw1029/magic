@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -14,7 +15,6 @@ namespace MagicExamHall.Editor
         private const string PrefabFolder = "Assets/MagicExamHall/Prefabs";
         private const string ResourcesFolder = "Assets/MagicExamHall/Resources";
         private const string MaterialFolder = "Assets/MagicExamHall/Resources/MagicExamHallMaterials";
-        private const float GameplayCameraOrthographicSize = 5.55f;
 
         [MenuItem("Magic Exam Hall/Rebuild Demo Scene")]
         public static void BuildAll()
@@ -26,7 +26,6 @@ namespace MagicExamHall.Editor
             scene.name = "MagicExamHall";
 
             var camera = CreateCamera();
-            CreateFloor();
             var player = CreatePlayer();
             var canvas = CreateCanvas();
             CreateEventSystem();
@@ -71,16 +70,16 @@ namespace MagicExamHall.Editor
 
         private static void EnsureMaterials()
         {
-            CreateOrUpdateMaterial($"{MaterialFolder}/PixelSpriteDefault.mat", "Sprites/Default");
+            CreateOrUpdateMaterial($"{MaterialFolder}/PixelSpriteDefault.mat", "Universal Render Pipeline/2D/Sprite-Lit-Default", "Universal Render Pipeline/2D/Sprite-Unlit-Default", "Sprites/Default");
             CreateOrUpdateMaterial($"{MaterialFolder}/PixelUIDefault.mat", "UI/Default");
         }
 
-        private static void CreateOrUpdateMaterial(string path, string shaderName)
+        private static void CreateOrUpdateMaterial(string path, params string[] shaderNames)
         {
-            var shader = Shader.Find(shaderName);
+            var shader = FindFirstShader(shaderNames);
             if (shader == null)
             {
-                Debug.LogWarning($"Could not find shader {shaderName}; material {path} was not generated.");
+                Debug.LogWarning($"Could not find a compatible shader for {path}.");
                 return;
             }
 
@@ -103,10 +102,7 @@ namespace MagicExamHall.Editor
             cameraObject.tag = "MainCamera";
             cameraObject.transform.position = new Vector3(0f, 0f, -10f);
             var camera = cameraObject.AddComponent<Camera>();
-            camera.orthographic = true;
-            camera.orthographicSize = GameplayCameraOrthographicSize;
-            camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.035f, 0.043f, 0.055f);
+            PixelRenderSetup.ConfigureCamera(camera, ExamGameController.GameplayCameraOrthographicSize, new Color(0.035f, 0.043f, 0.055f));
             return camera;
         }
 
@@ -168,7 +164,9 @@ namespace MagicExamHall.Editor
             sprite.kind = PixelSpriteKind.Player;
             sprite.primary = new Color(0.95f, 0.92f, 0.78f);
             sprite.secondary = new Color(0.28f, 0.62f, 0.96f);
-            sprite.sortingOrder = 4;
+            sprite.sortingOrder = 30;
+            var animator = player.AddComponent<PlayerSpriteAnimator>();
+            animator.SetSortingOrder(30);
             return player;
         }
 
@@ -202,11 +200,27 @@ namespace MagicExamHall.Editor
             var drawing = controllerObject.AddComponent<WorldDrawingController>();
             drawing.mainCamera = camera;
             drawing.ApplyPlayableDefaults();
+            PixelRenderSetup.EnsureGlobalLight(controllerObject.transform);
+            PixelRenderSetup.EnsurePlayerCastingLight(player);
         }
 
         private static void SavePrefabs(GameObject player)
         {
             PrefabUtility.SaveAsPrefabAsset(player, $"{PrefabFolder}/Apprentice.prefab");
+        }
+
+        private static Shader FindFirstShader(params string[] shaderNames)
+        {
+            foreach (var shaderName in shaderNames)
+            {
+                var shader = Shader.Find(shaderName);
+                if (shader != null)
+                {
+                    return shader;
+                }
+            }
+
+            return null;
         }
     }
 }

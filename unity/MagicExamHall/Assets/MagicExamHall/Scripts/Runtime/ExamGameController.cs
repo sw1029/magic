@@ -36,10 +36,12 @@ namespace MagicExamHall
         private SpellCastingService spellCasting = null!;
         private FloorGoalSystem floorGoals = null!;
         private MentorPresentationController mentor = null!;
+        private PlayerSpriteAnimator playerAnimator = null!;
         private RectTransform hudPanel = null!;
         private RectTransform notePanel = null!;
         private RectTransform reportPanel = null!;
         private RectTransform toastPanel = null!;
+        private Transform currentFloorRoot = null!;
         private Image hudAccent = null!;
         private Image noteAccent = null!;
         private Image reportAccent = null!;
@@ -53,6 +55,7 @@ namespace MagicExamHall
         private Text reportText = null!;
         private Text toastText = null!;
         private Font uiFont = null!;
+        private UnityEngine.Rendering.Universal.Light2D globalLight = null!;
         private string sessionId = "";
         private int trialCounter;
         private float floorStartedAt;
@@ -86,6 +89,24 @@ namespace MagicExamHall
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
         public int ActivePulseCountForTests => pulses.Count;
         public int VisibleGoalLabelCountForTests => activeGoals.Count(goal => goal.label != null);
+        public bool PlayerAnimationFramesLoadedForTests => playerAnimator != null && playerAnimator.HasExternalFrames;
+        public PlayerAnimationState PlayerAnimationStateForTests => playerAnimator == null ? PlayerAnimationState.Idle : playerAnimator.CurrentState;
+        public PlayerFacing PlayerFacingForTests => playerAnimator == null ? PlayerFacing.Down : playerAnimator.Facing;
+        public int PlayerAnimationFrameIndexForTests => playerAnimator == null ? 0 : playerAnimator.CurrentFrameIndex;
+        public int AutotileLayerCountForTests => FindObjectsByType<FloorAutotileLayer>(FindObjectsSortMode.None).Count(layer => layer.floorNumber == CurrentFloorNumber);
+        public int AutotilePlacedTileCountForTests => FindObjectsByType<FloorAutotileLayer>(FindObjectsSortMode.None).Where(layer => layer.floorNumber == CurrentFloorNumber).Sum(layer => layer.placedTileCount);
+        public int AutotileUniqueTileCountForTests => FindObjectsByType<FloorAutotileLayer>(FindObjectsSortMode.None).Where(layer => layer.floorNumber == CurrentFloorNumber).Sum(layer => layer.uniqueTileCount);
+        public int VariantPropCountForTests => ActiveVariantProps().Count();
+        public int UniquePropVariantCountForTests => ActiveVariantProps().Select(view => $"{view.kind}:{view.variantIndex}").Distinct().Count();
+        public bool HasAdjacentRepeatedPropVariantForTests => HasAdjacentRepeatedPropVariants();
+        public string AdjacentRepeatedPropVariantDetailsForTests => AdjacentRepeatedPropVariantDetails();
+        public string PropVariantSignatureForTests => string.Join("|", ActiveVariantProps()
+            .OrderBy(view => view.kind)
+            .ThenBy(view => Mathf.RoundToInt(view.transform.position.y * 100f))
+            .ThenBy(view => Mathf.RoundToInt(view.transform.position.x * 100f))
+            .Select(view => $"{view.name}:{view.kind}:{view.variantIndex}:{Mathf.RoundToInt(view.transform.position.x * 100f)}:{Mathf.RoundToInt(view.transform.position.y * 100f)}"));
+        public float MinGoalLabelWorldWidthForTests => activeGoals.Where(goal => goal.label != null).Select(goal => WorldLabelSize(goal.label.rectTransform).x).DefaultIfEmpty(0f).Min();
+        public float MaxGoalLabelWorldHeightForTests => activeGoals.Where(goal => goal.label != null).Select(goal => WorldLabelSize(goal.label.rectTransform).y).DefaultIfEmpty(0f).Max();
         public string OutputDirectory => logger?.OutputDirectory ?? "";
         public float PendingAdvanceSecondsForTests => pendingAdvanceAt < 0f ? -1f : pendingAdvanceAt - Time.time;
         public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
@@ -141,6 +162,7 @@ namespace MagicExamHall
             }
 
             trialCounter++;
+            PlayPlayerCastAnimation();
             var outcome = spellCasting.ProcessHandoff(handoff, seals.Select(view => view.seal).ToList(), Time.time);
             ApplySpellOutcome(outcome);
             return outcome;
@@ -194,6 +216,18 @@ namespace MagicExamHall
             player.position = worldPosition;
         }
 
+        public void SetPlayerMotionForTests(Vector2 motion)
+        {
+            var input = motion.sqrMagnitude > 1f ? motion.normalized : motion;
+            velocity = input * 4.2f;
+            playerAnimator?.SetMotion(input, velocity);
+        }
+
+        public void TriggerPlayerCastAnimationForTests()
+        {
+            PlayPlayerCastAnimation();
+        }
+
         private void ResolveSceneReferences()
         {
             mainCamera ??= Camera.main;
@@ -205,6 +239,7 @@ namespace MagicExamHall
                 mainCamera = cameraObject.AddComponent<Camera>();
             }
             ConfigureMainCamera(mainCamera);
+            globalLight = PixelRenderSetup.EnsureGlobalLight(transform);
 
             if (player == null)
             {
@@ -219,6 +254,8 @@ namespace MagicExamHall
                 sprite.sortingOrder = 30;
                 player = playerObject.transform;
             }
+            ConfigurePlayerAnimator();
+            PixelRenderSetup.EnsurePlayerCastingLight(player);
 
             if (canvas == null)
             {
@@ -254,12 +291,20 @@ namespace MagicExamHall
             mentor.Initialize(canvas, uiFont);
         }
 
+        private void ConfigurePlayerAnimator()
+        {
+            if (player == null)
+            {
+                return;
+            }
+
+            playerAnimator = player.GetComponent<PlayerSpriteAnimator>() ?? player.gameObject.AddComponent<PlayerSpriteAnimator>();
+            playerAnimator.SetSortingOrder(30);
+        }
+
         private static void ConfigureMainCamera(Camera camera)
         {
-            camera.orthographic = true;
-            camera.orthographicSize = GameplayCameraOrthographicSize;
-            camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.035f, 0.043f, 0.055f);
+            PixelRenderSetup.ConfigureCamera(camera, GameplayCameraOrthographicSize, new Color(0.035f, 0.043f, 0.055f));
         }
 
         private void BuildUi()
@@ -318,16 +363,10 @@ namespace MagicExamHall
         {
             var floorRoot = new GameObject($"Floor {floor.number} - {floor.title}");
             floorObjects.Add(floorRoot);
+            currentFloorRoot = floorRoot.transform;
             var palette = FloorPalette.For(floor);
-            CreateWorldSprite("Exam Hall Backdrop", Vector2.zero, Vector3.one, palette.backdrop, palette.backdropLine, PixelSpriteKind.FloorTile, -9, true, new Vector2(20.5f, 11.6f), floorRoot.transform);
-            CreateWorldSprite("Stone Tile Floor", Vector2.zero, Vector3.one, palette.floor, palette.floorLine, PixelSpriteKind.FloorTile, -7, true, new Vector2(16.4f, 10f), floorRoot.transform);
-            CreateWorldSprite("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, palette.northWall, floor.accentColor, PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 1.15f), floorRoot.transform);
-            CreateWorldSprite("South Carved Wall", new Vector2(0f, -4.95f), Vector3.one, palette.southWall, palette.floorLine, PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 0.8f), floorRoot.transform);
-            CreateWorldSprite("Center Runner", new Vector2(0f, 0.12f), Vector3.one, floor.rugColor, floor.accentColor, PixelSpriteKind.Rug, -5, true, new Vector2(2.2f, 7.6f), floorRoot.transform);
-            CreateWorldSprite("West Bookcase", new Vector2(-7.25f, 1.1f), Vector3.one * 1.15f, palette.shelfWood, floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
-            CreateWorldSprite("East Bookcase", new Vector2(7.25f, 1.1f), Vector3.one * 1.15f, palette.shelfWood, floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
-            CreateWorldSprite("Northwest Candle", new Vector2(-6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), palette.candleFlame, PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
-            CreateWorldSprite("Northeast Candle", new Vector2(6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), palette.candleFlame, PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
+            BuildAutotileArchitecture(floor, palette, floorRoot.transform);
+            BuildPropVariants(floor, palette, floorRoot.transform);
             BuildFloorAtmosphere(floor, palette, floorRoot.transform);
 
             foreach (var goal in activeGoals)
@@ -349,12 +388,271 @@ namespace MagicExamHall
             }
         }
 
+        private void BuildAutotileArchitecture(FloorDefinition floor, FloorPalette palette, Transform floorRoot)
+        {
+            var seed = floor.number * 137;
+            FloorAutotileRenderer.CreateRectLayer(
+                "Exam Hall Backdrop Autotile",
+                floorRoot,
+                floor.number,
+                Vector2.zero,
+                22,
+                13,
+                new FloorAutotileTheme(palette.backdrop, palette.backdropLine, floor.accentColor, FloorAutotileLayerKind.Backdrop, seed + 1),
+                -10);
+
+            FloorAutotileRenderer.CreateRectLayer(
+                "Stone Tile Floor Autotile",
+                floorRoot,
+                floor.number,
+                Vector2.zero,
+                17,
+                10,
+                new FloorAutotileTheme(palette.floor, palette.floorLine, floor.accentColor, FloorAutotileLayerKind.Floor, seed + 2),
+                -7,
+                (x, y, width, height) => FloorShapeMask(floor.number, x, y, width, height));
+
+            FloorAutotileRenderer.CreateRectLayer(
+                "North Carved Wall Autotile",
+                floorRoot,
+                floor.number,
+                new Vector2(0f, 4.95f),
+                17,
+                1,
+                new FloorAutotileTheme(palette.northWall, palette.floorLine, floor.accentColor, FloorAutotileLayerKind.Wall, seed + 3),
+                -4);
+
+            FloorAutotileRenderer.CreateRectLayer(
+                "South Carved Wall Autotile",
+                floorRoot,
+                floor.number,
+                new Vector2(0f, -4.95f),
+                17,
+                1,
+                new FloorAutotileTheme(palette.southWall, palette.floorLine, floor.accentColor, FloorAutotileLayerKind.Wall, seed + 4),
+                -4);
+
+            FloorAutotileRenderer.CreateRectLayer(
+                "Center Runner Autotile",
+                floorRoot,
+                floor.number,
+                new Vector2(0f, 0.12f),
+                3,
+                8,
+                new FloorAutotileTheme(floor.rugColor, palette.floorLine, floor.accentColor, FloorAutotileLayerKind.Rug, seed + 5),
+                -5,
+                (x, y, width, height) => RunnerShapeMask(floor.number, x, y, width, height));
+
+            if (floor.number == 3)
+            {
+                FloorAutotileRenderer.CreateRectLayer(
+                    "Flow Side Runner West Autotile",
+                    floorRoot,
+                    floor.number,
+                    new Vector2(-4.25f, 0f),
+                    2,
+                    5,
+                    new FloorAutotileTheme(Color.Lerp(floor.rugColor, new Color(0.48f, 0.84f, 1f), 0.35f), palette.floorLine, floor.accentColor, FloorAutotileLayerKind.Rug, seed + 6),
+                    -5);
+                FloorAutotileRenderer.CreateRectLayer(
+                    "Flow Side Runner East Autotile",
+                    floorRoot,
+                    floor.number,
+                    new Vector2(4.25f, 0f),
+                    2,
+                    5,
+                    new FloorAutotileTheme(Color.Lerp(floor.rugColor, new Color(0.35f, 0.86f, 0.42f), 0.35f), palette.floorLine, floor.accentColor, FloorAutotileLayerKind.Rug, seed + 7),
+                    -5);
+            }
+            else if (floor.number == 5)
+            {
+                FloorAutotileRenderer.CreateRectLayer(
+                    "Final Seal Plaza Autotile",
+                    floorRoot,
+                    floor.number,
+                    Vector2.zero,
+                    9,
+                    6,
+                    new FloorAutotileTheme(Color.Lerp(palette.floor, floor.accentColor, 0.18f), palette.floorLine, floor.accentColor, FloorAutotileLayerKind.Floor, seed + 8),
+                    -6,
+                    FinalPlazaMask);
+            }
+        }
+
+        private void BuildPropVariants(FloorDefinition floor, FloorPalette palette, Transform floorRoot)
+        {
+            var westShelfVariant = CreateVariantProp(
+                floor,
+                floorRoot,
+                "West Bookcase",
+                new Vector2(-7.25f, 1.1f),
+                Vector3.one * 1.15f,
+                palette.shelfWood,
+                floor.accentColor,
+                PixelSpriteKind.Bookshelf,
+                -1);
+            CreateVariantProp(
+                floor,
+                floorRoot,
+                "East Bookcase",
+                new Vector2(7.25f, 1.1f),
+                Vector3.one * 1.15f,
+                palette.shelfWood,
+                floor.accentColor,
+                PixelSpriteKind.Bookshelf,
+                -1,
+                avoidVariant: westShelfVariant);
+
+            var candleMetal = Color.Lerp(new Color(0.63f, 0.57f, 0.44f), floor.accentColor, 0.12f);
+            var westCandleVariant = CreateVariantProp(
+                floor,
+                floorRoot,
+                "Northwest Candle",
+                new Vector2(-6.85f, 3.65f),
+                Vector3.one * 0.85f,
+                candleMetal,
+                palette.candleFlame,
+                PixelSpriteKind.Candle,
+                2);
+            CreateVariantProp(
+                floor,
+                floorRoot,
+                "Northeast Candle",
+                new Vector2(6.85f, 3.65f),
+                Vector3.one * 0.85f,
+                candleMetal,
+                palette.candleFlame,
+                PixelSpriteKind.Candle,
+                2,
+                avoidVariant: westCandleVariant);
+
+            var pillarColor = Color.Lerp(palette.northWall, palette.floor, 0.28f);
+            var westPillarVariant = CreateVariantProp(
+                floor,
+                floorRoot,
+                "West Carved Pillar",
+                new Vector2(-7.75f, 2.82f),
+                Vector3.one * 0.82f,
+                pillarColor,
+                floor.accentColor,
+                PixelSpriteKind.Pillar,
+                -2);
+            CreateVariantProp(
+                floor,
+                floorRoot,
+                "East Carved Pillar",
+                new Vector2(7.75f, 2.82f),
+                Vector3.one * 0.82f,
+                pillarColor,
+                floor.accentColor,
+                PixelSpriteKind.Pillar,
+                -2,
+                avoidVariant: westPillarVariant);
+
+            var northwestCornerPosition = new Vector2(-8.15f, 4.5f);
+            var southwestCornerPosition = new Vector2(-8.15f, -4.5f);
+            CreateVariantProp(floor, floorRoot, "Northwest Wall Corner", northwestCornerPosition, Vector3.one * 0.82f, palette.northWall, floor.accentColor, PixelSpriteKind.WallCorner, -3);
+            CreateVariantProp(floor, floorRoot, "Northeast Wall Corner", new Vector2(8.15f, 4.5f), Vector3.one * 0.82f, palette.northWall, floor.accentColor, PixelSpriteKind.WallCorner, -3, avoidVariant: PixelArtFactory.SelectDeterministicVariant(PixelSpriteKind.WallCorner, floor.number, northwestCornerPosition, "Northwest Wall Corner"), rotationZ: -90f);
+            CreateVariantProp(floor, floorRoot, "Southwest Wall Corner", southwestCornerPosition, Vector3.one * 0.82f, palette.southWall, floor.accentColor, PixelSpriteKind.WallCorner, -3, rotationZ: 90f);
+            CreateVariantProp(floor, floorRoot, "Southeast Wall Corner", new Vector2(8.15f, -4.5f), Vector3.one * 0.82f, palette.southWall, floor.accentColor, PixelSpriteKind.WallCorner, -3, avoidVariant: PixelArtFactory.SelectDeterministicVariant(PixelSpriteKind.WallCorner, floor.number, southwestCornerPosition, "Southwest Wall Corner"), rotationZ: 180f);
+
+            var guardColor = Color.Lerp(palette.floor, floor.accentColor, floor.number == 4 ? 0.36f : 0.18f);
+            var guardPositions = new[]
+            {
+                new Vector2(-5.85f, -3.32f),
+                new Vector2(-2.9f, -3.48f),
+                new Vector2(0f, -3.32f),
+                new Vector2(2.9f, -3.48f),
+                new Vector2(5.85f, -3.32f)
+            };
+            var previousGuardVariant = PixelArtFactory.NoVariantIndex;
+            for (var index = 0; index < guardPositions.Length; index++)
+            {
+                previousGuardVariant = CreateVariantProp(
+                    floor,
+                    floorRoot,
+                    $"South Floor Guard {index + 1}",
+                    guardPositions[index],
+                    Vector3.one * 0.66f,
+                    guardColor,
+                    floor.accentColor,
+                    PixelSpriteKind.FloorGuard,
+                    -2,
+                    avoidVariant: previousGuardVariant);
+            }
+
+            var westGuardPosition = new Vector2(-6.05f, 0.2f);
+            CreateVariantProp(floor, floorRoot, "West Side Floor Guard", westGuardPosition, Vector3.one * 0.58f, guardColor, floor.accentColor, PixelSpriteKind.FloorGuard, -2, rotationZ: 90f);
+            CreateVariantProp(floor, floorRoot, "East Side Floor Guard", new Vector2(6.05f, 0.2f), Vector3.one * 0.58f, guardColor, floor.accentColor, PixelSpriteKind.FloorGuard, -2, avoidVariant: PixelArtFactory.SelectDeterministicVariant(PixelSpriteKind.FloorGuard, floor.number, westGuardPosition, "West Side Floor Guard"), rotationZ: -90f);
+        }
+
+        private int CreateVariantProp(
+            FloorDefinition floor,
+            Transform floorRoot,
+            string name,
+            Vector2 position,
+            Vector3 scale,
+            Color primary,
+            Color secondary,
+            PixelSpriteKind kind,
+            int sortingOrder,
+            int avoidVariant = PixelArtFactory.NoVariantIndex,
+            float rotationZ = 0f)
+        {
+            var variant = PixelArtFactory.SelectDeterministicVariantAvoiding(kind, floor.number, position, name, avoidVariant);
+            var body = CreateWorldSprite(name, position, scale, primary, secondary, kind, sortingOrder, false, Vector2.one, floorRoot, variantIndex: variant);
+            if (!Mathf.Approximately(rotationZ, 0f))
+            {
+                body.transform.rotation = Quaternion.Euler(0f, 0f, rotationZ);
+            }
+
+            return variant;
+        }
+
+        private static bool FloorShapeMask(int floorNumber, int x, int y, int width, int height)
+        {
+            var left = x;
+            var right = width - 1 - x;
+            var bottom = y;
+            var top = height - 1 - y;
+            var edgeDistance = Mathf.Min(Mathf.Min(left, right), Mathf.Min(bottom, top));
+
+            return floorNumber switch
+            {
+                2 => edgeDistance > 0 || x is > 1 and < 15,
+                3 => !(edgeDistance == 0 && (x + y) % 3 == 0),
+                4 => !(edgeDistance == 0 && (x < 2 || x > width - 3) && y is > 1 and < 8),
+                5 => Mathf.Abs(x - (width - 1) * 0.5f) + Mathf.Abs(y - (height - 1) * 0.5f) * 0.78f <= 7.4f,
+                _ => true
+            };
+        }
+
+        private static bool RunnerShapeMask(int floorNumber, int x, int y, int width, int height)
+        {
+            if (floorNumber == 4 && y % 3 == 1 && x == 1)
+            {
+                return false;
+            }
+
+            return floorNumber != 5 || y > 0 && y < height - 1 || x == 1;
+        }
+
+        private static bool FinalPlazaMask(int x, int y, int width, int height)
+        {
+            return Mathf.Abs(x - (width - 1) * 0.5f) + Mathf.Abs(y - (height - 1) * 0.5f) * 1.15f <= 5.0f;
+        }
+
         private void ApplyFloorTheme(FloorDefinition floor)
         {
             var palette = FloorPalette.For(floor);
             if (mainCamera != null)
             {
                 mainCamera.backgroundColor = palette.cameraBackground;
+            }
+            if (globalLight != null)
+            {
+                var lightColor = Color.Lerp(palette.cameraBackground, Color.white, 0.38f);
+                PixelRenderSetup.ConfigureGlobalLight(globalLight, lightColor, PixelRenderSetup.DefaultGlobalLightIntensity);
             }
 
             var accent = floor.accentColor;
@@ -451,8 +749,14 @@ namespace MagicExamHall
         private ProcessedSpell ProcessSpellGroup(List<List<StrokeSample>> strokes, Vector2 center, int strokeCount)
         {
             trialCounter++;
+            PlayPlayerCastAnimation();
             var outcome = spellCasting.Process(strokes, center, strokeCount, seals.Select(view => view.seal).ToList(), Time.time);
             return ApplySpellOutcome(outcome);
+        }
+
+        private void PlayPlayerCastAnimation()
+        {
+            playerAnimator?.PlayCast();
         }
 
         private ProcessedSpell ApplySpellOutcome(SpellCastOutcome outcome)
@@ -971,6 +1275,7 @@ namespace MagicExamHall
             velocity = Vector2.Lerp(velocity, input * 4.2f, Time.deltaTime * 12f);
             player.position += (Vector3)(velocity * Time.deltaTime);
             player.position = new Vector3(Mathf.Clamp(player.position.x, -7.35f, 7.35f), Mathf.Clamp(player.position.y, -4.25f, 4.25f), 0f);
+            playerAnimator?.SetMotion(input, velocity);
         }
 
         private void TickHazards()
@@ -1382,6 +1687,7 @@ namespace MagicExamHall
                 }
             }
             floorObjects.Clear();
+            currentFloorRoot = null;
             foreach (var seal in seals)
             {
                 if (seal.root != null)
@@ -1392,7 +1698,7 @@ namespace MagicExamHall
             seals.Clear();
         }
 
-        private GameObject CreateWorldSprite(string name, Vector2 position, Vector3 scale, Color primary, Color secondary, PixelSpriteKind kind, int sortingOrder, bool tiled = false, Vector2 tiledSize = default, Transform parent = null)
+        private GameObject CreateWorldSprite(string name, Vector2 position, Vector3 scale, Color primary, Color secondary, PixelSpriteKind kind, int sortingOrder, bool tiled = false, Vector2 tiledSize = default, Transform parent = null, int variantIndex = PixelArtFactory.NoVariantIndex)
         {
             var body = new GameObject(name);
             body.transform.SetParent(parent, true);
@@ -1401,6 +1707,7 @@ namespace MagicExamHall
             body.AddComponent<SpriteRenderer>();
             var pixelSprite = body.AddComponent<PixelSpriteView>();
             pixelSprite.kind = kind;
+            pixelSprite.variantIndex = variantIndex;
             pixelSprite.primary = primary;
             pixelSprite.secondary = secondary;
             pixelSprite.rendererTint = RuntimeTintFor(kind, primary);
@@ -1408,6 +1715,7 @@ namespace MagicExamHall
             pixelSprite.tiled = tiled;
             pixelSprite.tiledSize = tiledSize == default ? Vector2.one : tiledSize;
             pixelSprite.Apply();
+            PixelRenderSetup.ConfigureSpriteLight(body, kind, primary, secondary, name);
             return body;
         }
 
@@ -1417,9 +1725,50 @@ namespace MagicExamHall
             {
                 PixelSpriteKind.Pulse or PixelSpriteKind.RuneCircle => new Color(primary.r, primary.g, primary.b, primary.a),
                 PixelSpriteKind.FloorTile or PixelSpriteKind.WallTrim or PixelSpriteKind.Rug => Color.Lerp(Color.white, primary, 0.46f),
-                PixelSpriteKind.Bookshelf or PixelSpriteKind.Candle or PixelSpriteKind.Station or PixelSpriteKind.Target => Color.Lerp(Color.white, primary, 0.20f),
+                PixelSpriteKind.Bookshelf or PixelSpriteKind.Candle or PixelSpriteKind.FloorGuard or PixelSpriteKind.WallCorner or PixelSpriteKind.Pillar or PixelSpriteKind.Station or PixelSpriteKind.Target => Color.Lerp(Color.white, primary, 0.20f),
                 _ => Color.white
             };
+        }
+
+        private IEnumerable<PixelSpriteView> ActiveVariantProps()
+        {
+            return currentFloorRoot == null
+                ? Enumerable.Empty<PixelSpriteView>()
+                : currentFloorRoot.GetComponentsInChildren<PixelSpriteView>()
+                    .Where(view => view != null && IsVariantPropKind(view.kind) && view.variantIndex >= 0);
+        }
+
+        private bool HasAdjacentRepeatedPropVariants()
+        {
+            return AdjacentRepeatedPropVariantDetails().Length > 0;
+        }
+
+        private string AdjacentRepeatedPropVariantDetails()
+        {
+            var propRows = ActiveVariantProps()
+                .GroupBy(view => $"{view.kind}:{Mathf.RoundToInt(view.transform.position.y * 2f)}");
+            foreach (var row in propRows)
+            {
+                var ordered = row.OrderBy(view => view.transform.position.x).ToList();
+                for (var index = 1; index < ordered.Count; index++)
+                {
+                    if (ordered[index].variantIndex == ordered[index - 1].variantIndex)
+                    {
+                        return $"{row.Key}:{ordered[index - 1].name}->{ordered[index].name}:v{ordered[index].variantIndex}";
+                    }
+                }
+            }
+
+            return "";
+        }
+
+        private static bool IsVariantPropKind(PixelSpriteKind kind)
+        {
+            return kind is PixelSpriteKind.Bookshelf
+                or PixelSpriteKind.Candle
+                or PixelSpriteKind.FloorGuard
+                or PixelSpriteKind.WallCorner
+                or PixelSpriteKind.Pillar;
         }
 
         private static Color WithAlpha(Color color, float alpha)
@@ -1431,24 +1780,33 @@ namespace MagicExamHall
         {
             var canvasObject = new GameObject($"{goal.title} Goal Label");
             canvasObject.transform.SetParent(parent, false);
-            canvasObject.transform.position = goal.position + new Vector2(0f, -0.86f);
+            canvasObject.transform.position = goal.position + new Vector2(0f, -0.78f);
             var worldCanvas = canvasObject.AddComponent<Canvas>();
             worldCanvas.renderMode = RenderMode.WorldSpace;
             worldCanvas.overrideSorting = true;
             worldCanvas.sortingOrder = 42;
             var rect = canvasObject.GetComponent<RectTransform>() ?? canvasObject.AddComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(4.2f, 0.92f);
-            canvasObject.transform.localScale = Vector3.one * 0.026f;
+            rect.sizeDelta = new Vector2(148f, 36f);
+            canvasObject.transform.localScale = Vector3.one * 0.012f;
 
             var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, rect.sizeDelta, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, 0.86f));
             background.raycastTarget = false;
-            var accent = CreateImage("Goal Label Accent", canvasObject.transform, Vector2.zero, new Vector2(rect.sizeDelta.x, 0.08f), Anchor.TopLeft, WithAlpha(goal.color, 0.80f));
+            var accent = CreateImage("Goal Label Accent", canvasObject.transform, Vector2.zero, new Vector2(rect.sizeDelta.x, 3f), Anchor.TopLeft, WithAlpha(goal.color, 0.80f));
             accent.raycastTarget = false;
-            var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 28, FontStyle.Bold, Vector2.zero, rect.sizeDelta, Anchor.Center);
+            var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 18, FontStyle.Bold, Vector2.zero, rect.sizeDelta, Anchor.Center);
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.Lerp(goal.color, Color.white, 0.45f);
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
             text.raycastTarget = false;
             return text;
+        }
+
+        private static Vector2 WorldLabelSize(RectTransform rect)
+        {
+            var scale = rect.lossyScale;
+            var size = rect.rect.size;
+            return new Vector2(Mathf.Abs(size.x * scale.x), Mathf.Abs(size.y * scale.y));
         }
 
         private Image CreateImage(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)

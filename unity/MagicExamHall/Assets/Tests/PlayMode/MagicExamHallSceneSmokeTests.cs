@@ -5,7 +5,9 @@ using MagicExamHall;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
+using UnityEngine.Tilemaps;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
@@ -31,6 +33,17 @@ namespace MagicExamHall.Tests
             Assert.That(Camera.main, Is.Not.Null);
             Assert.That(Camera.main.clearFlags, Is.EqualTo(CameraClearFlags.SolidColor));
             Assert.That(Camera.main.orthographicSize, Is.EqualTo(ExamGameController.GameplayCameraOrthographicSize).Within(0.001f));
+            var pixelPerfect = Camera.main.GetComponent<PixelPerfectCamera>();
+            Assert.That(pixelPerfect, Is.Not.Null);
+            Assert.That(pixelPerfect.assetsPPU, Is.EqualTo(PixelRenderSetup.AssetsPixelsPerUnit));
+            Assert.That(pixelPerfect.refResolutionX, Is.EqualTo(PixelRenderSetup.ReferenceResolutionX));
+            Assert.That(pixelPerfect.refResolutionY, Is.EqualTo(PixelRenderSetup.ReferenceResolutionY));
+            Assert.That(pixelPerfect.cropFrame, Is.EqualTo(PixelPerfectCamera.CropFrame.Windowbox));
+            Assert.That(pixelPerfect.gridSnapping, Is.EqualTo(PixelPerfectCamera.GridSnapping.PixelSnapping));
+            var globalLight = Object.FindObjectsByType<Light2D>(FindObjectsSortMode.None).FirstOrDefault(light => light.lightType == Light2D.LightType.Global);
+            Assert.That(globalLight, Is.Not.Null);
+            Assert.That(globalLight.intensity, Is.InRange(0.3f, 0.5f));
+            Assert.That(Object.FindObjectsByType<Light2D>(FindObjectsSortMode.None).Count(light => light.lightType == Light2D.LightType.Point), Is.GreaterThanOrEqualTo(3));
             var drawing = Object.FindFirstObjectByType<WorldDrawingController>();
             Assert.That(drawing, Is.Not.Null);
             Assert.That(drawing.bufferSeconds, Is.EqualTo(WorldDrawingController.DefaultBufferSeconds).Within(0.001f));
@@ -40,6 +53,101 @@ namespace MagicExamHall.Tests
             Assert.That(controller.CurrentMentorNameForTests, Is.EqualTo("발착층 조교"));
             Assert.That(controller.MentorSpeechTextForTests, Is.EqualTo(controller.LastMagicNoteText));
             Assert.That(controller.OutputDirectory, Does.Contain("MagicExamHallLogs"));
+            var playerAnimator = Object.FindFirstObjectByType<PlayerSpriteAnimator>();
+            Assert.That(playerAnimator, Is.Not.Null);
+            Assert.That(controller.PlayerAnimationFramesLoadedForTests, Is.True);
+            Assert.That(controller.PlayerAnimationStateForTests, Is.EqualTo(PlayerAnimationState.Idle));
+            Assert.That(controller.PlayerFacingForTests, Is.EqualTo(PlayerFacing.Down));
+            Assert.That(playerAnimator.GetComponent<SpriteRenderer>().sprite.texture.width, Is.EqualTo(PlayerSpriteLibrary.FrameWidth));
+            Assert.That(controller.AutotileLayerCountForTests, Is.GreaterThanOrEqualTo(5));
+            Assert.That(controller.AutotilePlacedTileCountForTests, Is.GreaterThan(450));
+            Assert.That(controller.AutotileUniqueTileCountForTests, Is.GreaterThan(32));
+            Assert.That(controller.VariantPropCountForTests, Is.GreaterThanOrEqualTo(16));
+            Assert.That(controller.UniquePropVariantCountForTests, Is.GreaterThanOrEqualTo(7));
+            Assert.That(controller.HasAdjacentRepeatedPropVariantForTests, Is.False);
+            Assert.That(Object.FindObjectsByType<TilemapRenderer>(FindObjectsSortMode.None).Length, Is.GreaterThanOrEqualTo(5));
+            Assert.That(
+                Object.FindObjectsByType<PixelSpriteView>(FindObjectsSortMode.None)
+                    .Count(view => view.tiled && view.kind is PixelSpriteKind.FloorTile or PixelSpriteKind.WallTrim or PixelSpriteKind.Rug),
+                Is.EqualTo(0));
+        }
+
+        [UnityTest]
+        public IEnumerator AutotileLayersStayPopulatedAcrossFloors()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            for (var floor = 0; floor < controller.FloorCount; floor++)
+            {
+                controller.LoadFloorForTests(floor);
+                yield return null;
+
+                Assert.That(controller.AutotileLayerCountForTests, Is.GreaterThanOrEqualTo(5), $"floor {floor + 1}");
+                Assert.That(controller.AutotilePlacedTileCountForTests, Is.GreaterThan(450), $"floor {floor + 1}");
+                Assert.That(controller.AutotileUniqueTileCountForTests, Is.GreaterThan(32), $"floor {floor + 1}");
+                Assert.That(controller.MinGoalLabelWorldWidthForTests, Is.GreaterThan(1.3f), $"floor {floor + 1}");
+                Assert.That(controller.MaxGoalLabelWorldHeightForTests, Is.LessThan(0.55f), $"floor {floor + 1}");
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator PropVariantsStayDeterministicAcrossFloorReloads()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            for (var floor = 0; floor < controller.FloorCount; floor++)
+            {
+                controller.LoadFloorForTests(floor);
+                yield return null;
+                var firstSignature = controller.PropVariantSignatureForTests;
+
+                controller.LoadFloorForTests((floor + 1) % controller.FloorCount);
+                yield return null;
+                controller.LoadFloorForTests(floor);
+                yield return null;
+
+                Assert.That(controller.PropVariantSignatureForTests, Is.EqualTo(firstSignature), $"floor {floor + 1}");
+                Assert.That(controller.VariantPropCountForTests, Is.GreaterThanOrEqualTo(16), $"floor {floor + 1}");
+                Assert.That(controller.UniquePropVariantCountForTests, Is.GreaterThanOrEqualTo(7), $"floor {floor + 1}");
+                Assert.That(controller.HasAdjacentRepeatedPropVariantForTests, Is.False, $"floor {floor + 1}: {controller.AdjacentRepeatedPropVariantDetailsForTests}");
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerAnimationTracksMovementAndCasting()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(controller.PlayerAnimationFramesLoadedForTests, Is.True);
+
+            controller.SetPlayerMotionForTests(Vector2.right);
+            Assert.That(controller.PlayerFacingForTests, Is.EqualTo(PlayerFacing.Right));
+            Assert.That(controller.PlayerAnimationStateForTests, Is.EqualTo(PlayerAnimationState.Walk));
+            var walkFrame = controller.PlayerAnimationFrameIndexForTests;
+            yield return new WaitForSeconds(0.18f);
+            Assert.That(controller.PlayerAnimationStateForTests, Is.EqualTo(PlayerAnimationState.Walk));
+            Assert.That(controller.PlayerAnimationFrameIndexForTests, Is.Not.EqualTo(walkFrame));
+
+            controller.TriggerPlayerCastAnimationForTests();
+            Assert.That(controller.PlayerAnimationStateForTests, Is.EqualTo(PlayerAnimationState.CastCharge));
+            yield return new WaitForSeconds(0.4f);
+            Assert.That(controller.PlayerAnimationStateForTests, Is.EqualTo(PlayerAnimationState.CastRelease));
+            yield return new WaitForSeconds(0.3f);
+            Assert.That(controller.PlayerAnimationStateForTests, Is.EqualTo(PlayerAnimationState.Idle));
         }
 
         [UnityTest]
@@ -54,6 +162,8 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1));
             Assert.That(controller.VisibleGoalLabelCountForTests, Is.EqualTo(controller.ActiveGoalCount));
+            Assert.That(controller.MinGoalLabelWorldWidthForTests, Is.GreaterThan(1.3f));
+            Assert.That(controller.MaxGoalLabelWorldHeightForTests, Is.LessThan(0.55f));
             Assert.That(controller.HudCopyForTests, Does.Contain("표식 아래 라벨"));
             Assert.That(controller.HudCopyForTests, Does.Contain("남은 표식"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("표식 근처"));

@@ -13,6 +13,20 @@
 3. Play 모드 실행 시 자동 교체.
 4. `docs/CREDITS.md`에 출처를 한 줄 추가합니다.
 
+## Variant prop 규칙
+
+Prop variant는 `PixelSpriteView.variantIndex`로 선택합니다.
+PNG는 `Bookshelf_0.png`처럼 `PixelSpriteKind` 이름 뒤에 `_숫자`를 붙이거나, `Bookshelf/0.png`처럼 kind 폴더 아래에 둘 수 있습니다.
+로더는 variant PNG, base PNG, 절차 fallback 순서로 찾습니다.
+
+현재 내부 제작 variant:
+
+- `Bookshelf_0..2`
+- `Candle_0..2`
+- `FloorGuard_0..3`
+- `WallCorner_0..3`
+- `Pillar_0..1`
+
 내장 PNG는 프로젝트 내부 제작 자산이라 별도 외부 라이선스 표기가 필요 없습니다.
 
 ## 라이선스 보관

@@ -1,5 +1,5 @@
 - id: T30-05
-- status: blocked
+- status: ready
 - owner: SilverSupplier
 - depends_on: T30-01
 - blocks: -

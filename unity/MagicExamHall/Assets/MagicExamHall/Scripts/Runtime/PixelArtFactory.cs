@@ -43,6 +43,51 @@ namespace MagicExamHall
                 case PixelSpriteKind.Player:
                     DrawPlayer(texture, primary, secondary);
                     break;
+                case PixelSpriteKind.MentorNeutral:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Neutral, 0);
+                    break;
+                case PixelSpriteKind.MentorHappy:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Happy, 0);
+                    break;
+                case PixelSpriteKind.MentorFrown:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Frown, 0);
+                    break;
+                case PixelSpriteKind.MentorScholarNeutral:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Neutral, 1);
+                    break;
+                case PixelSpriteKind.MentorScholarHappy:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Happy, 1);
+                    break;
+                case PixelSpriteKind.MentorScholarFrown:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Frown, 1);
+                    break;
+                case PixelSpriteKind.MentorGuideNeutral:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Neutral, 2);
+                    break;
+                case PixelSpriteKind.MentorGuideHappy:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Happy, 2);
+                    break;
+                case PixelSpriteKind.MentorGuideFrown:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Frown, 2);
+                    break;
+                case PixelSpriteKind.MentorWatcherNeutral:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Neutral, 3);
+                    break;
+                case PixelSpriteKind.MentorWatcherHappy:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Happy, 3);
+                    break;
+                case PixelSpriteKind.MentorWatcherFrown:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Frown, 3);
+                    break;
+                case PixelSpriteKind.MentorArchivistNeutral:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Neutral, 4);
+                    break;
+                case PixelSpriteKind.MentorArchivistHappy:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Happy, 4);
+                    break;
+                case PixelSpriteKind.MentorArchivistFrown:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Frown, 4);
+                    break;
                 case PixelSpriteKind.Station:
                     DrawStation(texture, primary, secondary);
                     break;
@@ -166,6 +211,95 @@ namespace MagicExamHall
             Fill(texture, 17, 5, 4, 2, outline);
             Fill(texture, 12, 6, 3, 1, robeDark);
             Fill(texture, 17, 6, 3, 1, robeDark);
+        }
+
+        private static void DrawMentor(Texture2D texture, Color skin, Color robe, MentorExpression expression, int variant)
+        {
+            DrawPlayer(texture, skin, robe);
+            var outline = new Color(0.035f, 0.032f, 0.045f, 1f);
+            var robeDark = Shade(robe, 0.5f);
+            var robeLight = Mix(robe, Color.white, 0.32f);
+            Fill(texture, 13, 22, 6, 3, skin);
+            Fill(texture, 12, 25, 8, 3, new Color(0.18f, 0.10f, 0.22f, 1f));
+            DrawMentorVariant(texture, skin, robe, variant, outline, robeDark, robeLight);
+
+            switch (expression)
+            {
+                case MentorExpression.Happy:
+                    Set(texture, 13, 23, outline);
+                    Set(texture, 14, 24, outline);
+                    Set(texture, 18, 23, outline);
+                    Set(texture, 17, 24, outline);
+                    Set(texture, 15, 22, Shade(skin, 0.75f));
+                    Set(texture, 16, 22, Shade(skin, 0.75f));
+                    break;
+                case MentorExpression.Frown:
+                    Line(texture, 12, 24, 14, 23, outline);
+                    Line(texture, 17, 23, 19, 24, outline);
+                    Line(texture, 14, 22, 17, 22, outline);
+                    Set(texture, 16, 21, Shade(skin, 0.75f));
+                    break;
+                default:
+                    Set(texture, 13, 23, outline);
+                    Set(texture, 18, 23, outline);
+                    Set(texture, 16, 21, Shade(skin, 0.75f));
+                    break;
+            }
+        }
+
+        private static void DrawMentorVariant(Texture2D texture, Color skin, Color robe, int variant, Color outline, Color robeDark, Color robeLight)
+        {
+            switch (variant)
+            {
+                case 1:
+                    Fill(texture, 11, 25, 10, 2, outline);
+                    Fill(texture, 12, 26, 8, 1, robeLight);
+                    Fill(texture, 12, 23, 3, 2, new Color(0.78f, 0.95f, 1f, 1f));
+                    Fill(texture, 17, 23, 3, 2, new Color(0.78f, 0.95f, 1f, 1f));
+                    Line(texture, 15, 24, 17, 24, outline);
+                    Fill(texture, 6, 13, 4, 5, outline);
+                    Fill(texture, 7, 14, 3, 4, new Color(0.22f, 0.16f, 0.10f, 1f));
+                    Line(texture, 8, 18, 10, 14, robeLight);
+                    break;
+                case 2:
+                    Fill(texture, 10, 24, 12, 4, outline);
+                    Fill(texture, 11, 24, 10, 3, robeDark);
+                    Fill(texture, 9, 18, 4, 7, outline);
+                    Fill(texture, 19, 18, 4, 7, outline);
+                    Line(texture, 9, 17, 6, 14, robeLight);
+                    Line(texture, 23, 17, 26, 14, robeLight);
+                    Fill(texture, 13, 27, 6, 2, robe);
+                    break;
+                case 3:
+                    Fill(texture, 10, 26, 12, 2, outline);
+                    Fill(texture, 11, 27, 10, 1, robeDark);
+                    Fill(texture, 13, 28, 6, 2, robe);
+                    Fill(texture, 8, 12, 4, 10, outline);
+                    Fill(texture, 20, 12, 4, 10, outline);
+                    Fill(texture, 9, 13, 2, 8, robeDark);
+                    Fill(texture, 21, 13, 2, 8, robeDark);
+                    Line(texture, 12, 25, 8, 29, robeLight);
+                    Line(texture, 19, 25, 23, 29, robeLight);
+                    Fill(texture, 13, 24, 6, 1, new Color(1f, 0.78f, 0.36f, 1f));
+                    break;
+                case 4:
+                    Fill(texture, 10, 25, 12, 2, outline);
+                    Fill(texture, 12, 27, 8, 2, outline);
+                    Fill(texture, 13, 28, 6, 3, robeDark);
+                    Set(texture, 16, 30, Color.white);
+                    Set(texture, 15, 29, Color.white);
+                    Set(texture, 17, 29, Color.white);
+                    Fill(texture, 7, 12, 5, 4, outline);
+                    Fill(texture, 8, 13, 4, 3, new Color(0.78f, 0.70f, 0.42f, 1f));
+                    Fill(texture, 22, 12, 3, 7, outline);
+                    Fill(texture, 23, 13, 2, 6, robeLight);
+                    break;
+                default:
+                    Fill(texture, 10, 27, 12, 2, outline);
+                    Fill(texture, 11, 28, 10, 1, robeDark);
+                    Fill(texture, 13, 29, 6, 2, robe);
+                    break;
+            }
         }
 
         private static void DrawStation(Texture2D texture, Color element, Color accent)
@@ -603,6 +737,13 @@ namespace MagicExamHall
         }
     }
 
+    internal enum MentorExpression
+    {
+        Neutral,
+        Happy,
+        Frown
+    }
+
     public enum PixelSpriteKind
     {
         Player,
@@ -619,6 +760,21 @@ namespace MagicExamHall
         WaterRune,
         WindRune,
         EarthRune,
-        LifeRune
+        LifeRune,
+        MentorNeutral,
+        MentorHappy,
+        MentorFrown,
+        MentorScholarNeutral,
+        MentorScholarHappy,
+        MentorScholarFrown,
+        MentorGuideNeutral,
+        MentorGuideHappy,
+        MentorGuideFrown,
+        MentorWatcherNeutral,
+        MentorWatcherHappy,
+        MentorWatcherFrown,
+        MentorArchivistNeutral,
+        MentorArchivistHappy,
+        MentorArchivistFrown
     }
 }

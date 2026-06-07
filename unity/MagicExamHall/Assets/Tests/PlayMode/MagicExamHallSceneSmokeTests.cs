@@ -407,6 +407,154 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator ExternalRecognitionHandoffDrivesSameWorldProgression()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            var baseOutcome = controller.SubmitRecognitionHandoff(SpellRecognitionHandoff.Base(
+                RecognitionStatus.Recognized,
+                SpellFamily.Water,
+                SpellFamily.Water,
+                new Vector2(0f, 3f),
+                0.97f,
+                PerfectQuality(),
+                "external water",
+                worldScale: 1.35f,
+                strokeCount: 1,
+                sourceId: "sw1029"));
+            yield return null;
+
+            Assert.That(baseOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("물"));
+
+            controller.LoadFloorForTests(1);
+            yield return null;
+
+            var noSeal = controller.SubmitRecognitionHandoff(SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.IceBar,
+                new Vector2(-0.65f, 3f),
+                0.95f,
+                0.95f,
+                sourceId: "sw1029"));
+            yield return null;
+
+            Assert.That(noSeal.kind, Is.EqualTo(SpellCastOutcomeKind.OverlayNoActiveSeal));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(0));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("overlay는 단독"));
+
+            var sealOutcome = controller.SubmitRecognitionHandoff(SpellRecognitionHandoff.Base(
+                RecognitionStatus.Recognized,
+                SpellFamily.Fire,
+                SpellFamily.Fire,
+                new Vector2(-0.65f, 3f),
+                0.96f,
+                PerfectQuality(),
+                "external fire seal",
+                worldScale: 1.4f,
+                strokeCount: 1,
+                sourceId: "sw1029"));
+            var overlayOutcome = controller.SubmitRecognitionHandoff(SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.IceBar,
+                new Vector2(-0.65f, 3f),
+                0.95f,
+                0.95f,
+                targetSealId: sealOutcome.createdSeal.sealId,
+                sourceId: "sw1029"));
+            yield return null;
+
+            Assert.That(overlayOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.OverlaySucceeded));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("얼음"));
+        }
+
+        [UnityTest]
+        public IEnumerator FullSyntheticCastingPlaythroughReachesTrueEndingReport()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            CastBaseGoal(controller, SpellFamily.Fire, new Vector2(-5.5f, 2.6f));
+            CastBaseGoal(controller, SpellFamily.Water, new Vector2(0f, 3.0f));
+            CastBaseGoal(controller, SpellFamily.Wind, new Vector2(5.5f, 2.6f));
+            CastBaseGoal(controller, SpellFamily.Earth, new Vector2(-3.2f, -2.45f));
+            CastBaseGoal(controller, SpellFamily.Life, new Vector2(3.2f, -2.45f));
+            yield return null;
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(5));
+
+            controller.AdvanceFloorForTests();
+            yield return null;
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
+
+            CastOverlayGoal(controller, OverlayOperator.SteelBrace, new Vector2(-5.8f, 2.7f));
+            CastOverlayGoal(controller, OverlayOperator.ElectricFork, new Vector2(-3.2f, 3.0f));
+            CastOverlayGoal(controller, OverlayOperator.IceBar, new Vector2(-0.65f, 3.0f));
+            CastOverlayGoal(controller, OverlayOperator.SoulDot, new Vector2(1.9f, 3.0f));
+            CastOverlayGoal(controller, OverlayOperator.VoidCut, new Vector2(4.45f, 3.0f));
+            CastOverlayGoal(controller, OverlayOperator.MartialAxis, new Vector2(6.4f, 2.7f));
+            yield return null;
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(6));
+
+            controller.AdvanceFloorForTests();
+            yield return null;
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(3));
+
+            CastComboGoal(controller, SpellFamily.Earth, OverlayOperator.SteelBrace, new Vector2(-4.6f, 1.8f));
+            CastComboGoal(controller, SpellFamily.Wind, OverlayOperator.MartialAxis, new Vector2(4.6f, 1.8f));
+            CastComboGoal(controller, SpellFamily.Life, OverlayOperator.SoulDot, new Vector2(-3.2f, -2.3f));
+            CastComboGoal(controller, SpellFamily.Water, OverlayOperator.IceBar, new Vector2(3.2f, -2.3f));
+            yield return null;
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(4));
+
+            controller.AdvanceFloorForTests();
+            yield return null;
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(4));
+
+            CastComboGoal(controller, SpellFamily.Earth, OverlayOperator.SteelBrace, new Vector2(-5.2f, 2.4f));
+            CastOverlayGoal(controller, OverlayOperator.IceBar, new Vector2(-1.7f, 2.9f));
+            CastOverlayGoal(controller, OverlayOperator.VoidCut, new Vector2(1.8f, 2.9f));
+            CastOverlayGoal(controller, OverlayOperator.ElectricFork, new Vector2(5.2f, 2.4f));
+            yield return null;
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(4));
+            Assert.That(Vector2.Distance(controller.SafePositionForTests, new Vector2(5.2f, 2.4f)), Is.LessThan(0.01f));
+
+            controller.AdvanceFloorForTests();
+            yield return null;
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(5));
+
+            CastComboGoal(controller, SpellFamily.Earth, OverlayOperator.SteelBrace, new Vector2(-4.8f, 2.6f));
+            CastBaseGoal(controller, SpellFamily.Water, new Vector2(-1.6f, 3.0f));
+            CastComboGoal(controller, SpellFamily.Life, OverlayOperator.SoulDot, new Vector2(1.6f, 3.0f));
+            CastOverlayGoal(controller, OverlayOperator.VoidCut, new Vector2(4.8f, 2.6f));
+            CastOverlayGoal(controller, OverlayOperator.SoulDot, new Vector2(-2.2f, -2.5f));
+            CastBaseGoal(controller, SpellFamily.Wind, new Vector2(2.2f, -2.5f));
+            yield return null;
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(6));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("성좌심 완전 복구"));
+
+            controller.AdvanceFloorForTests();
+            yield return null;
+
+            Assert.That(controller.HasEndingReport, Is.True);
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("진엔딩 (6/6 완전 복구)"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("base 성공/실패"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("overlay 성공/실패"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain("층별 완료"));
+        }
+
+        [UnityTest]
         public IEnumerator FinalFloorCanPassAtFiveOfSixGoals()
         {
             SceneManager.LoadScene("MagicExamHall");
@@ -507,6 +655,45 @@ namespace MagicExamHall.Tests
             Assert.That(controller.EndingReportTextForTests, Does.Contain("평균 문양 안정도"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("자기 평가"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("MagicExamHallLogs"));
+        }
+
+        private static void CastBaseGoal(ExamGameController controller, SpellFamily family, Vector2 position)
+        {
+            controller.CastSyntheticBaseForTests(family, position);
+        }
+
+        private static void CastOverlayGoal(ExamGameController controller, OverlayOperator op, Vector2 position)
+        {
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, position);
+            if (op == OverlayOperator.MartialAxis)
+            {
+                controller.CastSyntheticOverlayForTests(OverlayOperator.VoidCut, position);
+            }
+
+            controller.CastSyntheticOverlayForTests(op, position);
+        }
+
+        private static void CastComboGoal(ExamGameController controller, SpellFamily family, OverlayOperator op, Vector2 position)
+        {
+            controller.CastSyntheticBaseForTests(family, position);
+            if (op == OverlayOperator.MartialAxis)
+            {
+                controller.CastSyntheticOverlayForTests(OverlayOperator.VoidCut, position);
+            }
+
+            controller.CastSyntheticOverlayForTests(op, position);
+        }
+
+        private static QualityVector PerfectQuality()
+        {
+            return new QualityVector
+            {
+                closure = 1f,
+                smoothness = 1f,
+                tempo = 1f,
+                stability = 1f,
+                rotationBias = 0f
+            };
         }
     }
 }

@@ -39,16 +39,26 @@ namespace MagicExamHall
         private RectTransform hudPanel = null!;
         private RectTransform notePanel = null!;
         private RectTransform reportPanel = null!;
+        private RectTransform toastPanel = null!;
+        private Image hudAccent = null!;
+        private Image noteAccent = null!;
+        private Image reportAccent = null!;
+        private Image toastBackground = null!;
+        private Image toastAccent = null!;
         private Text hudTitle = null!;
         private Text hudCopy = null!;
         private Text floorProgress = null!;
         private Text noteText = null!;
+        private Text reportTitle = null!;
         private Text reportText = null!;
+        private Text toastText = null!;
         private Font uiFont = null!;
         private string sessionId = "";
         private int trialCounter;
         private float floorStartedAt;
         private float pendingAdvanceAt = -1f;
+        private float toastTtl;
+        private Color toastTint = Color.white;
         private Vector2 velocity;
         private Vector2 safePosition;
         private bool finalCompletionCelebrated;
@@ -108,6 +118,7 @@ namespace MagicExamHall
             TickFloorAdvance();
             magicNote.Tick(Time.deltaTime);
             mentor?.Tick(Time.time);
+            TickToast();
             UpdateHud();
         }
 
@@ -120,6 +131,19 @@ namespace MagicExamHall
         public BaseRecognitionResult CastRawBaseForTests(List<List<StrokeSample>> strokes, Vector2 worldCenter)
         {
             return ProcessSpellGroup(strokes, worldCenter, strokes.Count).baseResult;
+        }
+
+        public SpellCastOutcome SubmitRecognitionHandoff(SpellRecognitionHandoff handoff)
+        {
+            if (handoff == null)
+            {
+                throw new ArgumentNullException(nameof(handoff));
+            }
+
+            trialCounter++;
+            var outcome = spellCasting.ProcessHandoff(handoff, seals.Select(view => view.seal).ToList(), Time.time);
+            ApplySpellOutcome(outcome);
+            return outcome;
         }
 
         public OverlayRecognitionResult CastSyntheticOverlayForTests(OverlayOperator op, Vector2 worldCenter, float sealScaleRatio = 0.24f)
@@ -241,17 +265,32 @@ namespace MagicExamHall
         private void BuildUi()
         {
             ClearChildren(canvas.transform);
-            hudPanel = CreatePanel("HUD", canvas.transform, new Vector2(20, -20), new Vector2(560, 132), Anchor.TopLeft, new Color(0.04f, 0.055f, 0.075f, 0.88f));
-            hudTitle = CreateText("HUD Title", hudPanel, "Magic Exam Hall", 24, FontStyle.Bold, new Vector2(16, -12), new Vector2(520, 28), Anchor.TopLeft);
-            hudCopy = CreateText("HUD Copy", hudPanel, "", 15, FontStyle.Normal, new Vector2(16, -46), new Vector2(520, 60), Anchor.TopLeft);
-            floorProgress = CreateText("Floor Progress", hudPanel, "", 15, FontStyle.Bold, new Vector2(16, 12), new Vector2(520, 24), Anchor.BottomLeft);
+            hudPanel = CreatePanel("HUD", canvas.transform, new Vector2(20, -20), new Vector2(620, 142), Anchor.TopLeft, new Color(0.025f, 0.032f, 0.047f, 0.94f));
+            hudAccent = DecoratePanel(hudPanel, new Color(0.95f, 0.72f, 0.34f), strong: true);
+            hudTitle = CreateText("HUD Title", hudPanel, "Magic Exam Hall", 23, FontStyle.Bold, new Vector2(20, -14), new Vector2(572, 28), Anchor.TopLeft);
+            hudCopy = CreateText("HUD Copy", hudPanel, "", 14, FontStyle.Normal, new Vector2(20, -48), new Vector2(572, 64), Anchor.TopLeft);
+            floorProgress = CreateText("Floor Progress", hudPanel, "", 14, FontStyle.Bold, new Vector2(20, 12), new Vector2(572, 24), Anchor.BottomLeft);
+            floorProgress.color = new Color(0.92f, 0.95f, 1f);
 
-            notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(560, 112), Anchor.BottomLeft, new Color(0.04f, 0.055f, 0.075f, 0.84f));
-            noteText = CreateText("Note Text", notePanel, "", 14, FontStyle.Normal, new Vector2(14, -12), new Vector2(530, 88), Anchor.TopLeft);
+            notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(620, 126), Anchor.BottomLeft, new Color(0.025f, 0.032f, 0.047f, 0.90f));
+            noteAccent = DecoratePanel(notePanel, new Color(0.48f, 0.84f, 1f), strong: false);
+            noteText = CreateText("Note Text", notePanel, "", 14, FontStyle.Normal, new Vector2(18, -14), new Vector2(582, 96), Anchor.TopLeft);
+            noteText.color = new Color(0.94f, 0.97f, 1f);
 
-            reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(760, 520), Anchor.Center, new Color(0.035f, 0.045f, 0.065f, 0.96f));
-            reportText = CreateText("Report Text", reportPanel, "", 17, FontStyle.Normal, new Vector2(28, -28), new Vector2(704, 464), Anchor.TopLeft);
+            reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(840, 560), Anchor.Center, new Color(0.018f, 0.024f, 0.038f, 0.98f));
+            reportAccent = DecoratePanel(reportPanel, new Color(1f, 0.82f, 0.38f), strong: true);
+            reportTitle = CreateText("Report Title", reportPanel, "", 25, FontStyle.Bold, new Vector2(34, -26), new Vector2(772, 34), Anchor.TopLeft);
+            reportTitle.color = new Color(1f, 0.86f, 0.48f);
+            reportText = CreateText("Report Text", reportPanel, "", 15, FontStyle.Normal, new Vector2(34, -72), new Vector2(772, 448), Anchor.TopLeft);
+            reportText.color = new Color(0.94f, 0.96f, 1f);
             reportPanel.gameObject.SetActive(false);
+
+            toastPanel = CreatePanel("Action Toast", canvas.transform, new Vector2(-20, -20), new Vector2(500, 54), Anchor.TopRight, new Color(0.018f, 0.024f, 0.038f, 0.94f));
+            toastBackground = toastPanel.GetComponent<Image>();
+            toastAccent = DecoratePanel(toastPanel, new Color(1f, 0.82f, 0.38f), strong: false);
+            toastText = CreateText("Toast Text", toastPanel, "", 16, FontStyle.Bold, new Vector2(18, -13), new Vector2(464, 28), Anchor.TopLeft);
+            toastText.alignment = TextAnchor.MiddleLeft;
+            toastPanel.gameObject.SetActive(false);
         }
 
         private void LoadFloor(int index)
@@ -262,6 +301,7 @@ namespace MagicExamHall
             reportPanel.gameObject.SetActive(false);
             ClearFloorObjects();
             floorController.Load(index);
+            ApplyFloorTheme(floorController.Current);
             safePosition = new Vector2(0f, -4.05f);
             player.position = safePosition;
             floorStartedAt = Time.time;
@@ -278,15 +318,17 @@ namespace MagicExamHall
         {
             var floorRoot = new GameObject($"Floor {floor.number} - {floor.title}");
             floorObjects.Add(floorRoot);
-            CreateWorldSprite("Exam Hall Backdrop", Vector2.zero, Vector3.one, new Color(0.045f, 0.052f, 0.067f), new Color(0.035f, 0.04f, 0.052f), PixelSpriteKind.FloorTile, -9, true, new Vector2(20.5f, 11.6f), floorRoot.transform);
-            CreateWorldSprite("Stone Tile Floor", Vector2.zero, Vector3.one, new Color(0.15f, 0.17f, 0.22f), new Color(0.09f, 0.11f, 0.15f), PixelSpriteKind.FloorTile, -7, true, new Vector2(16.4f, 10f), floorRoot.transform);
-            CreateWorldSprite("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, new Color(0.22f, 0.20f, 0.27f), floor.accentColor, PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 1.15f), floorRoot.transform);
-            CreateWorldSprite("South Carved Wall", new Vector2(0f, -4.95f), Vector3.one, new Color(0.18f, 0.17f, 0.22f), new Color(0.50f, 0.40f, 0.20f), PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 0.8f), floorRoot.transform);
+            var palette = FloorPalette.For(floor);
+            CreateWorldSprite("Exam Hall Backdrop", Vector2.zero, Vector3.one, palette.backdrop, palette.backdropLine, PixelSpriteKind.FloorTile, -9, true, new Vector2(20.5f, 11.6f), floorRoot.transform);
+            CreateWorldSprite("Stone Tile Floor", Vector2.zero, Vector3.one, palette.floor, palette.floorLine, PixelSpriteKind.FloorTile, -7, true, new Vector2(16.4f, 10f), floorRoot.transform);
+            CreateWorldSprite("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, palette.northWall, floor.accentColor, PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 1.15f), floorRoot.transform);
+            CreateWorldSprite("South Carved Wall", new Vector2(0f, -4.95f), Vector3.one, palette.southWall, palette.floorLine, PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 0.8f), floorRoot.transform);
             CreateWorldSprite("Center Runner", new Vector2(0f, 0.12f), Vector3.one, floor.rugColor, floor.accentColor, PixelSpriteKind.Rug, -5, true, new Vector2(2.2f, 7.6f), floorRoot.transform);
-            CreateWorldSprite("West Bookcase", new Vector2(-7.25f, 1.1f), Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
-            CreateWorldSprite("East Bookcase", new Vector2(7.25f, 1.1f), Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
-            CreateWorldSprite("Northwest Candle", new Vector2(-6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
-            CreateWorldSprite("Northeast Candle", new Vector2(6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
+            CreateWorldSprite("West Bookcase", new Vector2(-7.25f, 1.1f), Vector3.one * 1.15f, palette.shelfWood, floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
+            CreateWorldSprite("East Bookcase", new Vector2(7.25f, 1.1f), Vector3.one * 1.15f, palette.shelfWood, floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
+            CreateWorldSprite("Northwest Candle", new Vector2(-6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), palette.candleFlame, PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
+            CreateWorldSprite("Northeast Candle", new Vector2(6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), palette.candleFlame, PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
+            BuildFloorAtmosphere(floor, palette, floorRoot.transform);
 
             foreach (var goal in activeGoals)
             {
@@ -305,6 +347,94 @@ namespace MagicExamHall
                 var body = CreateWorldSprite(hazard.title, hazard.position, Vector3.one * hazard.radius, hazard.color, new Color(1f, 1f, 1f, 0.6f), PixelSpriteKind.Pulse, 1, false, Vector2.one, floorRoot.transform);
                 hazard.body = body;
             }
+        }
+
+        private void ApplyFloorTheme(FloorDefinition floor)
+        {
+            var palette = FloorPalette.For(floor);
+            if (mainCamera != null)
+            {
+                mainCamera.backgroundColor = palette.cameraBackground;
+            }
+
+            var accent = floor.accentColor;
+            if (hudAccent != null)
+            {
+                hudAccent.color = WithAlpha(accent, 0.95f);
+            }
+            if (noteAccent != null)
+            {
+                noteAccent.color = WithAlpha(Color.Lerp(accent, Color.white, 0.18f), 0.82f);
+            }
+            if (hudTitle != null)
+            {
+                hudTitle.color = Color.Lerp(accent, Color.white, 0.48f);
+            }
+        }
+
+        private void BuildFloorAtmosphere(FloorDefinition floor, FloorPalette palette, Transform floorRoot)
+        {
+            switch (floor.number)
+            {
+                case 1:
+                    CreateWorldSprite("Practice Dais", new Vector2(0f, -0.82f), Vector3.one * 0.95f, floor.accentColor, Color.white, PixelSpriteKind.Station, -1, false, Vector2.one, floorRoot);
+                    CreateWorldSprite("West Practice Rune", new Vector2(-6.15f, -2.85f), Vector3.one * 0.9f, new Color(0.48f, 0.84f, 1f), Color.white, PixelSpriteKind.RuneCircle, -2, false, Vector2.one, floorRoot);
+                    CreateWorldSprite("East Practice Rune", new Vector2(6.15f, -2.85f), Vector3.one * 0.9f, new Color(0.35f, 0.86f, 0.42f), Color.white, PixelSpriteKind.RuneCircle, -2, false, Vector2.one, floorRoot);
+                    break;
+                case 2:
+                    CreateFloorBand("Overlay Mural Rail", new Vector2(-6.7f, 2.78f), new Vector2(6.7f, 2.78f), floor.accentColor, -2, floorRoot, 0.42f);
+                    CreateWorldSprite("Mural Core Left", new Vector2(-6.85f, 2.78f), Vector3.one * 0.55f, floor.accentColor, Color.white, PixelSpriteKind.Pulse, -1, false, Vector2.one, floorRoot);
+                    CreateWorldSprite("Mural Core Right", new Vector2(6.85f, 2.78f), Vector3.one * 0.55f, floor.accentColor, Color.white, PixelSpriteKind.Pulse, -1, false, Vector2.one, floorRoot);
+                    break;
+                case 3:
+                    CreateFloorBand("Bridge Ghost Northwest", Vector2.zero, new Vector2(-4.6f, 1.8f), new Color(0.48f, 0.84f, 1f), -3, floorRoot, 0.32f);
+                    CreateFloorBand("Bridge Ghost Northeast", Vector2.zero, new Vector2(4.6f, 1.8f), new Color(0.74f, 0.86f, 0.92f), -3, floorRoot, 0.32f);
+                    CreateFloorBand("Bridge Ghost Southwest", Vector2.zero, new Vector2(-3.2f, -2.3f), new Color(0.35f, 0.86f, 0.42f), -3, floorRoot, 0.30f);
+                    CreateFloorBand("Bridge Ghost Southeast", Vector2.zero, new Vector2(3.2f, -2.3f), new Color(0.48f, 0.84f, 1f), -3, floorRoot, 0.30f);
+                    break;
+                case 4:
+                    CreateFloorBand("Unstable Crack West", new Vector2(-4.25f, -1.08f), new Vector2(-2.05f, 0.52f), new Color(1f, 0.23f, 0.18f), -1, floorRoot, 0.26f);
+                    CreateFloorBand("Unstable Crack Center", new Vector2(-0.75f, -1.28f), new Vector2(1.15f, 0.88f), new Color(1f, 0.18f, 0.15f), -1, floorRoot, 0.32f);
+                    CreateFloorBand("Unstable Crack East", new Vector2(2.48f, -1.25f), new Vector2(4.82f, 0.28f), new Color(1f, 0.30f, 0.17f), -1, floorRoot, 0.25f);
+                    CreateWorldSprite("Stabilizer Gate West", new Vector2(-5.2f, 2.4f), Vector3.one * 1.1f, floor.accentColor, Color.white, PixelSpriteKind.RuneCircle, 0, false, Vector2.one, floorRoot);
+                    CreateWorldSprite("Stabilizer Gate East", new Vector2(5.2f, 2.4f), Vector3.one * 1.1f, floor.accentColor, Color.white, PixelSpriteKind.RuneCircle, 0, false, Vector2.one, floorRoot);
+                    break;
+                case 5:
+                    CreateWorldSprite("Final Seal Outer", Vector2.zero, Vector3.one * 4.15f, floor.accentColor, Color.white, PixelSpriteKind.RuneCircle, -2, false, Vector2.one, floorRoot);
+                    CreateWorldSprite("Final Seal Inner", Vector2.zero, Vector3.one * 2.45f, new Color(0.48f, 0.84f, 1f), Color.white, PixelSpriteKind.RuneCircle, -1, false, Vector2.one, floorRoot);
+                    CreateWorldSprite("Admission Core", Vector2.zero, Vector3.one * 0.78f, floor.accentColor, Color.white, PixelSpriteKind.Station, 0, false, Vector2.one, floorRoot);
+                    BuildConstellationNodes(floorRoot);
+                    break;
+            }
+        }
+
+        private void BuildConstellationNodes(Transform floorRoot)
+        {
+            var colors = new[]
+            {
+                FamilyColor(SpellFamily.Earth),
+                FamilyColor(SpellFamily.Water),
+                FamilyColor(SpellFamily.Life),
+                OverlayColor(OverlayOperator.VoidCut),
+                OverlayColor(OverlayOperator.SoulDot),
+                FamilyColor(SpellFamily.Wind)
+            };
+            for (var index = 0; index < colors.Length; index++)
+            {
+                var angle = Mathf.PI / 2f - index * Mathf.PI * 2f / colors.Length;
+                var position = new Vector2(Mathf.Cos(angle) * 3.1f, Mathf.Sin(angle) * 1.75f);
+                CreateWorldSprite($"Final Constellation Node {index + 1}", position, Vector3.one * 0.42f, colors[index], Color.white, PixelSpriteKind.Pulse, 0, false, Vector2.one, floorRoot);
+            }
+        }
+
+        private GameObject CreateFloorBand(string name, Vector2 from, Vector2 to, Color color, int sortingOrder, Transform parent, float width)
+        {
+            var delta = to - from;
+            var midpoint = from + delta * 0.5f;
+            var length = Mathf.Max(delta.magnitude, 0.1f);
+            var band = CreateWorldSprite(name, midpoint, new Vector3(width, length, 1f), color, Color.white, PixelSpriteKind.Rug, sortingOrder, false, Vector2.one, parent);
+            band.transform.rotation = Quaternion.Euler(0f, 0f, Vector2.SignedAngle(Vector2.up, delta.normalized));
+            return band;
         }
 
         private void ShowMagicNote(string text, MentorMood mentorMood)
@@ -334,6 +464,7 @@ namespace MagicExamHall
                 SpellCastOutcomeKind.OverlayFailed => ApplyOverlayFailure(outcome),
                 SpellCastOutcomeKind.OverlayDuplicate => ApplyOverlayDuplicate(outcome),
                 SpellCastOutcomeKind.OverlayStackFull => ApplyOverlayStackFull(outcome),
+                SpellCastOutcomeKind.OverlayNoActiveSeal => ApplyOverlayNoActiveSeal(outcome),
                 SpellCastOutcomeKind.OverlaySucceeded => ApplyOverlaySuccess(outcome),
                 SpellCastOutcomeKind.DetachedOverlay => ApplyDetachedOverlay(outcome),
                 _ => throw new ArgumentOutOfRangeException(nameof(outcome.kind), outcome.kind, "Unhandled spell cast outcome.")
@@ -349,7 +480,9 @@ namespace MagicExamHall
             baseFailureCounts[feedbackFamily] = priorFailures + 1;
             CurrentAssistLevel = hintState.AssistLevelNumber;
             LastHintText = hintState.body;
+            endingReport.RecordBase(feedbackFamily, baseResult.spell.quality, success: false, hintState.hintShown, hintState.assisted);
             ShowMagicNote(BuildBaseFailureNote(baseResult.spell, hintState), MentorMood.Frown);
+            ShowToast("문양 불안정 - 노트를 확인", new Color(0.92f, 0.72f, 0.34f));
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogBaseAttempt(baseResult, null, "failed", hintState);
             return new ProcessedSpell { baseResult = baseResult };
@@ -366,9 +499,13 @@ namespace MagicExamHall
             LastHintText = successHintState.assisted ? successHintState.body : "";
             var view = CreateSealView(seal);
             seals.Add(view);
-            endingReport.RecordBase(seal.baseFamily, seal.quality, success: true);
+            endingReport.RecordBase(seal.baseFamily, seal.quality, success: true, successHintState.hintShown, successHintState.assisted);
             var effect = ApplyBaseToGoals(seal.baseFamily, outcome.center);
             ShowMagicNote(BuildBaseSuccessNote(seal, effect, successHintState), MentorMood.Happy);
+            var toastMessage = effect.worldEffect == "base_off_target"
+                ? $"{SpellLabels.Korean(seal.baseFamily)} 인식 - 표식 근처로 이동"
+                : effect.completed ? $"목표 완료: {effect.goalTitle}" : $"{SpellLabels.Korean(seal.baseFamily)} seal 생성";
+            ShowToast(toastMessage, effect.worldEffect == "base_off_target" ? new Color(0.92f, 0.72f, 0.34f) : FamilyColor(seal.baseFamily), effect.completed);
             pulses.Add(new ParticlePulse(outcome.center, FamilyColor(seal.baseFamily)));
             LogBaseAttempt(baseResult, seal, effect.worldEffect, successHintState);
             EvaluateFloorCompletion();
@@ -381,7 +518,9 @@ namespace MagicExamHall
             var seal = outcome.targetSeal;
             CurrentAssistLevel = 1;
             LastHintText = OverlayActionHint(result, seal);
+            endingReport.RecordOverlay(result.recognizedOperator, success: false, outcome.kind, hintShown: true);
             ShowMagicNote(BuildOverlayFailureNote(result, seal), MentorMood.Frown);
+            ShowToast("overlay 불안정 - seal 위치 확인", new Color(0.92f, 0.72f, 0.34f));
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "failed");
             return new ProcessedSpell { overlayResult = result };
@@ -394,7 +533,9 @@ namespace MagicExamHall
             var op = outcome.overlayOperator!.Value;
             CurrentAssistLevel = 1;
             LastHintText = "같은 장식 대신 아직 비어 있는 다른 장식을 seal 위에 그려 보세요.";
+            endingReport.RecordOverlay(op, success: false, outcome.kind, hintShown: true);
             ShowMagicNote($"{SpellLabels.Korean(op)} 장식은 이미 이 seal에 붙어 있습니다.", MentorMood.Frown);
+            ShowToast("중복 overlay - 다른 장식 필요", OverlayColor(op));
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "duplicate_overlay");
             return new ProcessedSpell { overlayResult = result };
@@ -407,9 +548,35 @@ namespace MagicExamHall
             var op = outcome.overlayOperator!.Value;
             CurrentAssistLevel = 1;
             LastHintText = "새 base seal을 만든 뒤 남은 장식을 붙여 보세요.";
+            endingReport.RecordOverlay(op, success: false, outcome.kind, hintShown: true);
             ShowMagicNote($"하나의 seal에는 overlay를 {SpellCastingService.MaxOverlayStack}개까지만 안정적으로 붙일 수 있습니다.", MentorMood.Frown);
+            ShowToast("overlay stack full - 새 base 필요", OverlayColor(op));
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "overlay_stack_full");
+            return new ProcessedSpell { overlayResult = result };
+        }
+
+        private ProcessedSpell ApplyOverlayNoActiveSeal(SpellCastOutcome outcome)
+        {
+            var result = outcome.overlayResult;
+            result.status = RecognitionStatus.Invalid;
+            if (string.IsNullOrWhiteSpace(result.feedbackReason))
+            {
+                result.feedbackReason = "장식 모양은 보였지만 붙일 base seal이 아직 없습니다.";
+            }
+            CurrentAssistLevel = 1;
+            LastHintText = result.feedbackReason.Contains("targetSealId", StringComparison.Ordinal)
+                ? "현재 active seal snapshot을 다시 조회한 뒤 overlay를 보내거나 새 base seal을 먼저 만드세요."
+                : "먼저 목표 표식 근처에 base 문양을 그려 빛나는 seal을 만든 뒤, 그 seal 안쪽이나 가장자리에 장식을 그리세요.";
+            endingReport.RecordOverlay(result.recognizedOperator, success: false, outcome.kind, hintShown: true);
+            ShowMagicNote(
+                "노트: overlay는 단독으로 발동하지 않습니다.\n" +
+                $"{result.feedbackReason}\n" +
+                $"다음: {LastHintText}",
+                MentorMood.Frown);
+            ShowToast("base seal 먼저", new Color(0.92f, 0.72f, 0.34f), strong: true);
+            pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
+            LogOverlayNoSealAttempt(result, outcome.center, outcome.strokeCount, "overlay_no_active_seal");
             return new ProcessedSpell { overlayResult = result };
         }
 
@@ -424,11 +591,12 @@ namespace MagicExamHall
                 sealView.RefreshLabel(uiFont);
                 sealView.AddOverlayMark(op);
             }
-            endingReport.RecordOverlay(op);
+            endingReport.RecordOverlay(op, success: true, outcome.kind, hintShown: false);
             var effect = ApplyOverlayToGoals(seal, op, outcome.center);
             CurrentAssistLevel = 0;
             LastHintText = "";
             ShowMagicNote(BuildOverlaySuccessNote(seal, op, effect), MentorMood.Happy);
+            ShowToast(effect.completed ? $"목표 완료: {effect.goalTitle}" : $"{SpellLabels.Korean(op)} overlay 연결", OverlayColor(op), effect.completed);
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, effect.worldEffect);
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
             EvaluateFloorCompletion();
@@ -443,7 +611,9 @@ namespace MagicExamHall
             result.feedbackReason = BuildDetachedOverlayReason(result, seal, outcome.center);
             CurrentAssistLevel = 1;
             LastHintText = DetachedOverlayActionHint(seal);
+            endingReport.RecordOverlay(result.recognizedOperator, success: false, outcome.kind, hintShown: true);
             ShowMagicNote(BuildDetachedOverlayFailureNote(result, seal), MentorMood.Frown);
+            ShowToast("seal 가까이 다시 그리기", new Color(0.92f, 0.72f, 0.34f));
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "detached_overlay");
             return new ProcessedSpell { overlayResult = result };
@@ -468,7 +638,7 @@ namespace MagicExamHall
             if (resolution.kind == GoalResolutionKind.Completed)
             {
                 ActivateGoal(resolution.goal, resolution.worldEffect);
-                return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id);
+                return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id, completed: true, goalTitle: resolution.goal.title);
             }
 
             if (resolution.kind == GoalResolutionKind.BaseOffTarget)
@@ -492,7 +662,7 @@ namespace MagicExamHall
             if (resolution.kind == GoalResolutionKind.Completed)
             {
                 ActivateGoal(resolution.goal, resolution.worldEffect);
-                return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id);
+                return new GoalEffect(BuildGoalDiscoveryNote(resolution.goal), resolution.goal.id, completed: true, goalTitle: resolution.goal.title);
             }
 
             return new GoalEffect($"{seal.Label}: overlay stack이 빛났습니다.", "overlay_stack");
@@ -684,7 +854,9 @@ namespace MagicExamHall
                     return;
                 }
 
+                endingReport.RecordFloorCompletion(floorController.CurrentFloorNumber, Time.time - floorStartedAt, activeGoals.Count, activeGoals.Count);
                 ShowMagicNote(BuildFloorCompletionNote(), MentorMood.Happy);
+                ShowToast($"{floorController.CurrentFloorNumber}층 완료 - 다음 층 개방", floorController.Current.accentColor, strong: true);
                 pendingAdvanceAt = Time.time + StandardFloorAdvanceDelaySeconds;
                 return;
             }
@@ -699,7 +871,9 @@ namespace MagicExamHall
             if (fullyCompleted && !finalTrueEnding)
             {
                 finalTrueEnding = true;
+                endingReport.RecordFloorCompletion(floorController.CurrentFloorNumber, Time.time - floorStartedAt, completed, activeGoals.Count);
                 ShowMagicNote(BuildFloorCompletionNote(), MentorMood.Happy);
+                ShowToast("성좌심 완전 복구 - 보고서 준비", floorController.Current.accentColor, strong: true);
                 pendingAdvanceAt = Time.time + FinalFloorCompleteReportDelaySeconds;
                 return;
             }
@@ -709,7 +883,9 @@ namespace MagicExamHall
                 return;
             }
 
+            endingReport.RecordFloorCompletion(floorController.CurrentFloorNumber, Time.time - floorStartedAt, completed, activeGoals.Count);
             ShowMagicNote(BuildFloorCompletionNote(), MentorMood.Happy);
+            ShowToast("입학 시험 통과 - 보고서 준비", floorController.Current.accentColor, strong: true);
             pendingAdvanceAt = Time.time + FinalFloorPassReportDelaySeconds;
         }
 
@@ -811,7 +987,11 @@ namespace MagicExamHall
                 {
                     player.position = safePosition;
                     velocity = Vector2.zero;
-                    ShowMagicNote("균열이 몸을 밀어냈습니다. 가까운 안전 지점에서 다시 시작합니다.", MentorMood.Frown);
+                    ShowMagicNote(
+                        "균열이 몸을 밀어냈습니다. 가까운 안전 지점에서 다시 시작합니다.\n" +
+                        "다음: 아직 완료하지 않은 고정 목표를 해결해 안전 지점을 앞으로 옮기세요.",
+                        MentorMood.Frown);
+                    ShowToast("균열 접촉 - 안전 지점 복귀", hazard.color, strong: true);
                     pulses.Add(new ParticlePulse(hazard.position, hazard.color, weak: true));
                     return;
                 }
@@ -851,12 +1031,62 @@ namespace MagicExamHall
                 pulse.body.transform.localScale = Vector3.one * Mathf.Lerp(pulse.weak ? 0.35f : 0.45f, pulse.weak ? 1.4f : 2.5f, t) * pulse.scaleMultiplier;
                 var renderer = pulse.body.GetComponent<SpriteRenderer>();
                 renderer.sharedMaterial = PixelMaterialProvider.SpriteMaterial;
-                renderer.color = new Color(1f, 1f, 1f, Mathf.Lerp(0.8f, 0f, t));
+                renderer.color = new Color(pulse.color.r, pulse.color.g, pulse.color.b, Mathf.Lerp(0.8f, 0f, t));
                 if (t >= 1f)
                 {
                     Destroy(pulse.body);
                     pulses.RemoveAt(index);
                 }
+            }
+        }
+
+        private void ShowToast(string message, Color accent, bool strong = false)
+        {
+            if (toastPanel == null || toastText == null)
+            {
+                return;
+            }
+
+            toastTint = accent;
+            toastTtl = strong ? 2.6f : 2.05f;
+            toastText.text = message;
+            toastText.color = Color.Lerp(accent, Color.white, 0.68f);
+            if (toastAccent != null)
+            {
+                toastAccent.color = WithAlpha(accent, strong ? 0.95f : 0.82f);
+            }
+            if (toastBackground != null)
+            {
+                toastBackground.color = new Color(0.018f, 0.024f, 0.038f, 0.94f);
+            }
+            toastPanel.gameObject.SetActive(true);
+        }
+
+        private void TickToast()
+        {
+            if (toastPanel == null || !toastPanel.gameObject.activeSelf)
+            {
+                return;
+            }
+
+            toastTtl = Mathf.Max(0f, toastTtl - Time.deltaTime);
+            var fade = toastTtl < 0.34f ? Mathf.Clamp01(toastTtl / 0.34f) : 1f;
+            if (toastBackground != null)
+            {
+                toastBackground.color = new Color(0.018f, 0.024f, 0.038f, 0.94f * fade);
+            }
+            if (toastAccent != null)
+            {
+                toastAccent.color = WithAlpha(toastTint, 0.90f * fade);
+            }
+            if (toastText != null)
+            {
+                var textColor = Color.Lerp(toastTint, Color.white, 0.68f);
+                toastText.color = WithAlpha(textColor, fade);
+            }
+            if (toastTtl <= 0f)
+            {
+                toastPanel.gameObject.SetActive(false);
             }
         }
 
@@ -974,9 +1204,23 @@ namespace MagicExamHall
             reportPanel.gameObject.SetActive(true);
             notePanel.gameObject.SetActive(false);
             mentor?.Say(MentorMood.Neutral, "");
+            if (toastPanel != null)
+            {
+                toastTtl = 0f;
+                toastPanel.gameObject.SetActive(false);
+            }
             var completedFinalGoals = IsFinalFloor ? activeGoals.Count(goal => goal.completed) : activeGoals.Count;
             hudTitle.text = finalTrueEnding ? "입학 시험 완전 통과" : "입학 시험 통과";
             hudCopy.text = finalTrueEnding ? "입학 마법진이 완전히 밝아졌습니다." : "입학 마법진이 다시 밝아졌습니다.";
+            if (reportTitle != null)
+            {
+                reportTitle.text = finalTrueEnding ? "성좌심 완전 복구 보고서" : "성좌심 복구 보고서";
+                reportTitle.color = finalTrueEnding ? new Color(1f, 0.92f, 0.58f) : new Color(0.90f, 0.96f, 1f);
+            }
+            if (reportAccent != null)
+            {
+                reportAccent.color = finalTrueEnding ? new Color(1f, 0.84f, 0.36f, 0.96f) : new Color(0.48f, 0.84f, 1f, 0.88f);
+            }
             logger.LogSurvey(new SurveyLog
             {
                 sessionId = sessionId,
@@ -1019,7 +1263,7 @@ namespace MagicExamHall
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
             text.text = seal.Label;
-            return new SealView(root, seal, text);
+            return new SealView(root, seal, text, FamilyColor(seal.baseFamily));
         }
 
         private void LogBaseAttempt(BaseRecognitionResult result, CompiledSeal seal, string worldEffect, HintState hintState = null)
@@ -1093,6 +1337,41 @@ namespace MagicExamHall
             });
         }
 
+        private void LogOverlayNoSealAttempt(OverlayRecognitionResult result, Vector2 center, int strokeCount, string worldEffect)
+        {
+            logger.LogAttempt(new AttemptLog
+            {
+                sessionId = sessionId,
+                trialId = trialCounter.ToString(CultureInfo.InvariantCulture),
+                targetFamily = "",
+                recognizedFamily = result.OperatorText,
+                phase = SpellPhase.Overlay.ToString(),
+                baseFamily = "",
+                overlayStack = "",
+                sealId = "",
+                floorId = floorController.Current.number.ToString(CultureInfo.InvariantCulture),
+                targetObject = worldEffect,
+                worldEffect = worldEffect,
+                status = result.status.ToString(),
+                confidence = result.score,
+                closure = 0f,
+                smoothness = result.shapeConfidence,
+                tempo = 0f,
+                stability = 0f,
+                rotationBias = result.scaleRatio,
+                worldX = center.x,
+                worldY = center.y,
+                bufferStrokeCount = strokeCount,
+                attemptIndex = trialCounter,
+                elapsedMs = Mathf.RoundToInt((Time.time - floorStartedAt) * 1000f),
+                feedbackViewed = true,
+                success = false,
+                hintShown = true,
+                assistLevel = CurrentAssistLevel,
+                assisted = false
+            });
+        }
+
         private void ClearFloorObjects()
         {
             foreach (var body in floorObjects)
@@ -1124,11 +1403,28 @@ namespace MagicExamHall
             pixelSprite.kind = kind;
             pixelSprite.primary = primary;
             pixelSprite.secondary = secondary;
+            pixelSprite.rendererTint = RuntimeTintFor(kind, primary);
             pixelSprite.sortingOrder = sortingOrder;
             pixelSprite.tiled = tiled;
             pixelSprite.tiledSize = tiledSize == default ? Vector2.one : tiledSize;
             pixelSprite.Apply();
             return body;
+        }
+
+        private static Color RuntimeTintFor(PixelSpriteKind kind, Color primary)
+        {
+            return kind switch
+            {
+                PixelSpriteKind.Pulse or PixelSpriteKind.RuneCircle => new Color(primary.r, primary.g, primary.b, primary.a),
+                PixelSpriteKind.FloorTile or PixelSpriteKind.WallTrim or PixelSpriteKind.Rug => Color.Lerp(Color.white, primary, 0.46f),
+                PixelSpriteKind.Bookshelf or PixelSpriteKind.Candle or PixelSpriteKind.Station or PixelSpriteKind.Target => Color.Lerp(Color.white, primary, 0.20f),
+                _ => Color.white
+            };
+        }
+
+        private static Color WithAlpha(Color color, float alpha)
+        {
+            return new Color(color.r, color.g, color.b, alpha);
         }
 
         private Text CreateGoalLabel(WorldStateGoal goal, Transform parent)
@@ -1146,6 +1442,8 @@ namespace MagicExamHall
 
             var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, rect.sizeDelta, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, 0.86f));
             background.raycastTarget = false;
+            var accent = CreateImage("Goal Label Accent", canvasObject.transform, Vector2.zero, new Vector2(rect.sizeDelta.x, 0.08f), Anchor.TopLeft, WithAlpha(goal.color, 0.80f));
+            accent.raycastTarget = false;
             var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 28, FontStyle.Bold, Vector2.zero, rect.sizeDelta, Anchor.Center);
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.Lerp(goal.color, Color.white, 0.45f);
@@ -1170,6 +1468,16 @@ namespace MagicExamHall
         private RectTransform CreatePanel(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
         {
             return CreateImage(name, parent, anchoredPosition, size, anchor, color).rectTransform;
+        }
+
+        private Image DecoratePanel(RectTransform panel, Color accent, bool strong)
+        {
+            var size = panel.sizeDelta;
+            var accentImage = CreateImage("Accent Bar", panel, Vector2.zero, new Vector2(strong ? 7f : 5f, size.y), Anchor.TopLeft, WithAlpha(accent, strong ? 0.95f : 0.78f));
+            CreateImage("Top Pixel Edge", panel, Vector2.zero, new Vector2(size.x, strong ? 3f : 2f), Anchor.TopLeft, WithAlpha(Color.Lerp(accent, Color.white, 0.25f), strong ? 0.62f : 0.42f));
+            CreateImage("Bottom Pixel Edge", panel, Vector2.zero, new Vector2(size.x, 2f), Anchor.BottomLeft, new Color(0f, 0f, 0f, strong ? 0.44f : 0.32f));
+            CreateImage("Inner Highlight", panel, new Vector2(14f, -12f), new Vector2(Mathf.Max(1f, size.x - 28f), 1f), Anchor.TopLeft, WithAlpha(Color.white, strong ? 0.12f : 0.08f));
+            return accentImage;
         }
 
         private Text CreateText(string name, Transform parent, string content, int size, FontStyle style, Vector2 anchoredPosition, Vector2 rectSize, Anchor anchor)
@@ -1206,6 +1514,14 @@ namespace MagicExamHall
                 case Anchor.TopLeft:
                     rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
                     rect.pivot = new Vector2(0f, 1f);
+                    break;
+                case Anchor.TopCenter:
+                    rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+                    rect.pivot = new Vector2(0.5f, 1f);
+                    break;
+                case Anchor.TopRight:
+                    rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+                    rect.pivot = new Vector2(1f, 1f);
                     break;
                 case Anchor.BottomLeft:
                     rect.anchorMin = rect.anchorMax = new Vector2(0f, 0f);
@@ -1252,9 +1568,103 @@ namespace MagicExamHall
                 .ToList();
         }
 
+        private readonly struct FloorPalette
+        {
+            public readonly Color cameraBackground;
+            public readonly Color backdrop;
+            public readonly Color backdropLine;
+            public readonly Color floor;
+            public readonly Color floorLine;
+            public readonly Color northWall;
+            public readonly Color southWall;
+            public readonly Color shelfWood;
+            public readonly Color candleFlame;
+
+            private FloorPalette(
+                Color cameraBackground,
+                Color backdrop,
+                Color backdropLine,
+                Color floor,
+                Color floorLine,
+                Color northWall,
+                Color southWall,
+                Color shelfWood,
+                Color candleFlame)
+            {
+                this.cameraBackground = cameraBackground;
+                this.backdrop = backdrop;
+                this.backdropLine = backdropLine;
+                this.floor = floor;
+                this.floorLine = floorLine;
+                this.northWall = northWall;
+                this.southWall = southWall;
+                this.shelfWood = shelfWood;
+                this.candleFlame = candleFlame;
+            }
+
+            public static FloorPalette For(FloorDefinition floor)
+            {
+                return floor.number switch
+                {
+                    1 => new FloorPalette(
+                        new Color(0.036f, 0.041f, 0.052f),
+                        new Color(0.052f, 0.058f, 0.072f),
+                        new Color(0.030f, 0.035f, 0.046f),
+                        new Color(0.20f, 0.20f, 0.22f),
+                        new Color(0.12f, 0.13f, 0.15f),
+                        new Color(0.28f, 0.24f, 0.25f),
+                        new Color(0.20f, 0.18f, 0.19f),
+                        new Color(0.44f, 0.25f, 0.14f),
+                        new Color(1f, 0.58f, 0.16f)),
+                    2 => new FloorPalette(
+                        new Color(0.030f, 0.032f, 0.060f),
+                        new Color(0.040f, 0.038f, 0.074f),
+                        new Color(0.025f, 0.025f, 0.048f),
+                        new Color(0.15f, 0.15f, 0.27f),
+                        new Color(0.10f, 0.09f, 0.18f),
+                        new Color(0.21f, 0.18f, 0.34f),
+                        new Color(0.15f, 0.14f, 0.25f),
+                        new Color(0.36f, 0.22f, 0.18f),
+                        new Color(0.70f, 0.54f, 1f)),
+                    3 => new FloorPalette(
+                        new Color(0.022f, 0.050f, 0.060f),
+                        new Color(0.030f, 0.062f, 0.070f),
+                        new Color(0.020f, 0.038f, 0.045f),
+                        new Color(0.10f, 0.22f, 0.25f),
+                        new Color(0.055f, 0.135f, 0.16f),
+                        new Color(0.14f, 0.30f, 0.34f),
+                        new Color(0.10f, 0.22f, 0.26f),
+                        new Color(0.30f, 0.24f, 0.16f),
+                        new Color(0.48f, 0.84f, 1f)),
+                    4 => new FloorPalette(
+                        new Color(0.060f, 0.028f, 0.032f),
+                        new Color(0.072f, 0.035f, 0.040f),
+                        new Color(0.044f, 0.022f, 0.027f),
+                        new Color(0.22f, 0.12f, 0.13f),
+                        new Color(0.13f, 0.07f, 0.08f),
+                        new Color(0.30f, 0.15f, 0.16f),
+                        new Color(0.22f, 0.10f, 0.12f),
+                        new Color(0.34f, 0.18f, 0.12f),
+                        new Color(1f, 0.30f, 0.16f)),
+                    _ => new FloorPalette(
+                        new Color(0.030f, 0.034f, 0.060f),
+                        new Color(0.038f, 0.040f, 0.072f),
+                        new Color(0.023f, 0.026f, 0.050f),
+                        new Color(0.13f, 0.14f, 0.24f),
+                        new Color(0.08f, 0.09f, 0.16f),
+                        new Color(0.20f, 0.18f, 0.30f),
+                        new Color(0.15f, 0.14f, 0.23f),
+                        new Color(0.33f, 0.23f, 0.17f),
+                        new Color(1f, 0.82f, 0.38f))
+                };
+            }
+        }
+
         private enum Anchor
         {
             Center,
+            TopCenter,
+            TopRight,
             TopLeft,
             BottomLeft
         }
@@ -1263,11 +1673,15 @@ namespace MagicExamHall
         {
             public readonly string note;
             public readonly string worldEffect;
+            public readonly bool completed;
+            public readonly string goalTitle;
 
-            public GoalEffect(string note, string worldEffect)
+            public GoalEffect(string note, string worldEffect, bool completed = false, string goalTitle = "")
             {
                 this.note = note;
                 this.worldEffect = worldEffect;
+                this.completed = completed;
+                this.goalTitle = goalTitle;
             }
         }
 
@@ -1304,13 +1718,15 @@ namespace MagicExamHall
             public readonly GameObject root;
             public readonly CompiledSeal seal;
             private readonly Text label;
+            private readonly Color tint;
             private readonly List<GameObject> overlayMarks = new();
 
-            public SealView(GameObject root, CompiledSeal seal, Text label)
+            public SealView(GameObject root, CompiledSeal seal, Text label, Color tint)
             {
                 this.root = root;
                 this.seal = seal;
                 this.label = label;
+                this.tint = tint;
             }
 
             public void RefreshLabel(Font font)
@@ -1330,6 +1746,7 @@ namespace MagicExamHall
                 var renderer = mark.AddComponent<SpriteRenderer>();
                 renderer.sprite = PixelArtFactory.CreateSprite($"Overlay {op}", OverlayColor(op), Color.white, PixelSpriteKind.Pulse);
                 renderer.sharedMaterial = PixelMaterialProvider.SpriteMaterial;
+                renderer.color = OverlayColor(op);
                 renderer.sortingOrder = 24;
                 overlayMarks.Add(mark);
             }
@@ -1344,7 +1761,7 @@ namespace MagicExamHall
                 var renderer = root.GetComponent<SpriteRenderer>();
                 if (renderer != null)
                 {
-                    renderer.color = new Color(1f, 1f, 1f, Mathf.Clamp01(normalizedLifetime + 0.16f));
+                    renderer.color = new Color(tint.r, tint.g, tint.b, Mathf.Clamp01(normalizedLifetime + 0.16f));
                 }
             }
         }
@@ -1372,28 +1789,99 @@ namespace MagicExamHall
     {
         private readonly Dictionary<SpellFamily, int> baseUse = new();
         private readonly Dictionary<OverlayOperator, int> overlayUse = new();
+        private readonly List<FloorCompletionSummary> floorCompletions = new();
         private readonly HashSet<string> discoveries = new();
         private readonly List<float> qualityScores = new();
+        private int baseSuccessCount;
+        private int baseFailureCount;
+        private int overlaySuccessCount;
+        private int overlayFailureCount;
+        private int overlayDuplicateCount;
+        private int overlayStackFullCount;
+        private int detachedOverlayCount;
+        private int noSealOverlayCount;
+        private int hintShownCount;
+        private int assistedSuccessCount;
 
         public int DiscoveryCount => discoveries.Count;
 
-        public void RecordBase(SpellFamily family, QualityVector quality, bool success)
+        public void RecordBase(SpellFamily family, QualityVector quality, bool success, bool hintShown, bool assisted)
         {
             baseUse[family] = baseUse.TryGetValue(family, out var count) ? count + 1 : 1;
             if (success)
             {
+                baseSuccessCount++;
                 qualityScores.Add(quality.Average());
+                if (assisted)
+                {
+                    assistedSuccessCount++;
+                }
+            }
+            else
+            {
+                baseFailureCount++;
+            }
+
+            if (hintShown)
+            {
+                hintShownCount++;
             }
         }
 
-        public void RecordOverlay(OverlayOperator op)
+        public void RecordOverlay(OverlayOperator? op, bool success, SpellCastOutcomeKind outcomeKind, bool hintShown)
         {
-            overlayUse[op] = overlayUse.TryGetValue(op, out var count) ? count + 1 : 1;
+            if (op.HasValue)
+            {
+                overlayUse[op.Value] = overlayUse.TryGetValue(op.Value, out var count) ? count + 1 : 1;
+            }
+
+            if (success)
+            {
+                overlaySuccessCount++;
+            }
+            else
+            {
+                overlayFailureCount++;
+            }
+
+            switch (outcomeKind)
+            {
+                case SpellCastOutcomeKind.OverlayDuplicate:
+                    overlayDuplicateCount++;
+                    break;
+                case SpellCastOutcomeKind.OverlayStackFull:
+                    overlayStackFullCount++;
+                    break;
+                case SpellCastOutcomeKind.DetachedOverlay:
+                    detachedOverlayCount++;
+                    break;
+                case SpellCastOutcomeKind.OverlayNoActiveSeal:
+                    noSealOverlayCount++;
+                    break;
+            }
+
+            if (hintShown)
+            {
+                hintShownCount++;
+            }
         }
 
         public void RecordDiscovery(string id, string effect)
         {
             discoveries.Add($"{id}:{effect}");
+        }
+
+        public void RecordFloorCompletion(int floorNumber, float elapsedSeconds, int completedGoals, int totalGoals)
+        {
+            var existingIndex = floorCompletions.FindIndex(item => item.floorNumber == floorNumber);
+            var summary = new FloorCompletionSummary(floorNumber, Mathf.Max(0f, elapsedSeconds), completedGoals, totalGoals);
+            if (existingIndex >= 0)
+            {
+                floorCompletions[existingIndex] = summary;
+                return;
+            }
+
+            floorCompletions.Add(summary);
         }
 
         public string BuildText(int totalAttempts, string outputDirectory, bool trueEnding, int completedFinalGoals, int totalFinalGoals)
@@ -1412,7 +1900,12 @@ namespace MagicExamHall
                 $"가장 많이 사용한 base: {favoriteBase}\n" +
                 $"가장 많이 사용한 overlay: {favoriteOverlay}\n" +
                 $"발견한 세계 반응: {discoveries.Count}개\n" +
-                $"평균 문양 안정도: {averageQuality:0}%\n\n" +
+                $"평균 문양 안정도: {averageQuality:0}%\n" +
+                $"base 성공/실패: {baseSuccessCount}/{baseFailureCount}\n" +
+                $"overlay 성공/실패: {overlaySuccessCount}/{overlayFailureCount}\n" +
+                $"중복/stack full/거리 오류/no seal: {overlayDuplicateCount}/{overlayStackFullCount}/{detachedOverlayCount}/{noSealOverlayCount}\n" +
+                $"힌트 표시: {hintShownCount}회, 힌트 후 성공: {assistedSuccessCount}회\n" +
+                $"층별 완료: {BuildFloorCompletionLine()}\n\n" +
                 BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
                 "자기 평가\n" +
                 "1. 어떤 문양이 가장 내 손에 잘 맞았나요?\n" +
@@ -1420,6 +1913,18 @@ namespace MagicExamHall
                 "3. base와 overlay 조합을 스스로 예측할 수 있었나요?\n" +
                 "4. 직접 마법을 시전한다는 느낌이 있었나요?\n\n" +
                 $"로그 저장 위치:\n{outputDirectory}";
+        }
+
+        private string BuildFloorCompletionLine()
+        {
+            if (floorCompletions.Count == 0)
+            {
+                return "기록 없음";
+            }
+
+            return string.Join(" / ", floorCompletions
+                .OrderBy(item => item.floorNumber)
+                .Select(item => $"{item.floorNumber}층 {item.completedGoals}/{item.totalGoals} {item.elapsedSeconds:0.0}s"));
         }
 
         private static string BuildReflectionLine(string favoriteBase, string favoriteOverlay, int discoveryCount)
@@ -1440,6 +1945,22 @@ namespace MagicExamHall
             }
 
             return $"{favoriteBase} base와 {favoriteOverlay} 장식을 가장 자주 실험했습니다. 탑은 그 반복을 단순한 성공이 아니라 당신만의 문법으로 기록했습니다.";
+        }
+
+        private readonly struct FloorCompletionSummary
+        {
+            public readonly int floorNumber;
+            public readonly float elapsedSeconds;
+            public readonly int completedGoals;
+            public readonly int totalGoals;
+
+            public FloorCompletionSummary(int floorNumber, float elapsedSeconds, int completedGoals, int totalGoals)
+            {
+                this.floorNumber = floorNumber;
+                this.elapsedSeconds = elapsedSeconds;
+                this.completedGoals = completedGoals;
+                this.totalGoals = totalGoals;
+            }
         }
     }
 

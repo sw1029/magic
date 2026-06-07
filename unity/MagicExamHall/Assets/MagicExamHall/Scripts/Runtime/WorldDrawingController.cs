@@ -20,6 +20,10 @@ namespace MagicExamHall
         private readonly List<List<StrokeSample>> bufferedStrokes = new();
         private readonly List<StrokeSample> activeStroke = new();
         private readonly List<StrokeVisual> visuals = new();
+        private AudioSource drawingAudio;
+        private AudioClip[] penTickClips = Array.Empty<AudioClip>();
+        private AudioClip[] penCompleteClips = Array.Empty<AudioClip>();
+        private float lastPenTickAt = -10f;
         private bool drawing;
         private bool waitingForBuffer;
         private float lastReleaseTime;
@@ -37,6 +41,7 @@ namespace MagicExamHall
         private void Awake()
         {
             mainCamera ??= Camera.main;
+            ConfigureDrawingAudio();
         }
 
         private void Update()
@@ -70,11 +75,18 @@ namespace MagicExamHall
                 drawing = true;
                 waitingForBuffer = false;
                 activeStroke.Clear();
+                PlayRandomDrawingClip(penTickClips, 0.26f);
                 AddPoint(Input.mousePosition);
             }
 
             if (drawing && Input.GetMouseButton(1))
             {
+                if (Time.time - lastPenTickAt >= 0.18f)
+                {
+                    PlayRandomDrawingClip(penTickClips, 0.16f);
+                    lastPenTickAt = Time.time;
+                }
+
                 AddPoint(Input.mousePosition);
             }
 
@@ -89,6 +101,7 @@ namespace MagicExamHall
                 var stroke = new List<StrokeSample>(activeStroke);
                 bufferedStrokes.Add(stroke);
                 CreateStrokeVisual(stroke);
+                PlayRandomDrawingClip(penCompleteClips, 0.22f);
             }
 
             activeStroke.Clear();
@@ -163,6 +176,36 @@ namespace MagicExamHall
             }
 
             visuals.Add(new StrokeVisual(body, line));
+        }
+
+        private void ConfigureDrawingAudio()
+        {
+            drawingAudio = GetComponent<AudioSource>();
+            if (drawingAudio == null)
+            {
+                drawingAudio = gameObject.AddComponent<AudioSource>();
+            }
+
+            drawingAudio.playOnAwake = false;
+            drawingAudio.spatialBlend = 0f;
+            drawingAudio.volume = 1f;
+            drawingAudio.ignoreListenerPause = true;
+            penTickClips = Resources.LoadAll<AudioClip>("Sfx/PenAndPaper01")
+                .Where(clip => clip.name.IndexOf("SFX_Penv", StringComparison.OrdinalIgnoreCase) >= 0)
+                .ToArray();
+            penCompleteClips = Resources.LoadAll<AudioClip>("Sfx/HydrographicPen01");
+        }
+
+        private void PlayRandomDrawingClip(AudioClip[] clips, float volume)
+        {
+            if (drawingAudio == null || clips == null || clips.Length == 0)
+            {
+                return;
+            }
+
+            drawingAudio.pitch = UnityEngine.Random.Range(0.94f, 1.06f);
+            drawingAudio.PlayOneShot(clips[UnityEngine.Random.Range(0, clips.Length)], volume);
+            drawingAudio.pitch = 1f;
         }
 
         private void TickVisuals()

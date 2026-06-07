@@ -1,5 +1,6 @@
 - id: T30-02
 - status: blocked
+- owner: SilverSupplier
 - depends_on: T30-01
 - blocks: -
 

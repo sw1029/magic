@@ -74,6 +74,8 @@ namespace MagicExamHall
         public int CompletedGoalCountForTests => activeGoals.Count(goal => goal.completed);
         public Vector2 PlayerPosition => player == null ? Vector2.zero : player.position;
         public Vector2 SafePositionForTests => safePosition;
+        public Vector2 HudPanelSizeForTests => hudPanel == null ? Vector2.zero : hudPanel.sizeDelta;
+        public Vector2 MagicNotePanelSizeForTests => notePanel == null ? Vector2.zero : notePanel.sizeDelta;
         public bool HasEndingReport => reportPanel != null && reportPanel.gameObject.activeSelf;
         public bool IsDrawingPanelVisible => false;
         public bool IsResultPanelVisible => false;
@@ -96,6 +98,7 @@ namespace MagicExamHall
         public int AutotileLayerCountForTests => FindObjectsByType<FloorAutotileLayer>(FindObjectsSortMode.None).Count(layer => layer.floorNumber == CurrentFloorNumber);
         public int AutotilePlacedTileCountForTests => FindObjectsByType<FloorAutotileLayer>(FindObjectsSortMode.None).Where(layer => layer.floorNumber == CurrentFloorNumber).Sum(layer => layer.placedTileCount);
         public int AutotileUniqueTileCountForTests => FindObjectsByType<FloorAutotileLayer>(FindObjectsSortMode.None).Where(layer => layer.floorNumber == CurrentFloorNumber).Sum(layer => layer.uniqueTileCount);
+        public float MaxGoalMarkerWorldWidthForTests => activeGoals.Where(goal => goal.renderer != null).Select(goal => goal.renderer.bounds.size.x).DefaultIfEmpty(0f).Max();
         public int VariantPropCountForTests => ActiveVariantProps().Count();
         public int UniquePropVariantCountForTests => ActiveVariantProps().Select(view => $"{view.kind}:{view.variantIndex}").Distinct().Count();
         public bool HasAdjacentRepeatedPropVariantForTests => HasAdjacentRepeatedPropVariants();
@@ -310,16 +313,16 @@ namespace MagicExamHall
         private void BuildUi()
         {
             ClearChildren(canvas.transform);
-            hudPanel = CreatePanel("HUD", canvas.transform, new Vector2(20, -20), new Vector2(620, 142), Anchor.TopLeft, new Color(0.025f, 0.032f, 0.047f, 0.94f));
+            hudPanel = CreatePanel("HUD", canvas.transform, new Vector2(20, -20), new Vector2(560, 112), Anchor.TopLeft, new Color(0.025f, 0.032f, 0.047f, 0.92f));
             hudAccent = DecoratePanel(hudPanel, new Color(0.95f, 0.72f, 0.34f), strong: true);
-            hudTitle = CreateText("HUD Title", hudPanel, "Magic Exam Hall", 23, FontStyle.Bold, new Vector2(20, -14), new Vector2(572, 28), Anchor.TopLeft);
-            hudCopy = CreateText("HUD Copy", hudPanel, "", 14, FontStyle.Normal, new Vector2(20, -48), new Vector2(572, 64), Anchor.TopLeft);
-            floorProgress = CreateText("Floor Progress", hudPanel, "", 14, FontStyle.Bold, new Vector2(20, 12), new Vector2(572, 24), Anchor.BottomLeft);
+            hudTitle = CreateText("HUD Title", hudPanel, "Magic Exam Hall", 21, FontStyle.Bold, new Vector2(18, -12), new Vector2(514, 24), Anchor.TopLeft);
+            hudCopy = CreateText("HUD Copy", hudPanel, "", 13, FontStyle.Normal, new Vector2(18, -40), new Vector2(514, 48), Anchor.TopLeft);
+            floorProgress = CreateText("Floor Progress", hudPanel, "", 13, FontStyle.Bold, new Vector2(18, 10), new Vector2(514, 22), Anchor.BottomLeft);
             floorProgress.color = new Color(0.92f, 0.95f, 1f);
 
-            notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(620, 126), Anchor.BottomLeft, new Color(0.025f, 0.032f, 0.047f, 0.90f));
+            notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(540, 104), Anchor.BottomLeft, new Color(0.025f, 0.032f, 0.047f, 0.88f));
             noteAccent = DecoratePanel(notePanel, new Color(0.48f, 0.84f, 1f), strong: false);
-            noteText = CreateText("Note Text", notePanel, "", 14, FontStyle.Normal, new Vector2(18, -14), new Vector2(582, 96), Anchor.TopLeft);
+            noteText = CreateText("Note Text", notePanel, "", 13, FontStyle.Normal, new Vector2(16, -12), new Vector2(506, 78), Anchor.TopLeft);
             noteText.color = new Color(0.94f, 0.97f, 1f);
 
             reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(840, 560), Anchor.Center, new Color(0.018f, 0.024f, 0.038f, 0.98f));
@@ -376,7 +379,7 @@ namespace MagicExamHall
                 goal.renderer = body.GetComponent<SpriteRenderer>();
                 if (goal.kind == PixelSpriteKind.RuneCircle)
                 {
-                    body.transform.localScale *= 1.45f;
+                    body.transform.localScale *= 1.18f;
                 }
                 goal.label = CreateGoalLabel(goal, floorRoot.transform);
             }
@@ -1780,26 +1783,41 @@ namespace MagicExamHall
         {
             var canvasObject = new GameObject($"{goal.title} Goal Label");
             canvasObject.transform.SetParent(parent, false);
-            canvasObject.transform.position = goal.position + new Vector2(0f, -0.78f);
+            canvasObject.transform.position = goal.position + GoalLabelOffset(goal.position);
             var worldCanvas = canvasObject.AddComponent<Canvas>();
             worldCanvas.renderMode = RenderMode.WorldSpace;
             worldCanvas.overrideSorting = true;
             worldCanvas.sortingOrder = 42;
             var rect = canvasObject.GetComponent<RectTransform>() ?? canvasObject.AddComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(148f, 36f);
-            canvasObject.transform.localScale = Vector3.one * 0.012f;
+            rect.sizeDelta = new Vector2(132f, 32f);
+            canvasObject.transform.localScale = Vector3.one * 0.011f;
 
             var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, rect.sizeDelta, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, 0.86f));
             background.raycastTarget = false;
             var accent = CreateImage("Goal Label Accent", canvasObject.transform, Vector2.zero, new Vector2(rect.sizeDelta.x, 3f), Anchor.TopLeft, WithAlpha(goal.color, 0.80f));
             accent.raycastTarget = false;
-            var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 18, FontStyle.Bold, Vector2.zero, rect.sizeDelta, Anchor.Center);
+            var text = CreateText("Goal Label Text", canvasObject.transform, goal.OpenLabel, 16, FontStyle.Bold, Vector2.zero, rect.sizeDelta, Anchor.Center);
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.Lerp(goal.color, Color.white, 0.45f);
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.raycastTarget = false;
             return text;
+        }
+
+        private static Vector2 GoalLabelOffset(Vector2 goalPosition)
+        {
+            if (goalPosition.y <= -1.8f)
+            {
+                return new Vector2(0f, 0.82f);
+            }
+
+            if (goalPosition.y >= 2.2f)
+            {
+                return new Vector2(0f, -1.02f);
+            }
+
+            return new Vector2(0f, -0.78f);
         }
 
         private static Vector2 WorldLabelSize(RectTransform rect)
@@ -2556,7 +2574,20 @@ namespace MagicExamHall
             }
         }
 
-        public string OpenLabel => $"{title}\n{RequirementLabel}";
+        public string CompactRequirementLabel
+        {
+            get
+            {
+                if (comboBase.HasValue && comboOverlay.HasValue)
+                {
+                    return $"{SpellLabels.Korean(comboBase.Value)}+{SpellLabels.Korean(comboOverlay.Value)}";
+                }
+
+                return RequirementLabel;
+            }
+        }
+
+        public string OpenLabel => $"{title}\n{CompactRequirementLabel}";
 
         public WorldStateGoal WithReaction(WorldReactionKind reactionKind)
         {

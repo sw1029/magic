@@ -59,6 +59,11 @@ namespace MagicExamHall.Tests
             Assert.That(controller.PlayerAnimationStateForTests, Is.EqualTo(PlayerAnimationState.Idle));
             Assert.That(controller.PlayerFacingForTests, Is.EqualTo(PlayerFacing.Down));
             Assert.That(playerAnimator.GetComponent<SpriteRenderer>().sprite.texture.width, Is.EqualTo(PlayerSpriteLibrary.FrameWidth));
+            Assert.That(controller.HudPanelSizeForTests.x, Is.LessThanOrEqualTo(560f));
+            Assert.That(controller.HudPanelSizeForTests.y, Is.LessThanOrEqualTo(112f));
+            Assert.That(controller.MagicNotePanelSizeForTests.x, Is.LessThanOrEqualTo(540f));
+            Assert.That(controller.MagicNotePanelSizeForTests.y, Is.LessThanOrEqualTo(104f));
+            Assert.That(controller.MaxGoalMarkerWorldWidthForTests, Is.LessThan(2.15f));
             Assert.That(controller.AutotileLayerCountForTests, Is.GreaterThanOrEqualTo(5));
             Assert.That(controller.AutotilePlacedTileCountForTests, Is.GreaterThan(450));
             Assert.That(controller.AutotileUniqueTileCountForTests, Is.GreaterThan(32));
@@ -90,6 +95,7 @@ namespace MagicExamHall.Tests
                 Assert.That(controller.AutotileLayerCountForTests, Is.GreaterThanOrEqualTo(5), $"floor {floor + 1}");
                 Assert.That(controller.AutotilePlacedTileCountForTests, Is.GreaterThan(450), $"floor {floor + 1}");
                 Assert.That(controller.AutotileUniqueTileCountForTests, Is.GreaterThan(32), $"floor {floor + 1}");
+                Assert.That(controller.MaxGoalMarkerWorldWidthForTests, Is.LessThan(2.15f), $"floor {floor + 1}");
                 Assert.That(controller.MinGoalLabelWorldWidthForTests, Is.GreaterThan(1.3f), $"floor {floor + 1}");
                 Assert.That(controller.MaxGoalLabelWorldHeightForTests, Is.LessThan(0.55f), $"floor {floor + 1}");
             }

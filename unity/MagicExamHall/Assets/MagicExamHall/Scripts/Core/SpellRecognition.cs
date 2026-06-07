@@ -124,6 +124,18 @@ namespace MagicExamHall
             {
                 status = RecognitionStatus.Incomplete;
             }
+            else if (targetFamily == SpellFamily.Life &&
+                status != RecognitionStatus.Recognized &&
+                IsLikelyLifeCandidate(top, drawable, quality))
+            {
+                status = RecognitionStatus.Recognized;
+            }
+
+            if ((top.template.family == SpellFamily.Life || targetFamily == SpellFamily.Life) && !MatchesLifeYShape(drawable))
+            {
+                status = top.score >= 0.44f ? RecognitionStatus.Incomplete : RecognitionStatus.Invalid;
+            }
+
             SpellFamily? recognized = status == RecognitionStatus.Recognized ? top.template.family : null;
             var success = recognized.HasValue && recognized.Value == targetFamily;
 
@@ -456,7 +468,7 @@ namespace MagicExamHall
                 new()
                 {
                     family = SpellFamily.Life,
-                    minStrokes = 1,
+                    minStrokes = 2,
                     maxStrokes = 3,
                     strokes = new List<List<Vector2>>
                     {
@@ -657,6 +669,210 @@ namespace MagicExamHall
             }
 
             return Mathf.Clamp01(1f - Mathf.Abs(endpoints.Count - 4) / 5f);
+        }
+
+        private static bool IsLikelyLifeCandidate(
+            (SpellTemplate template, float score, float distance) top,
+            List<List<StrokeSample>> strokes,
+            QualityVector quality)
+        {
+            if (top.template.family != SpellFamily.Life || quality.closure > 0.68f || strokes.Count < 2 || strokes.Count > 3)
+            {
+                return false;
+            }
+
+            return top.score >= 0.56f && MatchesLifeYShape(strokes);
+        }
+
+        private static bool MatchesLifeYShape(List<List<StrokeSample>> strokes)
+        {
+            if (strokes == null || strokes.Count < 2 || strokes.Count > 3)
+            {
+                return false;
+            }
+
+            var points = strokes.SelectMany(stroke => stroke.Select(sample => sample.position)).ToList();
+            if (points.Count < 6)
+            {
+                return false;
+            }
+
+            var minX = points.Min(point => point.x);
+            var maxX = points.Max(point => point.x);
+            var minY = points.Min(point => point.y);
+            var maxY = points.Max(point => point.y);
+            var width = maxX - minX;
+            var height = maxY - minY;
+            var diagonal = Mathf.Max(Vector2.Distance(new Vector2(minX, minY), new Vector2(maxX, maxY)), 0.001f);
+            if (width < diagonal * 0.26f || height < diagonal * 0.42f)
+            {
+                return false;
+            }
+
+            if (!TryEstimateLifeBranchPoint(strokes, diagonal * 0.14f, out var branchPoint))
+            {
+                return false;
+            }
+
+            var tips = CollectLifeTips(strokes, branchPoint, diagonal * 0.16f);
+            if (tips.Count != 3)
+            {
+                return false;
+            }
+
+            return FitsLifeOrientation(tips, branchPoint, width, height, diagonal);
+        }
+
+        private static bool TryEstimateLifeBranchPoint(List<List<StrokeSample>> strokes, float maxDistance, out Vector2 branchPoint)
+        {
+            branchPoint = Vector2.zero;
+            var bestScore = float.MaxValue;
+            var found = false;
+
+            for (var strokeIndex = 0; strokeIndex < strokes.Count; strokeIndex++)
+            {
+                foreach (var sample in strokes[strokeIndex])
+                {
+                    var point = sample.position;
+                    var sum = 0f;
+                    var contributors = 0;
+
+                    for (var otherIndex = 0; otherIndex < strokes.Count; otherIndex++)
+                    {
+                        if (otherIndex == strokeIndex)
+                        {
+                            continue;
+                        }
+
+                        var distance = strokes[otherIndex].Min(other => Vector2.Distance(point, other.position));
+                        sum += distance;
+                        contributors++;
+                    }
+
+                    if (contributors == 0)
+                    {
+                        continue;
+                    }
+
+                    var average = sum / contributors;
+                    if (average < bestScore)
+                    {
+                        bestScore = average;
+                        branchPoint = point;
+                        found = true;
+                    }
+                }
+            }
+
+            return found && bestScore <= maxDistance;
+        }
+
+        private static List<Vector2> CollectLifeTips(List<List<StrokeSample>> strokes, Vector2 branchPoint, float mergeDistance)
+        {
+            var rawTips = strokes
+                .SelectMany(stroke => new[] { stroke[0].position, stroke[^1].position })
+                .Where(point => Vector2.Distance(point, branchPoint) > mergeDistance * 0.85f)
+                .OrderByDescending(point => Vector2.Distance(point, branchPoint))
+                .ToList();
+
+            var clustered = new List<Vector2>();
+            foreach (var point in rawTips)
+            {
+                var existingIndex = clustered.FindIndex(existing => Vector2.Distance(existing, point) <= mergeDistance);
+                if (existingIndex >= 0)
+                {
+                    clustered[existingIndex] = (clustered[existingIndex] + point) * 0.5f;
+                }
+                else
+                {
+                    clustered.Add(point);
+                }
+            }
+
+            if (clustered.Count < 3)
+            {
+                return clustered;
+            }
+
+            return clustered
+                .OrderByDescending(point => Vector2.Distance(point, branchPoint))
+                .Take(3)
+                .ToList();
+        }
+
+        private static bool FitsLifeOrientation(IReadOnlyList<Vector2> tips, Vector2 branchPoint, float width, float height, float diagonal)
+        {
+            const float VerticalMarginRatio = 0.10f;
+            const float CenterToleranceRatio = 0.22f;
+            const float SideReachRatio = 0.16f;
+            const float MinArmRatio = 0.20f;
+
+            var verticalMargin = height * VerticalMarginRatio;
+            var centerTolerance = Mathf.Max(width * CenterToleranceRatio, diagonal * 0.06f);
+            var sideReach = Mathf.Max(width * SideReachRatio, diagonal * 0.08f);
+            var minArmLength = diagonal * MinArmRatio;
+
+            bool MatchesPattern(bool stemIsTop)
+            {
+                var stemCandidates = tips
+                    .Where(tip => stemIsTop ? tip.y > branchPoint.y + verticalMargin : tip.y < branchPoint.y - verticalMargin)
+                    .Where(tip => Mathf.Abs(tip.x - branchPoint.x) <= centerTolerance)
+                    .OrderByDescending(tip => Vector2.Distance(tip, branchPoint))
+                    .ToList();
+                if (stemCandidates.Count == 0)
+                {
+                    return false;
+                }
+
+                var stem = stemCandidates[0];
+                if (Vector2.Distance(stem, branchPoint) < minArmLength)
+                {
+                    return false;
+                }
+
+                var branchTips = tips.Where(tip => tip != stem).ToList();
+                if (branchTips.Count != 2)
+                {
+                    return false;
+                }
+
+                var left = branchTips.FirstOrDefault(tip => tip.x < branchPoint.x - sideReach);
+                var right = branchTips.FirstOrDefault(tip => tip.x > branchPoint.x + sideReach);
+                if (left == default || right == default)
+                {
+                    return false;
+                }
+
+                if (stemIsTop)
+                {
+                    if (left.y >= branchPoint.y - verticalMargin || right.y >= branchPoint.y - verticalMargin)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (left.y <= branchPoint.y + verticalMargin || right.y <= branchPoint.y + verticalMargin)
+                    {
+                        return false;
+                    }
+                }
+
+                if (Vector2.Distance(left, branchPoint) < minArmLength || Vector2.Distance(right, branchPoint) < minArmLength)
+                {
+                    return false;
+                }
+
+                var leftDir = (left - branchPoint).normalized;
+                var rightDir = (right - branchPoint).normalized;
+                var stemDir = (stem - branchPoint).normalized;
+                var splitAngle = Vector2.Angle(leftDir, rightDir);
+                var leftStemAngle = Vector2.Angle(leftDir, stemDir);
+                var rightStemAngle = Vector2.Angle(rightDir, stemDir);
+                return splitAngle >= 35f && splitAngle <= 120f && leftStemAngle >= 85f && rightStemAngle >= 85f;
+            }
+
+            return MatchesPattern(true) || MatchesPattern(false);
         }
 
         private static float EstimateFillRatio(List<List<StrokeSample>> strokes)

@@ -114,6 +114,44 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void PixelArtFactoryLoadsBundledExternalSprites()
+        {
+            PixelArtFactory.ResetExternalSpriteCache();
+
+            foreach (var kind in System.Enum.GetValues(typeof(PixelSpriteKind)).Cast<PixelSpriteKind>())
+            {
+                var sprite = PixelArtFactory.CreateSprite($"procedural-sentinel-{kind}", Color.magenta, Color.green, kind);
+
+                Assert.That(sprite, Is.Not.Null, kind.ToString());
+                Assert.That(sprite.texture.width, Is.EqualTo(32), kind.ToString());
+                Assert.That(sprite.texture.height, Is.EqualTo(32), kind.ToString());
+                Assert.That(sprite.texture.name, Does.StartWith(kind.ToString()), kind.ToString());
+            }
+        }
+
+        [Test]
+        public void PixelSpriteViewAppliesRuntimeTint()
+        {
+            var body = new GameObject("Tinted Pulse Test");
+            try
+            {
+                body.AddComponent<SpriteRenderer>();
+                var view = body.AddComponent<PixelSpriteView>();
+                var tint = new Color(0.25f, 0.75f, 1f, 0.6f);
+                view.kind = PixelSpriteKind.Pulse;
+                view.rendererTint = tint;
+
+                view.Apply();
+
+                Assert.That(body.GetComponent<SpriteRenderer>().color, Is.EqualTo(tint));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(body);
+            }
+        }
+
+        [Test]
         public void OpenTriangleIsIncompleteInsteadOfFalsePositive()
         {
             var stroke = new List<StrokeSample>
@@ -208,6 +246,22 @@ namespace MagicExamHall.Tests
             Assert.That(result.success, Is.True);
             Assert.That(result.nextHint, Does.Contain("좋습니다"));
             Assert.That(result.nextHint, Does.Not.Contain("가지가 갈라지게"));
+        }
+
+        [Test]
+        public void ForklessLifeCandidateDoesNotRecognizeAsLife()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeLine(220, 80, 220, 360, 0f),
+                MakeLine(120, 230, 340, 230, 0.2f)
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Life);
+
+            Assert.That(result.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.success, Is.False);
+            Assert.That(result.feedbackReason, Does.Contain("생명").And.Contain("가지"));
         }
 
         [Test]
@@ -492,6 +546,184 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void SpellCastingServiceUsesInjectedRecognitionBoundary()
+        {
+            var service = new SpellCastingService(
+                new StubBaseRecognizer(SpellFamily.Water),
+                new StubOverlayRecognizer(OverlayOperator.ElectricFork));
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeLine(-0.5f, -0.5f, 0.5f, 0.5f, 0f)
+            };
+
+            var baseOutcome = service.Process(strokes, new Vector2(2f, -1f), strokes.Count, new List<CompiledSeal>(), 10f);
+
+            Assert.That(baseOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded));
+            Assert.That(baseOutcome.createdSeal.baseFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(baseOutcome.createdSeal.worldCenter, Is.EqualTo(new Vector2(2f, -1f)));
+
+            var overlayOutcome = service.Process(
+                strokes,
+                baseOutcome.createdSeal.worldCenter,
+                strokes.Count,
+                new List<CompiledSeal> { baseOutcome.createdSeal },
+                10.2f);
+
+            Assert.That(overlayOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.OverlaySucceeded));
+            Assert.That(overlayOutcome.targetSeal, Is.SameAs(baseOutcome.createdSeal));
+            Assert.That(baseOutcome.createdSeal.overlayStack, Does.Contain(OverlayOperator.ElectricFork));
+        }
+
+        [Test]
+        public void SpellCastingServiceProcessesExplicitRecognitionHandoffs()
+        {
+            var service = new SpellCastingService();
+            var baseHandoff = SpellRecognitionHandoff.Base(
+                RecognitionStatus.Recognized,
+                SpellFamily.Water,
+                SpellFamily.Water,
+                new Vector2(1.5f, -0.5f),
+                0.96f,
+                PerfectQuality(),
+                worldScale: 1.4f,
+                strokeCount: 2,
+                sourceId: "external-base");
+
+            var baseOutcome = service.ProcessHandoff(baseHandoff, new List<CompiledSeal>(), 0f);
+
+            Assert.That(baseOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded));
+            Assert.That(baseOutcome.createdSeal.baseFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(baseOutcome.createdSeal.worldCenter, Is.EqualTo(new Vector2(1.5f, -0.5f)));
+
+            var overlayHandoff = SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.IceBar,
+                baseOutcome.createdSeal.worldCenter,
+                0.94f,
+                0.91f,
+                targetSealId: baseOutcome.createdSeal.sealId,
+                sourceId: "external-overlay");
+
+            var overlayOutcome = service.ProcessHandoff(
+                overlayHandoff,
+                new List<CompiledSeal> { baseOutcome.createdSeal },
+                0.2f);
+
+            Assert.That(overlayOutcome.kind, Is.EqualTo(SpellCastOutcomeKind.OverlaySucceeded));
+            Assert.That(overlayOutcome.targetSeal, Is.SameAs(baseOutcome.createdSeal));
+            Assert.That(baseOutcome.createdSeal.overlayStack, Does.Contain(OverlayOperator.IceBar));
+        }
+
+        [Test]
+        public void RecognitionHandoffRoundTripsSerializableRecognizedValues()
+        {
+            var baseHandoff = SpellRecognitionHandoff.Base(
+                RecognitionStatus.Recognized,
+                SpellFamily.Life,
+                SpellFamily.Life,
+                new Vector2(1.25f, -2f),
+                0.92f,
+                PerfectQuality(),
+                sourceId: "json-base");
+            var baseCopy = JsonUtility.FromJson<SpellRecognitionHandoff>(JsonUtility.ToJson(baseHandoff));
+
+            Assert.That(baseCopy.recognizedFamily, Is.EqualTo(SpellFamily.Life));
+            Assert.That(baseCopy.ToBaseResult().spell.success, Is.True);
+            Assert.That(baseCopy.sourceId, Is.EqualTo("json-base"));
+
+            var overlayHandoff = SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.SoulDot,
+                Vector2.one,
+                0.9f,
+                0.86f,
+                targetSealId: "seal-123",
+                sourceId: "json-overlay");
+            var overlayCopy = JsonUtility.FromJson<SpellRecognitionHandoff>(JsonUtility.ToJson(overlayHandoff));
+
+            Assert.That(overlayCopy.recognizedOperator, Is.EqualTo(OverlayOperator.SoulDot));
+            Assert.That(overlayCopy.ToOverlayResult().success, Is.True);
+            Assert.That(overlayCopy.targetSealId, Is.EqualTo("seal-123"));
+        }
+
+        [Test]
+        public void BaseHandoffNearExistingSealStillCreatesNewBaseSeal()
+        {
+            var service = new SpellCastingService();
+            var existingSeal = CreateWorldSeal();
+            var handoff = SpellRecognitionHandoff.Base(
+                RecognitionStatus.Recognized,
+                SpellFamily.Life,
+                SpellFamily.Life,
+                existingSeal.worldCenter,
+                0.95f,
+                PerfectQuality(),
+                worldScale: 1.1f);
+
+            var outcome = service.ProcessHandoff(handoff, new List<CompiledSeal> { existingSeal }, 0.2f);
+
+            Assert.That(outcome.kind, Is.EqualTo(SpellCastOutcomeKind.BaseSucceeded));
+            Assert.That(outcome.createdSeal, Is.Not.SameAs(existingSeal));
+            Assert.That(outcome.createdSeal.baseFamily, Is.EqualTo(SpellFamily.Life));
+            Assert.That(existingSeal.overlayStack, Is.Empty);
+        }
+
+        [Test]
+        public void OverlayHandoffRequiresActiveAttachableSeal()
+        {
+            var service = new SpellCastingService();
+            var noSealHandoff = SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.SoulDot,
+                Vector2.zero,
+                0.95f,
+                0.95f);
+
+            var noSeal = service.ProcessHandoff(noSealHandoff, new List<CompiledSeal>(), 0f);
+
+            Assert.That(noSeal.kind, Is.EqualTo(SpellCastOutcomeKind.OverlayNoActiveSeal));
+
+            var seal = CreateWorldSeal();
+            var farHandoff = SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.SoulDot,
+                seal.worldCenter + Vector2.right * (SpellCastingService.AttachRadiusFor(seal) + 0.5f),
+                0.95f,
+                0.95f,
+                targetSealId: seal.sealId);
+
+            var detached = service.ProcessHandoff(farHandoff, new List<CompiledSeal> { seal }, 0.2f);
+
+            Assert.That(detached.kind, Is.EqualTo(SpellCastOutcomeKind.DetachedOverlay));
+            Assert.That(detached.targetSeal, Is.SameAs(seal));
+            Assert.That(seal.overlayStack, Is.Empty);
+        }
+
+        [Test]
+        public void OverlayHandoffWithExplicitStaleSealIdDoesNotAttachNearestSeal()
+        {
+            var service = new SpellCastingService();
+            var staleSeal = CreateWorldSeal();
+            staleSeal.expiresAt = 0.1f;
+            var activeSeal = CreateWorldSeal();
+            activeSeal.worldCenter = staleSeal.worldCenter;
+            activeSeal.expiresAt = 20f;
+            var handoff = SpellRecognitionHandoff.Overlay(
+                RecognitionStatus.Recognized,
+                OverlayOperator.SoulDot,
+                activeSeal.worldCenter,
+                0.95f,
+                0.95f,
+                targetSealId: staleSeal.sealId);
+
+            var outcome = service.ProcessHandoff(handoff, new List<CompiledSeal> { staleSeal, activeSeal }, 0.2f);
+
+            Assert.That(outcome.kind, Is.EqualTo(SpellCastOutcomeKind.OverlayNoActiveSeal));
+            Assert.That(outcome.overlayResult.feedbackReason, Does.Contain("targetSealId"));
+            Assert.That(activeSeal.overlayStack, Is.Empty);
+        }
+
+        [Test]
         public void SpellCastingServiceExposesAttachLookupForInputAdapters()
         {
             var seal = CreateWorldSeal();
@@ -519,6 +751,8 @@ namespace MagicExamHall.Tests
             Assert.Throws<System.ArgumentNullException>(() => service.ProcessBaseResult(null, Vector2.zero, 0, 0f));
             Assert.Throws<System.ArgumentNullException>(() => service.ProcessOverlayResult(null, seal, Vector2.zero, 0));
             Assert.Throws<System.ArgumentNullException>(() => service.ProcessOverlayResult(overlayResult, null, Vector2.zero, 0));
+            Assert.Throws<System.ArgumentNullException>(() => service.ProcessHandoff(null, new List<CompiledSeal>(), 0f));
+            Assert.Throws<System.ArgumentNullException>(() => service.ProcessHandoff(SpellRecognitionHandoff.Overlay(RecognitionStatus.Invalid, null, Vector2.zero, 0f, 0f), null, 0f));
         }
 
         [Test]
@@ -597,6 +831,18 @@ namespace MagicExamHall.Tests
             };
         }
 
+        private static QualityVector PerfectQuality()
+        {
+            return new QualityVector
+            {
+                closure = 1f,
+                smoothness = 1f,
+                tempo = 1f,
+                stability = 1f,
+                rotationBias = 0f
+            };
+        }
+
         private static List<List<StrokeSample>> Offset(List<List<StrokeSample>> strokes, Vector2 center, float canonicalCenter)
         {
             return strokes
@@ -614,6 +860,65 @@ namespace MagicExamHall.Tests
             Assert.That(fields[^3], Is.EqualTo(hintShown ? "true" : "false"));
             Assert.That(fields[^2], Is.EqualTo(assistLevel.ToString()));
             Assert.That(fields[^1], Is.EqualTo(assisted ? "true" : "false"));
+        }
+
+        private sealed class StubBaseRecognizer : IBaseGestureRecognizer
+        {
+            private readonly SpellFamily family;
+
+            public StubBaseRecognizer(SpellFamily family)
+            {
+                this.family = family;
+            }
+
+            public BaseRecognitionResult RecognizeBase(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)
+            {
+                return new BaseRecognitionResult
+                {
+                    spell = new SpellResult
+                    {
+                        status = RecognitionStatus.Recognized,
+                        recognizedFamily = family,
+                        targetFamily = family,
+                        confidence = 0.99f,
+                        quality = new QualityVector
+                        {
+                            closure = 1f,
+                            smoothness = 1f,
+                            tempo = 1f,
+                            stability = 1f
+                        },
+                        feedbackReason = "stub base",
+                        nextHint = "stub next",
+                        success = true
+                    },
+                    worldScale = 1.25f,
+                    bufferStrokeCount = strokes.Count
+                };
+            }
+        }
+
+        private sealed class StubOverlayRecognizer : IOverlayGestureRecognizer
+        {
+            private readonly OverlayOperator op;
+
+            public StubOverlayRecognizer(OverlayOperator op)
+            {
+                this.op = op;
+            }
+
+            public OverlayRecognitionResult RecognizeOverlay(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes, CompiledSeal seal)
+            {
+                return new OverlayRecognitionResult
+                {
+                    status = RecognitionStatus.Recognized,
+                    recognizedOperator = op,
+                    score = 0.98f,
+                    shapeConfidence = 0.98f,
+                    scaleRatio = 0.24f,
+                    feedbackReason = "stub overlay"
+                };
+            }
         }
     }
 }

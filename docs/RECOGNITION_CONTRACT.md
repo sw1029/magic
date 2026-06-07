@@ -220,7 +220,7 @@ StrokeSample {
 
 ### Unity service boundary note
 
-`StrokeRecognitionResult`는 다음 Unity 리팩터에서 `BaseRecognitionResult`와 `OverlayRecognitionResult`를 한 handoff event로 감싸기 위한 제안 타입이다. 이 PR에서 새 canonical schema로 확정하는 것은 아니며, 확정 전까지는 위 base/overlay result contract를 기준으로 한다.
+`SpellRecognitionHandoff`는 `BaseRecognitionResult`와 `OverlayRecognitionResult`를 한 handoff event로 감싸는 Unity 쪽 첫 구현 타입이다. 장기적으로 Web과 공유할 canonical schema를 확정하기 전까지는 이 타입이 Unity 외부 인식 결과의 adapter 역할을 하며, 위 base/overlay result contract를 기준으로 변환된다.
 
 ## 10. Final Seal Contract
 
@@ -338,7 +338,7 @@ adapter가 하면 안 되는 일:
 - invalid/incomplete를 무조건 success로 승격
 - 로그 privacy 정책 변경
 
-Unity에는 아직 같은 adapter 경계가 없다. Unity 쪽 후속 작업은 `IBaseGestureRecognizer`, `IOverlayGestureRecognizer`, optional model/profile service로 나눈다.
+Unity에는 `IBaseGestureRecognizer`와 `IOverlayGestureRecognizer` 경계가 생겼고, 기본 구현은 기존 heuristic static recognizer를 감싼다. 후속 작업은 이 경계 뒤에 optional model/profile service를 붙이는 방향으로 나눈다.
 
 ## 13. 새 Symbol 추가 체크리스트
 
@@ -385,14 +385,14 @@ Unity에는 아직 같은 adapter 경계가 없다. Unity 쪽 후속 작업은 `
 | --- | --- | --- |
 | 공통 fixture | 지금은 보류 | issue #20에 따라 인식기 안정화 뒤 재평가 |
 | Unity adjusted quality | 미구현 | issue #80 |
-| Unity model/shadow adapter | 미구현 | recognition service 분리 뒤 진행 |
+| Unity model/shadow adapter | 미구현 | recognizer interface 뒤에 optional adapter로 진행 |
 | Unity `symmetry`, `overshoot` | 미구현 | 필요 시 quality 확장 issue 생성 |
 | raw stroke 저장 | 기본 저장 안 함 | issue #16 privacy 기준 필요 |
 
 ## 15. 다음 구현 순서
 
-1. Unity `Recognition` 폴더와 service interface를 만든다.
-2. `GestureRecognizer` static 호출을 감싸는 `HeuristicBaseGestureRecognizer`를 만든다.
-3. `OverlayRecognizer` static 호출을 감싸는 `HeuristicOverlayGestureRecognizer`를 만든다.
-4. `ExamGameController`가 concrete static recognizer가 아니라 service 경유로 호출하게 바꾼다.
+1. Unity `Recognition` 폴더와 recognizer interface를 유지한다.
+2. `SpellCastingService`의 주입 지점과 `SpellRecognitionHandoff`를 기준으로 외부/base/overlay 인식 결과 handoff 테스트를 늘린다.
+3. `SpellRecognitionHandoff`를 Web fixture와 맞출 공통 JSON schema로 승격할지 결정한다.
+4. `ExamGameController`가 stroke session DTO를 직접 받는 대신 recognition completed 이벤트를 받도록 점진적으로 바꾼다.
 5. 그 다음에 profile/model adapter를 Unity에 붙일지 결정한다.

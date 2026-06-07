@@ -8,7 +8,8 @@
 
 | 자산 | 작가 | 출처 | 라이선스 | 사용 위치 |
 | --- | --- | --- | --- | --- |
-| _아직 외부 자산 없음. 모든 sprite는 `PixelArtFactory.cs`의 procedural 생성_ | — | — | — | — |
+| 기본 32×32 도트 sprite pack | 프로젝트 내부 제작 | `Assets/MagicExamHall/Resources/Sprites` | 프로젝트 라이선스 | 시험장 배경, 플레이어, 설치물, 룬, 원소 문양 |
+| Procedural fallback sprite | 프로젝트 내부 제작 | `PixelArtFactory.cs` | 프로젝트 라이선스 | PNG 누락 시 fallback |
 
 ## 사운드
 

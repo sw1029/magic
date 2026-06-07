@@ -449,7 +449,7 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
 - `docs/INPUT_LAYER_HANDOFF.md`가 추가됐다.
 - device input부터 stroke session까지의 입력 캡처 경계와, stroke session 이후 recognition/personalization 경계를 문서화했다.
 - Unity 쪽 목표 파일 구조, DTO, source interface, session buffer, recognition service, presentation 분리 기준을 포함한다.
-- 이번 PR은 C# 구현을 바꾸지 않고 다음 리팩터 PR의 기준선을 만든다.
+- 이후 C# 구현에서 `Scripts/Recognition` 경계와 recognizer 주입 지점을 작게 열기 시작했다.
 
 ### Step 3. Unity Recognition service 경계 생성
 
@@ -461,6 +461,13 @@ unity/MagicExamHall/Assets/MagicExamHall/Scripts/
 - `HeuristicOverlayRecognizer`
 - recognition service/coordinator가 static recognizer 호출을 감싼다
 - `ExamGameController`는 raw stroke나 recognizer 내부 구현 대신 recognition result를 받는다
+
+현재 반영 상태:
+
+- `Scripts/Recognition/HeuristicGestureRecognizers.cs`에 `IBaseGestureRecognizer`, `IOverlayGestureRecognizer`, `HeuristicBaseGestureRecognizer`, `HeuristicOverlayGestureRecognizer`를 추가했다.
+- `SpellRecognitionHandoff`와 `SpellCastingService.ProcessHandoff(...)`를 추가해 외부 인식 결과가 직접 그리기와 같은 게임 적용 경로를 탈 수 있다.
+- `SpellCastingService`는 기본 heuristic recognizer를 쓰되, 생성자 주입으로 대체 recognizer를 받을 수 있다.
+- 현재 `ExamGameController`는 기존 `WorldDrawingController` 입력 흐름을 유지하고, 게임 규칙은 `SpellCastingService`를 통해 분리된 recognizer 경계를 사용한다.
 
 ### Step 4. Unity assembly 계층 분리
 

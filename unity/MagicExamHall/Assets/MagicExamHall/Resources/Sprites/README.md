@@ -1,6 +1,8 @@
 # Sprites
 
 이 폴더에 PNG 파일을 두면 `PixelArtFactory`가 자동으로 procedural 도형 대신 사용합니다.
+현재 기본 32×32 도트 팩이 들어 있으며, 같은 파일명으로 교체하면 게임 화면 전체 톤을 바꿀 수 있습니다.
+`Pulse.png`와 `RuneCircle.png`는 런타임 tint를 받는 흰색 마스크 asset이므로 색을 고정해서 칠하지 않는 편이 좋습니다.
 
 자세한 규칙은 `docs/SPRITE_GUIDE.md` 참조.
 
@@ -10,6 +12,8 @@
 2. Unity Editor에서 import 설정 확인: PPU 16, Filter Point, Wrap Clamp, Pivot Center.
 3. Play 모드 실행 시 자동 교체.
 4. `docs/CREDITS.md`에 출처를 한 줄 추가합니다.
+
+내장 PNG는 프로젝트 내부 제작 자산이라 별도 외부 라이선스 표기가 필요 없습니다.
 
 ## 라이선스 보관
 

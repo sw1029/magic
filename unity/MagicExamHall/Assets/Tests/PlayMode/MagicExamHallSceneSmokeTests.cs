@@ -35,6 +35,10 @@ namespace MagicExamHall.Tests
             Assert.That(drawing, Is.Not.Null);
             Assert.That(drawing.bufferSeconds, Is.EqualTo(WorldDrawingController.DefaultBufferSeconds).Within(0.001f));
             Assert.That(drawing.minPointDistance, Is.EqualTo(WorldDrawingController.DefaultMinPointDistance).Within(0.001f));
+            Assert.That(Object.FindFirstObjectByType<MentorPresentationController>(), Is.Not.Null);
+            Assert.That(controller.IsMentorVisibleForTests, Is.True);
+            Assert.That(controller.CurrentMentorNameForTests, Is.EqualTo("발착층 조교"));
+            Assert.That(controller.MentorSpeechTextForTests, Is.EqualTo(controller.LastMagicNoteText));
             Assert.That(controller.OutputDirectory, Does.Contain("MagicExamHallLogs"));
         }
 
@@ -55,6 +59,47 @@ namespace MagicExamHall.Tests
             Assert.That(controller.LastMagicNoteText, Does.Contain("표식 근처"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("물은 닫힌 원"));
             Assert.That(controller.LastMagicNoteText, Does.Contain("바람"));
+        }
+
+        [UnityTest]
+        public IEnumerator MentorChangesProfileByFloorAndMirrorsNotes()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(1);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
+            Assert.That(controller.CurrentMentorNameForTests, Is.EqualTo("벽화 연구원"));
+            Assert.That(controller.MentorMoodForTests, Is.EqualTo(MentorMood.Neutral));
+            Assert.That(controller.MentorSpeechTextForTests, Is.EqualTo(controller.LastMagicNoteText));
+            Assert.That(controller.MentorSpeechTextForTests, Does.Contain("장식"));
+        }
+
+        [UnityTest]
+        public IEnumerator MentorReactsToSuccessAndFailure()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-5.5f, 2.6f));
+            Assert.That(controller.MentorMoodForTests, Is.EqualTo(MentorMood.Happy));
+            Assert.That(controller.MentorSpeechTextForTests, Is.EqualTo(controller.LastMagicNoteText));
+            Assert.That(controller.MentorSpeechTextForTests, Does.Contain("불씨"));
+
+            controller.CastRawBaseForTests(new List<List<StrokeSample>>(), Vector2.zero);
+            Assert.That(controller.MentorMoodForTests, Is.EqualTo(MentorMood.Frown));
+            Assert.That(controller.MentorSpeechTextForTests, Is.EqualTo(controller.LastMagicNoteText));
+            Assert.That(controller.MentorSpeechTextForTests, Does.Contain("짧은 힌트"));
         }
 
         [UnityTest]

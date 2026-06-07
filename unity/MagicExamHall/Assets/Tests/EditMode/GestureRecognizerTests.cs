@@ -118,7 +118,26 @@ namespace MagicExamHall.Tests
         {
             PixelArtFactory.ResetExternalSpriteCache();
 
-            foreach (var kind in System.Enum.GetValues(typeof(PixelSpriteKind)).Cast<PixelSpriteKind>())
+            var bundledKinds = new[]
+            {
+                PixelSpriteKind.Player,
+                PixelSpriteKind.Station,
+                PixelSpriteKind.Target,
+                PixelSpriteKind.Pulse,
+                PixelSpriteKind.FloorTile,
+                PixelSpriteKind.WallTrim,
+                PixelSpriteKind.Rug,
+                PixelSpriteKind.Bookshelf,
+                PixelSpriteKind.Candle,
+                PixelSpriteKind.RuneCircle,
+                PixelSpriteKind.FireRune,
+                PixelSpriteKind.WaterRune,
+                PixelSpriteKind.WindRune,
+                PixelSpriteKind.EarthRune,
+                PixelSpriteKind.LifeRune
+            };
+
+            foreach (var kind in bundledKinds)
             {
                 var sprite = PixelArtFactory.CreateSprite($"procedural-sentinel-{kind}", Color.magenta, Color.green, kind);
 
@@ -126,6 +145,22 @@ namespace MagicExamHall.Tests
                 Assert.That(sprite.texture.width, Is.EqualTo(32), kind.ToString());
                 Assert.That(sprite.texture.height, Is.EqualTo(32), kind.ToString());
                 Assert.That(sprite.texture.name, Does.StartWith(kind.ToString()), kind.ToString());
+            }
+        }
+
+        [Test]
+        public void PixelArtFactoryCreatesProceduralMentorSprites()
+        {
+            PixelArtFactory.ResetExternalSpriteCache();
+
+            foreach (var kind in System.Enum.GetValues(typeof(PixelSpriteKind)).Cast<PixelSpriteKind>().Where(kind => kind.ToString().StartsWith("Mentor")))
+            {
+                var sprite = PixelArtFactory.CreateSprite($"procedural-sentinel-{kind}", Color.magenta, Color.green, kind);
+
+                Assert.That(sprite, Is.Not.Null, kind.ToString());
+                Assert.That(sprite.texture.width, Is.EqualTo(32), kind.ToString());
+                Assert.That(sprite.texture.height, Is.EqualTo(32), kind.ToString());
+                Assert.That(sprite.texture.name, Does.StartWith($"procedural-sentinel-{kind}"), kind.ToString());
             }
         }
 

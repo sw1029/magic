@@ -35,6 +35,7 @@ namespace MagicExamHall
         private EndingReport endingReport = null!;
         private SpellCastingService spellCasting = null!;
         private FloorGoalSystem floorGoals = null!;
+        private MentorPresentationController mentor = null!;
         private RectTransform hudPanel = null!;
         private RectTransform notePanel = null!;
         private RectTransform reportPanel = null!;
@@ -76,6 +77,10 @@ namespace MagicExamHall
         public int CurrentAssistLevel { get; private set; }
         public string LastHintText { get; private set; } = "";
         public string LastMagicNoteText => magicNote?.Text ?? "";
+        public string CurrentMentorNameForTests => mentor == null ? "" : mentor.CurrentMentorName;
+        public string MentorSpeechTextForTests => mentor == null ? "" : mentor.SpeechText;
+        public MentorMood MentorMoodForTests => mentor == null ? MentorMood.Neutral : mentor.CurrentMood;
+        public bool IsMentorVisibleForTests => mentor != null && mentor.IsVisible;
         public string HudCopyForTests => hudCopy == null ? "" : hudCopy.text;
         public string FloorProgressForTests => floorProgress == null ? "" : floorProgress.text;
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
@@ -99,6 +104,7 @@ namespace MagicExamHall
             floorGoals = new FloorGoalSystem();
             ResolveSceneReferences();
             BuildUi();
+            ConfigureMentor();
             ConfigureWorldDrawing();
             LoadFloor(0);
         }
@@ -111,6 +117,7 @@ namespace MagicExamHall
             TickHazards();
             TickFloorAdvance();
             magicNote.Tick(Time.deltaTime);
+            mentor?.Tick(Time.time);
             TickToast();
             UpdateHud();
         }
@@ -241,6 +248,12 @@ namespace MagicExamHall
             worldDrawing.SpellBuffered += OnSpellBuffered;
         }
 
+        private void ConfigureMentor()
+        {
+            mentor = gameObject.GetComponent<MentorPresentationController>() ?? gameObject.AddComponent<MentorPresentationController>();
+            mentor.Initialize(canvas, uiFont);
+        }
+
         private static void ConfigureMainCamera(Camera camera)
         {
             camera.orthographic = true;
@@ -297,7 +310,8 @@ namespace MagicExamHall
             activeHazards.Clear();
             activeHazards.AddRange(floorController.Current.hazards.Select(hazard => hazard.Clone()));
             BuildFloorArt(floorController.Current);
-            magicNote.Show(BuildFloorEntryNote(floorController.Current));
+            mentor.ConfigureFloor(floorController.Current.number);
+            ShowMagicNote(BuildFloorEntryNote(floorController.Current), MentorMood.Neutral);
         }
 
         private void BuildFloorArt(FloorDefinition floor)
@@ -423,6 +437,12 @@ namespace MagicExamHall
             return band;
         }
 
+        private void ShowMagicNote(string text, MentorMood mentorMood)
+        {
+            magicNote.Show(text);
+            mentor?.Say(mentorMood, text);
+        }
+
         private void OnSpellBuffered(List<List<StrokeSample>> strokes, Vector2 center, int strokeCount)
         {
             ProcessSpellGroup(strokes, center, strokeCount);
@@ -461,7 +481,7 @@ namespace MagicExamHall
             CurrentAssistLevel = hintState.AssistLevelNumber;
             LastHintText = hintState.body;
             endingReport.RecordBase(feedbackFamily, baseResult.spell.quality, success: false, hintState.hintShown, hintState.assisted);
-            magicNote.Show(BuildBaseFailureNote(baseResult.spell, hintState));
+            ShowMagicNote(BuildBaseFailureNote(baseResult.spell, hintState), MentorMood.Frown);
             ShowToast("문양 불안정 - 노트를 확인", new Color(0.92f, 0.72f, 0.34f));
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogBaseAttempt(baseResult, null, "failed", hintState);
@@ -481,7 +501,7 @@ namespace MagicExamHall
             seals.Add(view);
             endingReport.RecordBase(seal.baseFamily, seal.quality, success: true, successHintState.hintShown, successHintState.assisted);
             var effect = ApplyBaseToGoals(seal.baseFamily, outcome.center);
-            magicNote.Show(BuildBaseSuccessNote(seal, effect, successHintState));
+            ShowMagicNote(BuildBaseSuccessNote(seal, effect, successHintState), MentorMood.Happy);
             var toastMessage = effect.worldEffect == "base_off_target"
                 ? $"{SpellLabels.Korean(seal.baseFamily)} 인식 - 표식 근처로 이동"
                 : effect.completed ? $"목표 완료: {effect.goalTitle}" : $"{SpellLabels.Korean(seal.baseFamily)} seal 생성";
@@ -499,7 +519,7 @@ namespace MagicExamHall
             CurrentAssistLevel = 1;
             LastHintText = OverlayActionHint(result, seal);
             endingReport.RecordOverlay(result.recognizedOperator, success: false, outcome.kind, hintShown: true);
-            magicNote.Show(BuildOverlayFailureNote(result, seal));
+            ShowMagicNote(BuildOverlayFailureNote(result, seal), MentorMood.Frown);
             ShowToast("overlay 불안정 - seal 위치 확인", new Color(0.92f, 0.72f, 0.34f));
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "failed");
@@ -514,7 +534,7 @@ namespace MagicExamHall
             CurrentAssistLevel = 1;
             LastHintText = "같은 장식 대신 아직 비어 있는 다른 장식을 seal 위에 그려 보세요.";
             endingReport.RecordOverlay(op, success: false, outcome.kind, hintShown: true);
-            magicNote.Show($"{SpellLabels.Korean(op)} 장식은 이미 이 seal에 붙어 있습니다.");
+            ShowMagicNote($"{SpellLabels.Korean(op)} 장식은 이미 이 seal에 붙어 있습니다.", MentorMood.Frown);
             ShowToast("중복 overlay - 다른 장식 필요", OverlayColor(op));
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "duplicate_overlay");
@@ -529,7 +549,7 @@ namespace MagicExamHall
             CurrentAssistLevel = 1;
             LastHintText = "새 base seal을 만든 뒤 남은 장식을 붙여 보세요.";
             endingReport.RecordOverlay(op, success: false, outcome.kind, hintShown: true);
-            magicNote.Show($"하나의 seal에는 overlay를 {SpellCastingService.MaxOverlayStack}개까지만 안정적으로 붙일 수 있습니다.");
+            ShowMagicNote($"하나의 seal에는 overlay를 {SpellCastingService.MaxOverlayStack}개까지만 안정적으로 붙일 수 있습니다.", MentorMood.Frown);
             ShowToast("overlay stack full - 새 base 필요", OverlayColor(op));
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "overlay_stack_full");
@@ -549,10 +569,11 @@ namespace MagicExamHall
                 ? "현재 active seal snapshot을 다시 조회한 뒤 overlay를 보내거나 새 base seal을 먼저 만드세요."
                 : "먼저 목표 표식 근처에 base 문양을 그려 빛나는 seal을 만든 뒤, 그 seal 안쪽이나 가장자리에 장식을 그리세요.";
             endingReport.RecordOverlay(result.recognizedOperator, success: false, outcome.kind, hintShown: true);
-            magicNote.Show(
+            ShowMagicNote(
                 "노트: overlay는 단독으로 발동하지 않습니다.\n" +
                 $"{result.feedbackReason}\n" +
-                $"다음: {LastHintText}");
+                $"다음: {LastHintText}",
+                MentorMood.Frown);
             ShowToast("base seal 먼저", new Color(0.92f, 0.72f, 0.34f), strong: true);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogOverlayNoSealAttempt(result, outcome.center, outcome.strokeCount, "overlay_no_active_seal");
@@ -574,7 +595,7 @@ namespace MagicExamHall
             var effect = ApplyOverlayToGoals(seal, op, outcome.center);
             CurrentAssistLevel = 0;
             LastHintText = "";
-            magicNote.Show(BuildOverlaySuccessNote(seal, op, effect));
+            ShowMagicNote(BuildOverlaySuccessNote(seal, op, effect), MentorMood.Happy);
             ShowToast(effect.completed ? $"목표 완료: {effect.goalTitle}" : $"{SpellLabels.Korean(op)} overlay 연결", OverlayColor(op), effect.completed);
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, effect.worldEffect);
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
@@ -591,7 +612,7 @@ namespace MagicExamHall
             CurrentAssistLevel = 1;
             LastHintText = DetachedOverlayActionHint(seal);
             endingReport.RecordOverlay(result.recognizedOperator, success: false, outcome.kind, hintShown: true);
-            magicNote.Show(BuildDetachedOverlayFailureNote(result, seal));
+            ShowMagicNote(BuildDetachedOverlayFailureNote(result, seal), MentorMood.Frown);
             ShowToast("seal 가까이 다시 그리기", new Color(0.92f, 0.72f, 0.34f));
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
             LogOverlayAttempt(result, seal, outcome.center, outcome.strokeCount, "detached_overlay");
@@ -834,7 +855,7 @@ namespace MagicExamHall
                 }
 
                 endingReport.RecordFloorCompletion(floorController.CurrentFloorNumber, Time.time - floorStartedAt, activeGoals.Count, activeGoals.Count);
-                magicNote.Show(BuildFloorCompletionNote());
+                ShowMagicNote(BuildFloorCompletionNote(), MentorMood.Happy);
                 ShowToast($"{floorController.CurrentFloorNumber}층 완료 - 다음 층 개방", floorController.Current.accentColor, strong: true);
                 pendingAdvanceAt = Time.time + StandardFloorAdvanceDelaySeconds;
                 return;
@@ -851,7 +872,7 @@ namespace MagicExamHall
             {
                 finalTrueEnding = true;
                 endingReport.RecordFloorCompletion(floorController.CurrentFloorNumber, Time.time - floorStartedAt, completed, activeGoals.Count);
-                magicNote.Show(BuildFloorCompletionNote());
+                ShowMagicNote(BuildFloorCompletionNote(), MentorMood.Happy);
                 ShowToast("성좌심 완전 복구 - 보고서 준비", floorController.Current.accentColor, strong: true);
                 pendingAdvanceAt = Time.time + FinalFloorCompleteReportDelaySeconds;
                 return;
@@ -863,7 +884,7 @@ namespace MagicExamHall
             }
 
             endingReport.RecordFloorCompletion(floorController.CurrentFloorNumber, Time.time - floorStartedAt, completed, activeGoals.Count);
-            magicNote.Show(BuildFloorCompletionNote());
+            ShowMagicNote(BuildFloorCompletionNote(), MentorMood.Happy);
             ShowToast("입학 시험 통과 - 보고서 준비", floorController.Current.accentColor, strong: true);
             pendingAdvanceAt = Time.time + FinalFloorPassReportDelaySeconds;
         }
@@ -966,9 +987,10 @@ namespace MagicExamHall
                 {
                     player.position = safePosition;
                     velocity = Vector2.zero;
-                    magicNote.Show(
+                    ShowMagicNote(
                         "균열이 몸을 밀어냈습니다. 가까운 안전 지점에서 다시 시작합니다.\n" +
-                        "다음: 아직 완료하지 않은 고정 목표를 해결해 안전 지점을 앞으로 옮기세요.");
+                        "다음: 아직 완료하지 않은 고정 목표를 해결해 안전 지점을 앞으로 옮기세요.",
+                        MentorMood.Frown);
                     ShowToast("균열 접촉 - 안전 지점 복귀", hazard.color, strong: true);
                     pulses.Add(new ParticlePulse(hazard.position, hazard.color, weak: true));
                     return;
@@ -1181,6 +1203,7 @@ namespace MagicExamHall
         {
             reportPanel.gameObject.SetActive(true);
             notePanel.gameObject.SetActive(false);
+            mentor?.Say(MentorMood.Neutral, "");
             if (toastPanel != null)
             {
                 toastTtl = 0f;

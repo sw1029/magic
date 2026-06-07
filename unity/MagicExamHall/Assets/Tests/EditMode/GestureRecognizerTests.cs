@@ -218,6 +218,22 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void ForklessLifeCandidateDoesNotRecognizeAsLife()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeLine(220, 80, 220, 360, 0f),
+                MakeLine(120, 230, 340, 230, 0.2f)
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Life);
+
+            Assert.That(result.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.success, Is.False);
+            Assert.That(result.feedbackReason, Does.Contain("생명").And.Contain("가지"));
+        }
+
+        [Test]
         public void EmptyBaseFailureUsesPlayerFacingCopy()
         {
             var result = GestureRecognizer.Recognize(new List<List<StrokeSample>>(), SpellFamily.Water);

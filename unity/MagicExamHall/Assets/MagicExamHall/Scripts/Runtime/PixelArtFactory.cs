@@ -110,11 +110,25 @@ namespace MagicExamHall
                 return null;
             }
 
-            var sprite = Resources.Load<Sprite>(ExternalSpriteRoot + kind);
+            var path = ExternalSpriteRoot + kind;
+            var sprite = Resources.Load<Sprite>(path);
             if (sprite == null)
             {
-                ExternalMissCache.Add(kind);
-                return null;
+                var texture = Resources.Load<Texture2D>(path);
+                if (texture == null)
+                {
+                    ExternalMissCache.Add(kind);
+                    return null;
+                }
+
+                texture.filterMode = FilterMode.Point;
+                texture.wrapMode = TextureWrapMode.Clamp;
+                sprite = Sprite.Create(
+                    texture,
+                    new Rect(0, 0, texture.width, texture.height),
+                    new Vector2(0.5f, 0.5f),
+                    PixelsPerUnit);
+                sprite.name = kind.ToString();
             }
 
             ExternalCache[kind] = sprite;

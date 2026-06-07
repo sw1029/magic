@@ -13,6 +13,7 @@ namespace MagicExamHall
         OverlaySucceeded,
         OverlayDuplicate,
         OverlayStackFull,
+        OverlayNoActiveSeal,
         DetachedOverlay
     }
 
@@ -33,6 +34,20 @@ namespace MagicExamHall
         public const int MaxOverlayStack = 3;
         public const float MinimumOverlayAttachRadius = 1.35f;
         public const float OverlayAttachScaleMultiplier = 0.95f;
+
+        private readonly IBaseGestureRecognizer baseRecognizer;
+        private readonly IOverlayGestureRecognizer overlayRecognizer;
+
+        public SpellCastingService()
+            : this(new HeuristicBaseGestureRecognizer(), new HeuristicOverlayGestureRecognizer())
+        {
+        }
+
+        public SpellCastingService(IBaseGestureRecognizer baseRecognizer, IOverlayGestureRecognizer overlayRecognizer)
+        {
+            this.baseRecognizer = baseRecognizer ?? throw new ArgumentNullException(nameof(baseRecognizer));
+            this.overlayRecognizer = overlayRecognizer ?? throw new ArgumentNullException(nameof(overlayRecognizer));
+        }
 
         public SpellCastOutcome Process(
             List<List<StrokeSample>> strokes,
@@ -63,6 +78,29 @@ namespace MagicExamHall
             return ProcessBase(strokes, center, strokeCount, now);
         }
 
+        public SpellCastOutcome ProcessHandoff(
+            SpellRecognitionHandoff handoff,
+            IReadOnlyList<CompiledSeal> seals,
+            float now)
+        {
+            if (handoff == null)
+            {
+                throw new ArgumentNullException(nameof(handoff));
+            }
+
+            if (seals == null)
+            {
+                throw new ArgumentNullException(nameof(seals));
+            }
+
+            return handoff.phase switch
+            {
+                SpellPhase.Base => ProcessBaseResult(handoff.ToBaseResult(), handoff.center, handoff.strokeCount, now),
+                SpellPhase.Overlay => ProcessOverlayHandoff(handoff, seals, now),
+                _ => throw new NotSupportedException($"Recognition handoff phase {handoff.phase} is not supported by the game runtime.")
+            };
+        }
+
         public static float AttachRadiusFor(CompiledSeal seal)
         {
             if (seal == null)
@@ -87,6 +125,21 @@ namespace MagicExamHall
                 .Where(seal => now <= seal.expiresAt)
                 .OrderBy(seal => Vector2.Distance(center, seal.worldCenter))
                 .FirstOrDefault(seal => Vector2.Distance(center, seal.worldCenter) <= AttachRadiusFor(seal));
+        }
+
+        public static CompiledSeal FindActiveSealById(IReadOnlyList<CompiledSeal> seals, string sealId, float now)
+        {
+            if (seals == null)
+            {
+                throw new ArgumentNullException(nameof(seals));
+            }
+
+            if (string.IsNullOrWhiteSpace(sealId))
+            {
+                return null;
+            }
+
+            return seals.FirstOrDefault(seal => now <= seal.expiresAt && seal.sealId == sealId);
         }
 
         /// <summary>
@@ -203,7 +256,7 @@ namespace MagicExamHall
             int strokeCount,
             float now)
         {
-            var baseResult = SpellRuntime.RecognizeBase(strokes);
+            var baseResult = baseRecognizer.RecognizeBase(strokes);
             return ProcessBaseResult(baseResult, center, strokeCount, now);
         }
 
@@ -213,11 +266,68 @@ namespace MagicExamHall
             int strokeCount,
             CompiledSeal seal)
         {
-            var result = OverlayRecognizer.Recognize(strokes, seal);
+            var result = overlayRecognizer.RecognizeOverlay(strokes, seal);
             return ProcessOverlayResult(result, seal, center, strokeCount);
         }
 
-        private static DetachedOverlayCandidate FindDetachedOverlayCandidate(
+        private SpellCastOutcome ProcessOverlayHandoff(
+            SpellRecognitionHandoff handoff,
+            IReadOnlyList<CompiledSeal> seals,
+            float now)
+        {
+            var result = handoff.ToOverlayResult();
+            var hasExplicitTarget = !string.IsNullOrWhiteSpace(handoff.targetSealId);
+            var sealById = FindActiveSealById(seals, handoff.targetSealId, now);
+            if (hasExplicitTarget && sealById == null)
+            {
+                result.status = RecognitionStatus.Invalid;
+                result.feedbackReason = "지정된 targetSealId가 만료되었거나 현재 활성 seal 목록에 없습니다.";
+                return new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.OverlayNoActiveSeal,
+                    overlayResult = result,
+                    center = handoff.center,
+                    strokeCount = handoff.strokeCount
+                };
+            }
+
+            var nearestSeal = sealById ?? seals
+                .Where(candidate => now <= candidate.expiresAt)
+                .OrderBy(candidate => Vector2.Distance(handoff.center, candidate.worldCenter))
+                .FirstOrDefault();
+
+            if (nearestSeal == null)
+            {
+                return new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.OverlayNoActiveSeal,
+                    overlayResult = result,
+                    center = handoff.center,
+                    strokeCount = handoff.strokeCount
+                };
+            }
+
+            var sealByIdIsAttachable = sealById != null &&
+                Vector2.Distance(handoff.center, sealById.worldCenter) <= AttachRadiusFor(sealById);
+            var attachable = sealById != null
+                ? sealByIdIsAttachable ? sealById : null
+                : FindAttachableSeal(seals, handoff.center, now);
+            if (attachable == null)
+            {
+                return new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.DetachedOverlay,
+                    overlayResult = result,
+                    targetSeal = nearestSeal,
+                    center = handoff.center,
+                    strokeCount = handoff.strokeCount
+                };
+            }
+
+            return ProcessOverlayResult(result, attachable, handoff.center, handoff.strokeCount);
+        }
+
+        private DetachedOverlayCandidate FindDetachedOverlayCandidate(
             List<List<StrokeSample>> strokes,
             Vector2 center,
             IReadOnlyList<CompiledSeal> seals,
@@ -232,13 +342,13 @@ namespace MagicExamHall
                 return null;
             }
 
-            var basePreview = SpellRuntime.RecognizeBase(strokes);
+            var basePreview = baseRecognizer.RecognizeBase(strokes);
             if (basePreview.spell.status == RecognitionStatus.Recognized && basePreview.spell.recognizedFamily.HasValue)
             {
                 return null;
             }
 
-            var result = OverlayRecognizer.Recognize(strokes, nearestSeal);
+            var result = overlayRecognizer.RecognizeOverlay(strokes, nearestSeal);
             if (result.success || result.recognizedOperator.HasValue || result.score >= 0.48f || result.shapeConfidence >= 0.55f)
             {
                 return new DetachedOverlayCandidate(nearestSeal, result);

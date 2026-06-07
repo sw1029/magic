@@ -1,6 +1,6 @@
 # Sprite Guide
 
-`Magic Exam Hall`의 비주얼 자산을 외부 픽셀 아트로 교체할 때 따르는 규칙입니다. 자산만 정해진 자리에 두면 코드 수정 없이 바로 게임에 반영됩니다.
+`Magic Exam Hall`의 비주얼 자산을 외부 픽셀 아트로 교체할 때 따르는 규칙입니다. 현재 기본 32×32 도트 팩이 포함되어 있으며, 자산만 정해진 자리에 두면 코드 수정 없이 바로 게임에 반영됩니다.
 
 ## 경로와 명명 규칙
 
@@ -35,6 +35,15 @@ family별 base 룬은 시각 정합성 PR에서 enum이 확장된 뒤에 사용 
 | `EarthRune` | `EarthRune.png` | 아래가 넓은 사다리꼴 |
 | `LifeRune` | `LifeRune.png` | 줄기와 위로 갈라지는 두 가지 |
 
+## 현재 내장 팩
+
+`Resources/Sprites/`에는 시험장용 기본 PNG 세트가 들어 있습니다. 임시 도형 fallback보다 디테일이 많은 버전이며, 다음 방향으로 맞췄습니다.
+
+- 돌바닥, 벽 장식, 러그, 책장, 촛불을 분리해 시험장 공간감 강화
+- base family 5종을 서로 다른 실루엣과 색으로 구분
+- `Pulse`와 `RuneCircle`은 흰색 마스크 asset으로 두고 런타임 tint를 적용해 family, hazard, overlay 색을 유지
+- 코드 fallback은 그대로 남겨 PNG가 빠진 경우에도 플레이 가능
+
 ## 권장 스펙
 
 - **해상도**: 32×32 픽셀 권장. 16×16 또는 64×64도 동작하지만 다른 sprite와 같은 단위로 그려야 화면에서 크기가 일관됨.
@@ -50,8 +59,9 @@ family별 base 룬은 시각 정합성 PR에서 enum이 확장된 뒤에 사용 
 `PixelArtFactory.CreateSprite` 호출 시:
 
 1. `Resources/Sprites/<Kind>` 경로에서 PNG 검색
-2. 있으면 그대로 반환 (원본 색 유지)
-3. 없으면 기존 코드 기반 procedural 도형으로 fallback
+2. sprite import면 그대로 반환, texture import면 런타임에 PPU 16 sprite로 변환
+3. 있으면 원본 색 유지
+4. 없으면 기존 코드 기반 procedural 도형으로 fallback
 
 따라서 PNG가 일부만 준비돼도 그 sprite만 교체되고 나머지는 그대로 동작합니다. 점진적 교체가 가능합니다.
 
@@ -59,7 +69,9 @@ family별 base 룬은 시각 정합성 PR에서 enum이 확장된 뒤에 사용 
 
 ## 색 처리
 
-외부 sprite는 원본 색 그대로 표시됩니다. `PixelArtFactory.CreateSprite`의 `primary`·`secondary` 인자는 procedural fallback에만 적용됩니다.
+대부분의 외부 sprite는 원본 색 그대로 표시됩니다. `PixelArtFactory.CreateSprite`의 `primary`·`secondary` 인자는 procedural fallback에 주로 적용됩니다.
+
+단 `Pulse`와 `RuneCircle`은 게임 상태 색이 중요한 sprite라서 `PixelSpriteView.rendererTint`를 통해 런타임 tint를 곱합니다. 이 둘을 교체할 때는 흰색/회색 마스크 형태로 만들면 fire, water, hazard, overlay 색이 화면에서 잘 살아납니다.
 
 층별로 같은 sprite를 다른 색조로 보이고 싶다면 호출 측에서 `SpriteRenderer.color`를 곱셈 tint로 설정. 예를 들어 1층의 따뜻한 톤과 4층의 위험한 톤은 같은 `FloorTile.png` 위에 `Color` 곱으로 처리합니다.
 

@@ -321,6 +321,13 @@ private void OnRecognitionCompleted(StrokeRecognitionResult result)
 
 기존 `SpellBuffered(List<List<StrokeSample>>, Vector2 center, int strokeCount)`는 임시 호환 adapter로 유지할 수 있다. 다만 새 코드는 `StrokeInputSession`을 기준으로 작성한다.
 
+현재 Unity 구현 상태:
+
+- `SpellRecognitionHandoff`가 base/overlay 결과를 한 DTO로 감싸는 첫 handoff 타입으로 추가됐다.
+- `SpellCastingService.ProcessHandoff(...)`는 외부 인식 결과를 기존 base seal 생성, overlay 부착, duplicate/full/detached/no-seal 판정으로 변환한다.
+- `ExamGameController.SubmitRecognitionHandoff(...)`는 직접 그리기 흐름과 같은 `ApplySpellOutcome` 경로를 사용한다.
+- `WorldDrawingController`의 기존 우클릭 입력 흐름은 유지되어, 입력 분리 작업을 이어가도 플레이어블은 깨지지 않는다.
+
 ## 11. Web과 Unity 매핑
 
 | Web | Unity 목표 | 비고 |
@@ -351,8 +358,9 @@ private void OnRecognitionCompleted(StrokeRecognitionResult result)
 
 8. `IBaseGestureRecognizer`와 `IOverlayGestureRecognizer`를 만든다.
 9. 현재 static `GestureRecognizer` / `OverlayRecognizer` 호출을 heuristic 구현체 뒤로 감싼다.
-10. user profile, adjusted quality, model/shadow summary는 recognition result의 보조 필드로만 노출한다.
-11. `ExamGameController` 또는 `SpellCastingService`는 family/operator/status/confidence를 받은 뒤 게임 효과만 결정하게 만든다.
+10. `SpellRecognitionHandoff`처럼 base/overlay 결과를 한 DTO로 받아 게임 계층에 넘긴다.
+11. user profile, adjusted quality, model/shadow summary는 recognition result의 보조 필드로만 노출한다.
+12. `ExamGameController` 또는 `SpellCastingService`는 family/operator/status/confidence를 받은 뒤 게임 효과만 결정하게 만든다.
 
 첫 구현에서 유지해야 하는 플레이 감각:
 

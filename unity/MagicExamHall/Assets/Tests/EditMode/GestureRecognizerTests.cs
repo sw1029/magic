@@ -187,6 +187,58 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void AudioDirectorCreatesRequiredProceduralCues()
+        {
+            var body = new GameObject("Audio Director Test");
+            try
+            {
+                var director = body.AddComponent<AudioDirector>();
+
+                director.Initialize();
+
+                Assert.That(director.SfxClipCountForTests, Is.EqualTo(System.Enum.GetValues(typeof(AudioCue)).Length));
+                Assert.That(director.BgmClipCountForTests, Is.EqualTo(2));
+                director.PlayBgm(BgmCue.AmbientTower);
+                Assert.That(director.CurrentBgmForTests, Is.EqualTo(BgmCue.AmbientTower));
+                director.PlayBgm(BgmCue.None);
+                Assert.That(director.CurrentBgmForTests, Is.EqualTo(BgmCue.None));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(body);
+            }
+        }
+
+        [Test]
+        public void AccessibilitySettingsClampAndExposeInputChoices()
+        {
+            var originalSensitivity = MagicExamSettings.MouseSensitivity;
+            var originalTextScale = MagicExamSettings.TextScale;
+            var originalMovement = MagicExamSettings.MovementPreset;
+            var originalSwap = MagicExamSettings.SwapMouseButtons;
+            try
+            {
+                MagicExamSettings.MouseSensitivity = 9f;
+                MagicExamSettings.TextScale = 9f;
+                MagicExamSettings.MovementPreset = 99;
+                MagicExamSettings.SwapMouseButtons = true;
+
+                Assert.That(MagicExamSettings.MouseSensitivity, Is.EqualTo(1.75f).Within(0.001f));
+                Assert.That(MagicExamSettings.TextScale, Is.EqualTo(1.5f).Within(0.001f));
+                Assert.That(MagicExamSettings.MovementPreset, Is.EqualTo(2));
+                Assert.That(MagicExamSettings.DrawMouseButton, Is.EqualTo(0));
+                Assert.That(MagicExamSettings.MovementPresetLabel, Is.EqualTo("IJKL"));
+            }
+            finally
+            {
+                MagicExamSettings.MouseSensitivity = originalSensitivity;
+                MagicExamSettings.TextScale = originalTextScale;
+                MagicExamSettings.MovementPreset = originalMovement;
+                MagicExamSettings.SwapMouseButtons = originalSwap;
+            }
+        }
+
+        [Test]
         public void OpenTriangleIsIncompleteInsteadOfFalsePositive()
         {
             var stroke = new List<StrokeSample>

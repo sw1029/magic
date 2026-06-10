@@ -11,7 +11,7 @@
 | 핵심 플레이 | 이동, 맵 위 직접 드로잉, 세계 반응 관찰, 조합 실험, 목표 상태 해결, 노트 기록 |
 | 핵심 연구 질문 | 기호 기반 입력이 재미와 몰입을 만들면서도 실패 이유를 납득 가능하게 설명할 수 있는가 |
 | 주요 플랫폼 | Web prototype, Unity 6.3 LTS prototype |
-| 작성 기준일 | 2026-05-14 |
+| 작성 기준일 | 2026-06-10 |
 
 ### 소스 기준
 
@@ -20,7 +20,7 @@
 | 구현 흐름 | 기준 | 의미 |
 | --- | --- | --- |
 | Web prototype | `origin/main` 최신 참조 | recognizer, overlay, tutorial, dashboard, datacard, survey 기능이 가장 많이 반영된 기준선 |
-| Unity game prototype | `unity/MagicExamHall` | 실제 게임 플레이 형태인 2D 시험장 vertical slice |
+| Unity game prototype | `unity/MagicExamHall` | 실제 게임 플레이 형태인 2D 시험장 완주 가능 빌드 |
 
 주의: 로드맵은 Web 연구 프로토타입과 Unity 플레이어블을 함께 다루며, 구현 상태 표에서는 Web과 Unity를 분리합니다.
 
@@ -158,19 +158,24 @@
 | 엔딩 리포트/자동 설문 로그 | 구현됨 | `EndingReport`, `ExamLogging.cs` |
 | EditMode/PlayMode 테스트 | 구현됨 | `Assets/Tests/*` |
 | overlay operator | 구현됨 | `OverlayRecognizer`, `GestureRecognizerTests.cs` |
-| final seal compile | 부분 구현 | base seal에 overlay stack을 붙이고 world goal 효과에 반영 |
+| final seal compile | 구현됨 | base seal에 overlay stack을 붙이고 world goal/ending 조건에 반영 |
 | user profile 보정 | 미구현 | Unity 품질 분석은 있으나 web profile 정책 미연결 |
 | datacard/what-if/dashboard | 미구현 | Web 검증 도구로만 존재 |
+| 타이틀/메뉴/옵션/일시정지 | 구현됨 | `GameBootController` |
+| 저장 슬롯/이어하기/수동 저장 | 구현됨 | 3슬롯, 층 완료 자동 저장, codex 수동 저장 |
+| 사운드/BGM | 구현됨 | `AudioDirector` 절차 생성 SFX 12종+BGM 2종 |
+| codex/발견 기록 | 구현됨 | dialogue/floor/discovery 탭, base/overlay 발견 그리드 |
+| 접근성 옵션 | 구현됨 | 볼륨, 감도, 좌우클릭, 이동 프리셋, 텍스트 크기, 색 보조, 관찰 모드 |
 
 ### 문서/운영 상태
 
 | 영역 | 상태 | 메모 |
 | --- | --- | --- |
 | `docs/PROJECT_OVERVIEW.md` | 구현됨 | 프로젝트 개요와 설계 질문 정리 |
-| `README.md` | 정리 필요 | 실제 docs 구조와 일부 안내가 다름 |
+| `README.md` | 구현됨 | Web/Unity 실행법과 Unity 최종 로컬 기능 반영 |
 | `docs/20_queue/work-queue.md` | 정리 필요 | 큐 파일은 있으나 task 문서가 없음 |
 | `docs/30_tasks/README.md` | 정리 필요 | task 문서 규칙만 있음 |
-| GitHub workflow/PR template | 구현됨 | CI, CodeQL, issue/PR template 존재 |
+| GitHub workflow/PR template | 구현됨 | Web CI, Unity test workflow, CodeQL, issue/PR template 존재 |
 | 검증 스크립트 | 구현됨 | 현재는 `validated 0 task documents against work queue` |
 
 ## 7. 최종 기능 명세
@@ -307,7 +312,7 @@ Unity playable game
 | 힌트 escalator | 구현됨 | 1회 실패 reason hint, 2회 checklist, 3회 ghost trace |
 | 세션 로그 | 구현됨 | attempts/survey CSV/JSONL 저장 |
 | PlayMode smoke test | 구현됨 | scene load, world casting, overlay, hazard, ending report 검증 |
-| 빌드 산출물 | 미구현 | Windows/WebGL 등 실행 파일 생성과 smoke test |
+| 빌드 산출물 | 구현됨 | `scripts/build-windows.ps1`와 player smoke script |
 
 ### M2. World casting and overlay/final seal Unity 이식
 
@@ -333,9 +338,9 @@ Unity playable game
 | --- | --- | --- |
 | family별 tutorial card copy 통합 | 부분 구현 | Web datacard 문구를 Unity hint/checklist에 반영 |
 | exemplar/ghost trace 개선 | 부분 구현 | 각 family/operator의 모범선이 명확함 |
-| why panel Unity 버전 | 미구현 | 결과 이유가 2-3문장으로 표시 |
+| why panel Unity 버전 | 부분 구현 | magic note/hint/toast가 이유와 다음 행동을 표시 |
 | quality off/on compare Unity 버전 | 미구현 | 품질 반영 전후 효과 차이 표시 |
-| 접근성/조작 옵션 | 미구현 | 마우스 민감도, 다시 그리기, 키 안내, 색 대비 확인 |
+| 접근성/조작 옵션 | 구현됨 | 옵션 패널에서 감도, 좌우클릭, 이동 프리셋, 텍스트, 색 보조, 관찰 모드 제공 |
 
 ### M4. 게임 콘텐츠 확장
 
@@ -345,9 +350,9 @@ Unity playable game
 | --- | --- | --- |
 | 층별 세계 반응 | 구현됨 | base/overlay/combo 목표가 층별 진행에 기여 |
 | overlay tutorial floor | 구현됨 | 2층에서 6개 overlay를 모두 실험 |
-| final seal challenge | 부분 구현 | 5층 성좌심에서 base/combo 요구치를 채움 |
-| 실패/성공 연출 | 부분 구현 | 사운드, 화면 shake, particle, goal animation |
-| 엔딩 요약 | 미구현 | 완료 시간, 시도 수, assist 사용량, quality 평균 표시 |
+| final seal challenge | 구현됨 | 5층 6슬롯, 5/6 통과 엔딩, 6/6 진엔딩 |
+| 실패/성공 연출 | 구현됨 | 절차 생성 사운드, stroke 색 전환, pulse, goal animation, hazard reset |
+| 엔딩 요약 | 구현됨 | 완료 시간, 시도 수, assist 사용량, quality 평균, 발견 발췌 표시 |
 
 ### M5. 연구 검증 패키지
 
@@ -355,11 +360,11 @@ Unity playable game
 
 | 작업 | 상태 | 완료 조건 |
 | --- | --- | --- |
-| 실험 프로토콜 문서 | 미구현 | 참가자 과제, 측정 항목, 진행 순서 정의 |
-| 로그 스키마 고정 | 부분 구현 | Web/Unity 로그 필드 대응표 작성 |
-| 설문 결과 export | 부분 구현 | CSV/JSONL 저장 확인 |
+| 실험 프로토콜 문서 | 구현됨 | `docs/RESEARCH_PROTOCOL.md` |
+| 로그 스키마 고정 | 구현됨 | `docs/LOGGING_AND_PRIVACY.md`와 Unity logger 출력 대응 |
+| 설문 결과 export | 구현됨 | CSV/JSONL 저장과 테스트 확인 |
 | dashboard 분석 리포트 | Web 구현됨 | synthetic stress와 실제 로그를 비교할 수 있음 |
-| privacy/security 점검 | 부분 구현 | raw data/contact data 분리 원칙 문서화 |
+| privacy/security 점검 | 구현됨 | raw stroke 미저장, 직접 식별정보 미수집, 익명화 원칙 문서화 |
 
 ### M6. Beta polish와 릴리스
 
@@ -367,10 +372,10 @@ Unity playable game
 
 | 작업 | 상태 | 완료 조건 |
 | --- | --- | --- |
-| Unity 빌드 자동화 | 미구현 | batchmode build script 또는 문서화 |
+| Unity 빌드 자동화 | 구현됨 | `scripts/build-windows.ps1` |
 | Web demo 배포 | 미구현 | GitHub Pages 또는 정적 빌드 배포 |
-| 최종 README 정리 | 미구현 | 실행법, 데모 흐름, 로드맵 링크 최신화 |
-| 릴리스 체크리스트 | 미구현 | 테스트, 빌드, 로그, 개인정보, 스크린샷 확인 |
+| 최종 README 정리 | 구현됨 | 실행법, 데모 흐름, Unity 최종 로컬 기능 갱신 |
+| 릴리스 체크리스트 | 구현됨 | 테스트, 빌드, 로그, 개인정보, 수동 QA 항목 정리 |
 | 발표 자료 | 미구현 | 문제, 설계, 구현, 검증, 결과를 5-8분 흐름으로 정리 |
 
 ## 10. Epic backlog
@@ -381,8 +386,8 @@ Unity playable game
 | --- | --- | --- | --- |
 | A1 | README의 docs 읽기 순서와 실제 파일 구조 동기화 | P0 | 구현됨 |
 | A2 | 작업 큐를 실제 task 문서와 연결하거나 단순 status 문서로 전환 | P0 | 미구현 |
-| A3 | Web main 기능과 Unity 브랜치 기능의 merge/rebase 전략 결정 | P0 | 미구현 |
-| A4 | 최종 게임명 결정: `Magic Exam Hall` 유지 또는 별도 게임명 | P1 | 미구현 |
+| A3 | Web main 기능과 Unity 브랜치 기능의 merge/rebase 전략 결정 | P0 | 부분 구현 |
+| A4 | 최종 게임명 결정: `Magic Exam Hall` 유지 또는 별도 게임명 | P1 | 구현됨 |
 | A5 | Web 연구, Unity 게임, 인식, ML 실험 계층 경계 문서화 | P0 | 구현됨 |
 
 ### Epic B. Core recognition contract
@@ -391,7 +396,7 @@ Unity playable game
 | --- | --- | --- | --- |
 | B1 | family/operator/quality/log schema 대응표 작성 | P0 | 부분 구현 |
 | B2 | Web과 Unity의 recognition status 명칭 통일 | P0 | 부분 구현 |
-| B3 | Unity에 overlay operator recognizer 추가 | P0 | 미구현 |
+| B3 | Unity에 overlay operator recognizer 추가 | P0 | 구현됨 |
 | B4 | Unity에 profile/shadow policy 중 최소 설명용 summary 추가 | P1 | 미구현 |
 | B5 | C#과 TypeScript recognizer의 regression fixture 공유 방식 결정 | P1 | 미구현 |
 | B6 | Web recognition model adapter 경계 생성 | P1 | 미구현 |
@@ -403,11 +408,11 @@ Unity playable game
 | ID | 작업 | 우선순위 | 상태 |
 | --- | --- | --- | --- |
 | C1 | 5층 vertical slice 안정화 | P0 | 구현됨 |
-| C2 | final seal challenge 1개 추가 | P0 | 부분 구현 |
+| C2 | final seal challenge 1개 추가 | P0 | 구현됨 |
 | C3 | family별 world effect 추가 | P1 | 구현됨 |
-| C4 | overlay별 effect modifier 추가 | P1 | 부분 구현 |
+| C4 | overlay별 effect modifier 추가 | P1 | 구현됨 |
 | C5 | 엔딩 결과 요약 화면 추가 | P1 | 구현됨 |
-| C6 | 실행 빌드 생성과 버전 표기 | P1 | 미구현 |
+| C6 | 실행 빌드 생성과 버전 표기 | P1 | 구현됨 |
 
 ### Epic D. Tutorial and feedback
 
@@ -424,9 +429,9 @@ Unity playable game
 | ID | 작업 | 우선순위 | 상태 |
 | --- | --- | --- | --- |
 | E1 | Unity attempt/survey log schema를 Web survey contract와 대응 | P0 | 부분 구현 |
-| E2 | 테스트 참가자용 진행 시나리오 문서 작성 | P0 | 미구현 |
+| E2 | 테스트 참가자용 진행 시나리오 문서 작성 | P0 | 구현됨 |
 | E3 | 결과 분석 notebook 또는 dashboard export 작성 | P1 | 미구현 |
-| E4 | raw capture 저장 정책 확정 | P1 | 미구현 |
+| E4 | raw capture 저장 정책 확정 | P1 | 구현됨 |
 | E5 | 제출용 anonymized sample log 포함 여부 결정 | P2 | 미구현 |
 
 ### Epic F. Web research lab
@@ -545,16 +550,16 @@ Unity playable game
 
 ## 16. 다음 10개 작업
 
-1. README의 존재하지 않는 docs/task 안내를 현재 구조에 맞게 수정한다.
-2. Unity 브랜치를 최신 `origin/main` 위에 통합할 전략을 정한다.
-3. `docs/GAME_DESIGN.md`를 기준으로 직접 드로잉 조작감과 층 구조를 더 구체화한다.
-4. Web의 operator spec을 Unity C# contract로 옮길 표를 만든다.
-5. Unity에 우클릭 월드 stroke 입력과 0.8초 입력 버퍼를 설계/구현한다.
-6. base seal instance와 seal 근처 overlay 후속 입력 규칙을 플레이 테스트로 조정한다.
-7. 세계 상태 목표 판정 모델을 세분화한다.
-8. 1층 발착층을 맵 위 직접 드로잉 튜토리얼로 다듬는다.
-9. 마법 노트 관찰문과 반복 실패 힌트 문구를 작성한다.
-10. 사용자 테스트 시나리오와 성찰형 리포트 항목을 작성한다.
+1. 외부 테스터 1인을 모집해 README만 보고 새 clone/빌드/플레이 재현을 확인한다.
+2. 사용자 테스트 5인 데이터를 `docs/RESEARCH_PROTOCOL.md`대로 수집하고 익명화한다.
+3. playtest 결과로 입력 버퍼와 seal attach 반경을 최종 확정한다.
+4. `npm ci`, `npm run validate:docs`, `npm test`, `npm run build`가 가능한 Node/npm 환경을 준비하고 Web 검증을 실행한다.
+5. GitHub secrets를 등록해 Unity workflow가 실제 PR CI에서 실행되는지 확인한다.
+6. GitHub PR/issue 정리 항목(#102/#103 등)을 원격 저장소에서 close 또는 흡수한다.
+7. Web demo 배포 여부와 GitHub Pages 경로를 결정한다.
+8. 제출용 Windows build zip과 release note를 만든다.
+9. 발표 자료 5~8분 버전을 작성하고 2분 시연 영상 백업을 녹화한다.
+10. 수동 5층 완주 QA와 접근성 옵션 QA를 release checklist에 따라 기록한다.
 
 ## 17. 유지보수 규칙
 

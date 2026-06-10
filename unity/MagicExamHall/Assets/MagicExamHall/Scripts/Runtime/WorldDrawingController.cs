@@ -11,15 +11,19 @@ namespace MagicExamHall
         public const float DefaultBufferSeconds = 1.05f;
         public const float DefaultMinPointDistance = 0.05f;
         public const float StrokeVisualLifetimeSeconds = 2.3f;
+        public const float RecognizedStrokeFadeSeconds = 0.7f;
+        public const float InvalidStrokeFadeSeconds = 1.0f;
 
         public Camera mainCamera = null!;
         public float bufferSeconds = DefaultBufferSeconds;
         public float minPointDistance = DefaultMinPointDistance;
-        public Color strokeColor = new(0.22f, 0.95f, 1f, 0.92f);
+        public Color strokeColor = new(0.96f, 0.98f, 1f, 0.92f);
 
         private readonly List<List<StrokeSample>> bufferedStrokes = new();
         private readonly List<StrokeSample> activeStroke = new();
         private readonly List<StrokeVisual> visuals = new();
+        private readonly List<StrokeVisual> pendingVisuals = new();
+        private readonly List<StrokeVisual> lastBufferedVisuals = new();
         private AudioSource drawingAudio;
         private AudioClip[] penTickClips = Array.Empty<AudioClip>();
         private AudioClip[] penCompleteClips = Array.Empty<AudioClip>();
@@ -70,7 +74,8 @@ namespace MagicExamHall
                 return;
             }
 
-            if (Input.GetMouseButtonDown(1) && !PointerIsOverUi())
+            var drawButton = MagicExamSettings.DrawMouseButton;
+            if (Input.GetMouseButtonDown(drawButton) && !PointerIsOverUi())
             {
                 drawing = true;
                 waitingForBuffer = false;
@@ -79,7 +84,7 @@ namespace MagicExamHall
                 AddPoint(Input.mousePosition);
             }
 
-            if (drawing && Input.GetMouseButton(1))
+            if (drawing && Input.GetMouseButton(drawButton))
             {
                 if (Time.time - lastPenTickAt >= 0.18f)
                 {
@@ -90,7 +95,7 @@ namespace MagicExamHall
                 AddPoint(Input.mousePosition);
             }
 
-            if (!drawing || !Input.GetMouseButtonUp(1))
+            if (!drawing || !Input.GetMouseButtonUp(drawButton))
             {
                 return;
             }
@@ -130,14 +135,40 @@ namespace MagicExamHall
 
             var copy = bufferedStrokes.Select(stroke => stroke.Select(sample => new StrokeSample(sample.position, sample.time)).ToList()).ToList();
             bufferedStrokes.Clear();
+            lastBufferedVisuals.Clear();
+            lastBufferedVisuals.AddRange(pendingVisuals);
+            pendingVisuals.Clear();
             SpellBuffered(copy, CenterOf(copy), copy.Count);
+        }
+
+        public void MarkLastBufferedStrokesRecognized(Color color)
+        {
+            foreach (var visual in lastBufferedVisuals.Where(visual => visual.line != null))
+            {
+                visual.state = StrokeVisualState.Recognized;
+                visual.stateAge = 0f;
+                visual.targetColor = new Color(color.r, color.g, color.b, 0.92f);
+            }
+            lastBufferedVisuals.Clear();
+        }
+
+        public void MarkLastBufferedStrokesInvalid()
+        {
+            foreach (var visual in lastBufferedVisuals.Where(visual => visual.line != null))
+            {
+                visual.state = StrokeVisualState.Invalid;
+                visual.stateAge = 0f;
+                visual.targetColor = new Color(0.76f, 0.78f, 0.86f, 0.72f);
+            }
+            lastBufferedVisuals.Clear();
         }
 
         private void AddPoint(Vector2 screenPoint)
         {
             var world = mainCamera.ScreenToWorldPoint(new Vector3(screenPoint.x, screenPoint.y, -mainCamera.transform.position.z));
             var point = new Vector2(world.x, world.y);
-            if (activeStroke.Count > 0 && Vector2.Distance(activeStroke[^1].position, point) < minPointDistance)
+            var scaledMinDistance = minPointDistance / Mathf.Max(0.35f, MagicExamSettings.MouseSensitivity);
+            if (activeStroke.Count > 0 && Vector2.Distance(activeStroke[^1].position, point) < scaledMinDistance)
             {
                 return;
             }
@@ -175,7 +206,12 @@ namespace MagicExamHall
                 line.SetPosition(index, new Vector3(stroke[index].position.x, stroke[index].position.y, -0.2f));
             }
 
-            visuals.Add(new StrokeVisual(body, line));
+            var visual = new StrokeVisual(body, line)
+            {
+                targetColor = strokeColor
+            };
+            visuals.Add(visual);
+            pendingVisuals.Add(visual);
         }
 
         private void ConfigureDrawingAudio()
@@ -204,7 +240,7 @@ namespace MagicExamHall
             }
 
             drawingAudio.pitch = UnityEngine.Random.Range(0.94f, 1.06f);
-            drawingAudio.PlayOneShot(clips[UnityEngine.Random.Range(0, clips.Length)], volume);
+            drawingAudio.PlayOneShot(clips[UnityEngine.Random.Range(0, clips.Length)], volume * MagicExamSettings.SfxVolume);
             drawingAudio.pitch = 1f;
         }
 
@@ -214,15 +250,15 @@ namespace MagicExamHall
             {
                 var visual = visuals[index];
                 visual.age += Time.deltaTime;
-                var alpha = Mathf.Lerp(0.92f, 0f, visual.age / StrokeVisualLifetimeSeconds);
-                var color = new Color(strokeColor.r, strokeColor.g, strokeColor.b, alpha);
+                visual.stateAge += Time.deltaTime;
+                var color = visual.ColorFor(strokeColor);
                 if (visual.line != null)
                 {
                     visual.line.startColor = color;
                     visual.line.endColor = color;
                 }
 
-                if (visual.age >= StrokeVisualLifetimeSeconds)
+                if (visual.ShouldRemove)
                 {
                     if (visual.body != null)
                     {
@@ -244,12 +280,62 @@ namespace MagicExamHall
             public readonly GameObject body;
             public readonly LineRenderer line;
             public float age;
+            public float stateAge;
+            public Color targetColor;
+            public StrokeVisualState state;
 
             public StrokeVisual(GameObject body, LineRenderer line)
             {
                 this.body = body;
                 this.line = line;
             }
+
+            public bool ShouldRemove
+            {
+                get
+                {
+                    return state switch
+                    {
+                        StrokeVisualState.Recognized => stateAge >= RecognizedStrokeFadeSeconds,
+                        StrokeVisualState.Invalid => stateAge >= InvalidStrokeFadeSeconds,
+                        _ => age >= StrokeVisualLifetimeSeconds
+                    };
+                }
+            }
+
+            public Color ColorFor(Color baseColor)
+            {
+                return state switch
+                {
+                    StrokeVisualState.Recognized => RecognizedColor(baseColor),
+                    StrokeVisualState.Invalid => InvalidColor(),
+                    _ => new Color(baseColor.r, baseColor.g, baseColor.b, Mathf.Lerp(0.92f, 0f, age / StrokeVisualLifetimeSeconds))
+                };
+            }
+
+            private Color RecognizedColor(Color baseColor)
+            {
+                var tintT = Mathf.Clamp01(stateAge / 0.2f);
+                var fadeT = Mathf.Clamp01((stateAge - 0.2f) / 0.5f);
+                var color = Color.Lerp(baseColor, targetColor, tintT);
+                color.a = Mathf.Lerp(0.92f, 0f, fadeT);
+                return color;
+            }
+
+            private Color InvalidColor()
+            {
+                var fadeT = Mathf.Clamp01(stateAge / InvalidStrokeFadeSeconds);
+                var color = targetColor;
+                color.a = Mathf.Lerp(0.72f, 0f, fadeT);
+                return color;
+            }
+        }
+
+        private enum StrokeVisualState
+        {
+            Drawing,
+            Recognized,
+            Invalid
         }
     }
 }

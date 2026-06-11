@@ -29,6 +29,8 @@ namespace MagicExamHall
         public string[] noteLines = Array.Empty<string>();
         public string savedAtUtc = "";
         public int slotIndex;
+        public int discoveries;
+        public string endingLabel = "";
     }
 
     public static class MagicExamSettings
@@ -240,6 +242,7 @@ namespace MagicExamHall
         private Image codexQuickImage = null!;
         private Button newGameButton = null!;
         private Button continueButton = null!;
+        private Button practiceButton = null!;
         private Button codexQuickButton = null!;
         private Button optionsBackButton = null!;
         private Button resumeButton = null!;
@@ -420,7 +423,8 @@ namespace MagicExamHall
             newGameButton = CreateButton("New Game", menuPanel, "새 게임", new Vector2(-310f, 92f), StartNewGame);
             continueButton = CreateButton("Continue", menuPanel, "이어하기", new Vector2(-310f, 34f), ContinueGame);
             CreateButton("Options", menuPanel, "옵션", new Vector2(-310f, -24f), () => ShowOptions(GameBootState.MainMenu));
-            CreateButton("Quit", menuPanel, "종료", new Vector2(-310f, -82f), Application.Quit);
+            practiceButton = CreateButton("Practice", menuPanel, "연습장", new Vector2(-310f, -82f), StartPracticeMode);
+            CreateButton("Quit", menuPanel, "종료", new Vector2(-310f, -140f), Application.Quit);
             CreateText("Save Slot Label", menuPanel, "저장 슬롯", 16, FontStyle.Bold, new Vector2(128f, 92f), new Vector2(520, 28), Anchor.Center, TextAnchor.MiddleLeft, new Color(1f, 0.86f, 0.48f));
             slotButtons = new Button[SaveSlotCount];
             for (var index = 0; index < SaveSlotCount; index++)
@@ -659,18 +663,64 @@ namespace MagicExamHall
         {
             var snapshot = LoadProgress(activeSaveSlotIndex);
             continueButton.interactable = snapshot != null;
+            if (practiceButton != null)
+            {
+                practiceButton.interactable = AnyEndingReached();
+            }
             RefreshSlotButtons();
             var rows = Enumerable.Range(0, SaveSlotCount)
                 .Select(index =>
                 {
                     var slotSnapshot = LoadProgress(index);
                     var prefix = index == activeSaveSlotIndex ? ">" : " ";
-                    return slotSnapshot == null
-                        ? $"{prefix} 슬롯 {index + 1}: 비어 있음"
-                        : $"{prefix} 슬롯 {index + 1}: {slotSnapshot.floorNumber}/5층, 목표 {slotSnapshot.completedGoals}/{slotSnapshot.totalGoals}";
+                    if (slotSnapshot == null)
+                    {
+                        return $"{prefix} 슬롯 {index + 1}: 비어 있음";
+                    }
+
+                    var endingSuffix = string.IsNullOrEmpty(slotSnapshot.endingLabel) ? "" : $", {slotSnapshot.endingLabel}";
+                    return $"{prefix} 슬롯 {index + 1}: {slotSnapshot.floorNumber}/5층, 목표 {slotSnapshot.completedGoals}/{slotSnapshot.totalGoals}, 발견 {slotSnapshot.discoveries}{endingSuffix}";
                 });
             saveSummaryText.text = string.Join("\n", rows) + "\n" + (snapshot == null ? "선택 슬롯에는 저장된 진행이 없습니다." : $"선택 저장: {snapshot.savedAtUtc}");
         }
+
+        private bool AnyEndingReached()
+        {
+            return Enumerable.Range(0, SaveSlotCount)
+                .Select(LoadProgress)
+                .Any(slotSnapshot => slotSnapshot != null && !string.IsNullOrEmpty(slotSnapshot.endingLabel));
+        }
+
+        private void StartPracticeMode()
+        {
+            if (!AnyEndingReached())
+            {
+                return;
+            }
+
+            BeginTransition(StartPracticeRoutine());
+        }
+
+        private IEnumerator StartPracticeRoutine()
+        {
+            yield return FadeTo(1f, 0.45f);
+            StartPracticeModeImmediate();
+            yield return FadeTo(0f, 0.65f);
+        }
+
+        private void StartPracticeModeImmediate()
+        {
+            Time.timeScale = 1f;
+            controller.StartPracticeMode();
+            EnterGameplay();
+        }
+
+        public void StartPracticeModeForTests()
+        {
+            StartPracticeModeImmediate();
+        }
+
+        public bool PracticeUnlockedForTests => AnyEndingReached();
 
         private string BuildCodexText(MagicNoteCategory category)
         {
@@ -706,6 +756,7 @@ namespace MagicExamHall
                 string.Join(" / ", familyRows) + "\n\n" +
                 "Overlay operator\n" +
                 string.Join(" / ", overlayRows) + "\n\n" +
+                $"속성 반응 발견 {controller.DiscoveredReactionCountForTests}/10\n\n" +
                 notes;
         }
 
@@ -787,6 +838,12 @@ namespace MagicExamHall
 
         private void ManualSaveFromCodex()
         {
+            if (controller.IsPracticeMode)
+            {
+                codexText.text = BuildCodexText(codexTab) + "\n\n연습장의 진행은 저장하지 않습니다.";
+                return;
+            }
+
             SaveProgress(controller.CreateProgressSnapshot(), activeSaveSlotIndex);
             codexText.text = BuildCodexText(codexTab) + $"\n\n슬롯 {activeSaveSlotIndex + 1}에 저장했습니다.";
         }

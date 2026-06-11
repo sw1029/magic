@@ -63,7 +63,7 @@
 - [x] 플레이어가 4방향 이동 + idle/cast 애니메이션을 가진다 (외부 팩 허용, G-2 — 절차 생성 프레임 기본, PNG 드롭 시 자동 교체).
 - [ ] BGM 최소 1트랙(`ambient_tower`)이 실제 음원이고 라이선스가 문서화돼 있다 (G-3 — 파일 우선 로더 준비됨, 음원 소싱만 남음).
 - [x] 1회차 완주에서 탑의 서사 암시가 최소 3곳(층 진입 노트·멘토 대사·엔딩 한 줄)에서 보인다 (G-4).
-- [ ] 필수 목표 외 숨은 발견 5개 이상이 codex에 기록된다 (G-5).
+- [x] 필수 목표 외 숨은 발견 5개 이상이 codex에 기록된다 (G-5 — 속성 반응 10종이 첫 발생 시 관찰문으로 기록, 발견 탭에 n/10 진행도).
 
 ### 기술 기준
 
@@ -158,10 +158,12 @@ Phase 8  릴리스·제출 패키지
 
 P0-0 머지로 기존 열린 PR의 상당 부분이 중복되거나 충돌할 수 있다. 머지가 아니라 **재평가**가 기준이다.
 
-1. [ ] [#115 pixel art phase runtime polish](https://github.com/sw1029/magic/pull/115) (100파일, URP 포함) — finalize 머지 후 rebase 시도. 중복분 제거 후 가치가 남으면(URP·2D Light) OPT 트랙용으로 유지, 아니면 close하고 필요 커밋만 cherry-pick 목록화.
-2. [ ] [#107 커스텀 도형 authoring](https://github.com/sw1029/magic/pull/107) (40파일) — 동일 기준으로 재평가.
-3. [ ] [#108 커스텀 주문 효과·3~4층 구성](https://github.com/sw1029/magic/pull/108) (91파일) — 동일 기준. **Phase 5 검수 패스와 겹치므로, 살릴 콘텐츠가 있으면 P5 체크리스트에 항목으로 흡수한다.**
-4. [ ] draft [#102](https://github.com/sw1029/magic/pull/102)/[#103](https://github.com/sw1029/magic/pull/103) — D5 결정에 따라 close하고 유효한 커밋만 cherry-pick 목록으로 #80에 코멘트.
+2026-06-11 확인: #115·#116은 main에 머지 완료. **#107, #108, #103(draft)은 HEAD 커밋이 전부 origin/main의 ancestor로 확인됨** — 내용이 이미 다른 머지 경로(1585949)로 main에 반영돼 있어 머지 없이 close만 하면 된다. close는 작성자/소유자 결정 사항이라 사람이 실행한다.
+
+1. [x] [#115](https://github.com/sw1029/magic/pull/115) — main에 머지 완료 (URP·Light2D·플레이어 애니 인프라 반영).
+2. [ ] [#107 커스텀 도형 authoring](https://github.com/sw1029/magic/pull/107) — 내용 main 반영 확인 완료. **close 클릭만 필요 (사람).**
+3. [ ] [#108 커스텀 주문 효과·3~4층 구성](https://github.com/sw1029/magic/pull/108) — 내용 main 반영 확인 완료. **close 클릭만 필요 (사람).**
+4. [ ] draft [#103](https://github.com/sw1029/magic/pull/103) — 내용 main 반영 확인 완료, #102는 이미 닫힘. **close 클릭만 필요 (사람).** user profile 잔여는 #80에서 추적.
 
 완료 조건: 열린 PR 0개. 이후 새 PR은 머지 가능 상태가 되는 즉시 처리하고, 미머지 PR 위에 다음 작업을 쌓지 않는다.
 
@@ -185,10 +187,10 @@ P0-0 머지로 기존 열린 PR의 상당 부분이 중복되거나 충돌할 �
 
 ### P0-4. 개발 환경·CI 정비 (담당 각자)
 
-- [ ] 로컬에 Node 20+ 설치, PATH 등록 (`npm test` 로컬 실행 가능 상태로).
+- [x] 로컬에 Node 20+ 설치 (이 머신: Node v24 winget 설치 완료, 2026-06-11. 다른 팀원 머신은 각자).
 - [ ] Unity 6000.3.14f1 + 라이선스 전원 확인.
-- [ ] `npm ci && npm test && npm run build` 전원 통과 확인.
-- [ ] `unity-tests.yml`용 GitHub secrets(Unity 라이선스) 등록, workflow가 실제로 green인지 확인.
+- [x] `npm ci && npm run validate:docs && npm test && npm run build` 통과 확인 (이 머신: docs 7건, 테스트 181/181, 빌드 성공 — 2026-06-11).
+- [ ] `unity-tests.yml`용 GitHub secrets(Unity 라이선스) 등록, workflow가 실제로 green인지 확인. **(사람 필요: 라이선스 시리얼/계정 정보)**
 
 ### 게이트 0 → 1
 
@@ -363,18 +365,18 @@ SFX는 절차 생성을 유지한다. BGM만 실음원으로 바꾼다 — "데�
 
 목표와 무관한 "비밀 반응"으로 codex를 채울 가치와 2회차 동기를 만든다. 각 항목 = 작은 world effect + codex 발견 1줄.
 
-1. [ ] 후보 구현 (기존 오브젝트 재사용, 최소 5종): fire→물웅덩이=증기 / life→양초=촛불 사이 꽃 / wind→책장=책장이 펄럭임 / water→4층 그을음=씻겨 나감 / soul_dot 단독→가장 가까운 룬이 한 번 깜빡 응답.
-2. [ ] 각 발견은 codex 발견 탭 + `note_unlock` 펄스로 기록, 엔딩 리포트 "발견한 조합 수"에 합산.
-3. [ ] 통과 조건과 무관함을 유지 (몰라도 클리어 가능).
+1. [x] 후보 구현 — #108로 들어온 `ElementalInteractionSystem`의 속성 반응 10종(증기·점화·진화·빙결·융해·습윤·밀기·전도·생장·고정)이 world effect를 이미 제공. 발견 기록 경로가 없던 것을 연결.
+2. [x] 각 반응 종류의 첫 발생 시 codex 발견 관찰문 + `note_unlock` + 엔딩 리포트 발견 수 합산 (`RecordElementalDiscoveries`). codex 발견 탭에 "속성 반응 발견 n/10" 진행도 표시.
+3. [x] 통과 조건과 무관함을 유지 (반응은 어떤 층 목표에도 필수가 아님).
 
 #### G-6. 엔딩 후 자유 연습장 (담당 B)
 
-1. [ ] 엔딩 도달 저장이 있으면 메인 메뉴에 "연습장" 항목 해금: 1층 재사용, 목표 비활성, 모든 반응·발견 활성.
-2. [ ] 연습장 진입/이탈이 저장을 오염시키지 않음.
+1. [x] 엔딩 도달 저장(슬롯에 endingLabel 존재)이 있으면 메인 메뉴 "연습장" 해금: 1층 재사용, 층 진행·체크포인트 비활성, 모든 반응·발견 활성 (`StartPracticeMode`, HUD에 연습장 표기).
+2. [x] 연습장 진입/이탈이 저장을 오염시키지 않음 — 체크포인트 가드 + codex 수동 저장 차단. PlayMode 테스트(`PracticeModeUnlocksAfterEndingAndNeverProgressesOrSaves`)로 고정.
 
 #### G-7. 저장 슬롯 기록 표시 보강 (담당 B)
 
-1. [ ] 이어하기 슬롯에 발견 수·엔딩 종류(통과/진엔딩) 표시 추가 (층·시간은 구현됨).
+1. [x] 슬롯 요약에 발견 수·엔딩 종류(통과 엔딩/진엔딩) 표시 추가 — `GameProgressSnapshot.discoveries`/`endingLabel` 필드 신설.
 
 ### 게이트 G (→ 2차 사용자 테스트)
 

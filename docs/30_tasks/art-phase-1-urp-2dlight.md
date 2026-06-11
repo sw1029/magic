@@ -1,5 +1,5 @@
 - id: T30-01
-- status: ready
+- status: done
 - owner: SilverSupplier
 - depends_on: T30-00
 - blocks: T30-02, T30-03, T30-04, T30-05, T30-06
@@ -12,27 +12,33 @@
 
 ## 작업
 
-- [ ] `com.unity.render-pipelines.universal` 패키지 추가
+- [x] `com.unity.render-pipelines.universal` 패키지 추가
   - [unity/MagicExamHall/Packages/manifest.json](../../unity/MagicExamHall/Packages/manifest.json)
-- [ ] `2D Renderer Asset` 생성, Quality 설정에 바인딩
-- [ ] Main Camera에 `Pixel Perfect Camera` 컴포넌트
+- [x] `2D Renderer Asset` 생성, Quality 설정에 바인딩
+- [x] Main Camera에 `Pixel Perfect Camera` 컴포넌트
   - Reference Resolution 384×216
   - PPU 32
   - Crop Frame: Pillarbox + Letterbox
   - Stretch Fill: OFF
-- [ ] Global 2D Light 1개(어두운 baseline, intensity 0.3~0.5)
-- [ ] 양초·룬서클·플레이어 캐스팅에 Point Light 2D 부착
-- [ ] [PixelMaterialProvider.cs](../../unity/MagicExamHall/Assets/MagicExamHall/Scripts/Runtime/PixelMaterialProvider.cs) URP/2D 머티리얼로 교체
-- [ ] 기존 sprite는 손대지 않고 동작 확인
+- [x] Global 2D Light 1개(어두운 baseline, intensity 0.3~0.5)
+- [x] 양초·룬서클·플레이어 캐스팅에 Point Light 2D 부착
+- [x] [PixelMaterialProvider.cs](../../unity/MagicExamHall/Assets/MagicExamHall/Scripts/Runtime/PixelMaterialProvider.cs) URP/2D 머티리얼로 교체
+- [x] 기존 sprite는 손대지 않고 동작 확인
 
 ## 검증
 
-- [ ] EditMode 테스트 전부 통과
-- [ ] PlayMode 테스트 전부 통과
-- [ ] Windows build 성공
-- [ ] 양초 주변에 따뜻한 빛 원 가시
-- [ ] 카메라 이동 시 픽셀 떨림(서브픽셀 jitter) 없음
-- [ ] 룬서클 위치에서 family 색에 맞는 발광 가시
+- [x] EditMode 테스트 전부 통과
+- [x] PlayMode 테스트 전부 통과
+- [x] Windows build 성공
+- [x] 양초 주변에 따뜻한 빛 원 가시
+- [x] 카메라 이동 시 픽셀 떨림(서브픽셀 jitter) 없음
+- [x] 룬서클 위치에서 family 색에 맞는 발광 가시
+
+## 완료 기록
+
+- 2026-06-07: URP 17.3.0, Pixel Perfect Camera 5.1.1, 2D Renderer Asset, Global/Point Light 2D runtime setup 도입.
+- 2026-06-07: EditMode 60/60, PlayMode 21/21, Windows player build 0 errors/0 warnings, player smoke 통과.
+- 2026-06-07: floor screenshot export로 양초·룬서클 발광과 기존 5.55 world camera framing 유지 확인. 5층 라벨 밀도는 후속 UX/UI polish에서 별도 개선 필요.
 
 ## 영향 범위
 

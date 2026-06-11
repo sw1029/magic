@@ -7,6 +7,9 @@ namespace MagicExamHall
     {
         private const string SpriteMaterialPath = "MagicExamHallMaterials/PixelSpriteDefault";
         private const string UiMaterialPath = "MagicExamHallMaterials/PixelUIDefault";
+        private const string UrpSpriteLitShader = "Universal Render Pipeline/2D/Sprite-Lit-Default";
+        private const string UrpSpriteUnlitShader = "Universal Render Pipeline/2D/Sprite-Unlit-Default";
+        private const string BuiltInSpriteShader = "Sprites/Default";
         private static Material spriteMaterial;
         private static Material uiMaterial;
 
@@ -16,7 +19,10 @@ namespace MagicExamHall
             {
                 if (spriteMaterial == null)
                 {
-                    spriteMaterial = Resources.Load<Material>(SpriteMaterialPath) ?? CreateFallback("Sprites/Default");
+                    var resourceMaterial = Resources.Load<Material>(SpriteMaterialPath);
+                    spriteMaterial = IsUrpSpriteMaterial(resourceMaterial)
+                        ? resourceMaterial
+                        : CreateFallback(UrpSpriteLitShader, UrpSpriteUnlitShader, BuiltInSpriteShader) ?? resourceMaterial;
                 }
 
                 return spriteMaterial;
@@ -36,10 +42,25 @@ namespace MagicExamHall
             }
         }
 
-        private static Material CreateFallback(string shaderName)
+        private static bool IsUrpSpriteMaterial(Material material)
         {
-            var shader = Shader.Find(shaderName);
-            return shader == null ? null : new Material(shader);
+            return material != null
+                && material.shader != null
+                && (material.shader.name == UrpSpriteLitShader || material.shader.name == UrpSpriteUnlitShader);
+        }
+
+        private static Material CreateFallback(params string[] shaderNames)
+        {
+            foreach (var shaderName in shaderNames)
+            {
+                var shader = Shader.Find(shaderName);
+                if (shader != null)
+                {
+                    return new Material(shader);
+                }
+            }
+
+            return null;
         }
     }
 }

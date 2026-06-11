@@ -7,6 +7,7 @@ namespace MagicExamHall
     public sealed class PixelSpriteView : MonoBehaviour
     {
         public PixelSpriteKind kind = PixelSpriteKind.Target;
+        public int variantIndex = PixelArtFactory.NoVariantIndex;
         public Color primary = Color.white;
         public Color secondary = Color.gray;
         public Color rendererTint = Color.white;
@@ -19,6 +20,11 @@ namespace MagicExamHall
         private IEnumerator Start()
         {
             yield return null;
+            if (!enabled)
+            {
+                yield break;
+            }
+
             Apply();
         }
 
@@ -44,7 +50,7 @@ namespace MagicExamHall
         public void Apply()
         {
             var spriteRenderer = GetComponent<SpriteRenderer>();
-            spriteRenderer.sprite = PixelArtFactory.CreateSprite(name, primary, secondary, kind);
+            spriteRenderer.sprite = PixelArtFactory.CreateSprite(name, primary, secondary, kind, variantIndex);
             spriteRenderer.sharedMaterial = PixelMaterialProvider.SpriteMaterial;
             spriteRenderer.color = rendererTint;
             spriteRenderer.sortingOrder = sortingOrder;

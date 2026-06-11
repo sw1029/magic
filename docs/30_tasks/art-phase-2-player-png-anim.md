@@ -1,5 +1,5 @@
 - id: T30-02
-- status: blocked
+- status: done
 - owner: SilverSupplier
 - depends_on: T30-01
 - blocks: -
@@ -30,20 +30,29 @@ Resources/Sprites/Player/
 
 ## 코드 작업
 
-- [ ] `PixelArtFactory` → `PixelSpriteLibrary`로 확장: 단일 `Sprite` 반환에서 `SpriteSet`(방향×상태×프레임) 반환
-- [ ] [PixelSpriteView.cs](../../unity/MagicExamHall/Assets/MagicExamHall/Scripts/Runtime/PixelSpriteView.cs)에 frame ticker 추가(Animator 도입 또는 자체 카운터)
-- [ ] `PixelSpriteKind` enum을 frame이 있는 종류와 없는 종류로 분리
-- [ ] 플레이어 prefab에 facing direction 입력 → 자동 sprite 선택
-- [ ] 캐스팅 상태 전이(idle → cast_charge → cast_release → idle) 연결
+- [x] `PixelArtFactory` → `PixelSpriteLibrary`로 확장: 단일 `Sprite` 반환에서 `SpriteSet`(방향×상태×프레임) 반환
+- [x] [PixelSpriteView.cs](../../unity/MagicExamHall/Assets/MagicExamHall/Scripts/Runtime/PixelSpriteView.cs)에 frame ticker 추가(Animator 도입 또는 자체 카운터)
+  - `PlayerSpriteAnimator`가 player 전용 frame ticker를 담당하고, 정적 `PixelSpriteView`는 fallback/static sprite 전용으로 유지한다.
+- [x] `PixelSpriteKind` enum을 frame이 있는 종류와 없는 종류로 분리
+  - 정적 kind enum은 유지하고, framed player는 `PlayerAnimationState`/`PlayerFacing` 조합으로 분리했다.
+- [x] 플레이어 prefab에 facing direction 입력 → 자동 sprite 선택
+- [x] 캐스팅 상태 전이(idle → cast_charge → cast_release → idle) 연결
 
 ## 검증
 
-- [ ] idle 시 0.5초 주기 호흡 가시
-- [ ] 워크 시 4방향 모두 정확한 sprite 출력
-- [ ] 캐스팅 시 charge → release 전이 가시
-- [ ] EditMode/PlayMode 테스트 전부 통과
-- [ ] 외부 PNG 미설치 시 절차 폴백으로 안전 동작(SPRITE_GUIDE 로더 규칙)
-- [ ] Phase 1 PostFX와 합쳐 자연스러움
+- [x] idle 시 0.5초 주기 호흡 가시
+- [x] 워크 시 4방향 모두 정확한 sprite 출력
+- [x] 캐스팅 시 charge → release 전이 가시
+- [x] EditMode/PlayMode 테스트 전부 통과
+- [x] 외부 PNG 미설치 시 절차 폴백으로 안전 동작(SPRITE_GUIDE 로더 규칙)
+- [x] Phase 1 PostFX와 합쳐 자연스러움
+
+## 완료 기록
+
+- 2026-06-07: 자체 제작 48×64 플레이어 PNG 29프레임(`idle_*`, `walk_*`, `cast_charge_*`, `cast_release_*`) 생성.
+- 2026-06-07: `PlayerSpriteLibrary`/`PlayerSpriteAnimator` 도입. 이동 입력은 4방향 facing과 walk cycle로, 주문 처리 경로는 cast charge/release로 연결.
+- 2026-06-07: EditMode 61/61, PlayMode 22/22 통과. Windows player build 0 errors/0 warnings, player smoke 통과.
+- 2026-06-07: floor screenshot export로 플레이어 렌더와 URP 조명 합성을 확인. 5층 라벨 과밀은 후속 UX/UI polish에서 별도 개선 필요.
 
 ## 영향 범위
 
@@ -52,7 +61,7 @@ Resources/Sprites/Player/
 - 플레이어 prefab
 - 입력/인식 레이어 영향 없음
 
-## 자산 소싱 결정 필요
+## 자산 소싱 결정
 
-- [ ] 자체 제작 vs Mystic Woods vs Penzilla 선택
-- 선택 후 [docs/CREDITS.md](../CREDITS.md)에 출처 추가, [docs/asset-licenses/](../asset-licenses/) 아래 라이선스 파일 보관
+- [x] 자체 제작 선택
+- 외부 asset을 사용하지 않았으므로 [docs/CREDITS.md](../CREDITS.md) 및 [docs/asset-licenses/](../asset-licenses/) 추가 갱신 없음.

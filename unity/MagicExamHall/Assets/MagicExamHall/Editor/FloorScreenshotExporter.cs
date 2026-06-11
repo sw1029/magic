@@ -58,8 +58,7 @@ namespace MagicExamHall.Editor
             var originalPlane = canvas.planeDistance;
 
             camera.transform.position = new Vector3(0f, 0f, -10f);
-            camera.orthographic = true;
-            camera.orthographicSize = ExamGameController.GameplayCameraOrthographicSize;
+            PixelRenderSetup.ConfigureCamera(camera, ExamGameController.GameplayCameraOrthographicSize, camera.backgroundColor);
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
             canvas.worldCamera = camera;
             canvas.planeDistance = 1f;

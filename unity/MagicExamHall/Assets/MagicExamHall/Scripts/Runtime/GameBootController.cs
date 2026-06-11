@@ -412,6 +412,7 @@ namespace MagicExamHall
             CreateText("Title", titlePanel, "Magic Exam Hall", 54, FontStyle.Bold, new Vector2(0f, 92f), new Vector2(920, 72), Anchor.Center, TextAnchor.MiddleCenter, new Color(1f, 0.86f, 0.48f));
             CreateText("Subtitle", titlePanel, "Magic Recognizer Playable", 21, FontStyle.Bold, new Vector2(0f, 32f), new Vector2(640, 36), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.72f, 0.88f, 1f));
             CreateTowerSilhouette(titlePanel);
+            CreateText("Title Flavor", titlePanel, "떠 있는 탑은 오늘도 입학생을 기다린다.", 15, FontStyle.Italic, new Vector2(0f, -168f), new Vector2(640, 30), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.74f, 0.81f, 0.93f, 0.92f));
             CreateText("Any Key", titlePanel, "아무 키나 눌러 시작", 18, FontStyle.Bold, new Vector2(0f, -210f), new Vector2(420, 34), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.92f, 0.95f, 1f));
 
             menuPanel = CreatePanel("Main Menu", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));

@@ -12,6 +12,7 @@ namespace MagicExamHall
         private const string BuiltInSpriteShader = "Sprites/Default";
         private static Material spriteMaterial;
         private static Material uiMaterial;
+        private static Material additiveMaterial;
 
         public static Material SpriteMaterial
         {
@@ -39,6 +40,27 @@ namespace MagicExamHall
                 }
 
                 return uiMaterial;
+            }
+        }
+
+        /// <summary>
+        /// Material for glow halos. Under URP the legacy additive particle
+        /// shaders are unsupported (render magenta), so the halo uses the URP
+        /// sprite shader alpha-blended; without an SRP the legacy additive
+        /// shader gives true additive light stacking.
+        /// </summary>
+        public static Material AdditiveMaterial
+        {
+            get
+            {
+                if (additiveMaterial == null)
+                {
+                    additiveMaterial = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline != null
+                        ? CreateFallback(UrpSpriteUnlitShader, UrpSpriteLitShader, BuiltInSpriteShader) ?? SpriteMaterial
+                        : CreateFallback("Legacy Shaders/Particles/Additive", "Particles/Additive", "Mobile/Particles/Additive", BuiltInSpriteShader) ?? SpriteMaterial;
+                }
+
+                return additiveMaterial;
             }
         }
 

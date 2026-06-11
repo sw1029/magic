@@ -108,6 +108,7 @@ namespace MagicExamHall
 
         private ExamLogger logger = null!;
         private WorldDrawingController worldDrawing = null!;
+        private PlayerSpriteAnimator playerAnimator;
         private FloorController floorController = null!;
         private MagicNote magicNote = null!;
         private EndingReport endingReport = null!;
@@ -858,6 +859,7 @@ namespace MagicExamHall
                 sprite.sortingOrder = 30;
                 player = playerObject.transform;
             }
+            playerAnimator = player.GetComponent<PlayerSpriteAnimator>() ?? player.gameObject.AddComponent<PlayerSpriteAnimator>();
             EnsurePlayerPhysics();
 
             if (canvas == null)
@@ -2587,6 +2589,10 @@ namespace MagicExamHall
                 return;
             }
 
+            if (strokeCount > 0)
+            {
+                playerAnimator?.PlayCast();
+            }
             ProcessSpellGroup(strokes, center, strokeCount);
         }
 
@@ -2968,6 +2974,7 @@ namespace MagicExamHall
             ShowToast(toastMessage, eventEffect.worldEffect == "base_off_target" ? new Color(0.92f, 0.72f, 0.34f) : FamilyColor(seal.baseFamily), baseToastStrong);
             ShowBaseResultSummary(baseResult, "base 성공", resultSummary: eventEffect.note);
             pulses.Add(new ParticlePulse(outcome.center, FamilyColor(seal.baseFamily)));
+            GlowPulse.Flash(outcome.center, FamilyColor(seal.baseFamily), 1.9f, 25);
             LogBaseAttempt(baseResult, seal, eventEffect.worldEffect, successHintState);
             EvaluateFloorCompletion();
             return new ProcessedSpell { baseResult = baseResult };
@@ -3686,6 +3693,7 @@ namespace MagicExamHall
             endingReport.RecordDiscovery(goal.id, effect);
             audioDirector?.PlaySfx(AudioCue.GoalSatisfied, 0.82f);
             pulses.Add(new ParticlePulse(goal.position, goal.color));
+            GlowPulse.Flash(goal.position, goal.color, 1.7f, 26);
             TickQuestChecklist(forceRefresh: true);
             UpdateHud();
             UpdateResultPanelLayout();
@@ -4303,7 +4311,7 @@ namespace MagicExamHall
         {
             if (!IsFinalFloor)
             {
-                return floorController.Current.completeNote;
+                return $"{floorController.Current.completeNote}\n{FloorCompletionLore(floorController.Current.number)}";
             }
 
             CelebrateFinalCompletion(finalTrueEnding);
@@ -4383,6 +4391,7 @@ namespace MagicExamHall
             velocity = Vector2.Lerp(velocity, input * 4.2f, Time.deltaTime * 12f);
             player.position += (Vector3)(velocity * Time.deltaTime);
             player.position = new Vector3(Mathf.Clamp(player.position.x, -7.35f, 7.35f), Mathf.Clamp(player.position.y, -4.25f, 4.25f), 0f);
+            playerAnimator?.SetMotion(input, velocity);
         }
 
         private void TickPlatformPlayer()
@@ -4420,6 +4429,7 @@ namespace MagicExamHall
 
             ClampPlatformPlayer();
             TickPlatformCamera();
+            playerAnimator?.SetMotion(new Vector2(inputX, 0f), new Vector2(platformHorizontalVelocity, playerBody.linearVelocity.y));
         }
 
         private Vector2 ReadMovementInput()
@@ -5157,22 +5167,49 @@ namespace MagicExamHall
 
         private string BuildFloorEntryNote(FloorDefinition floor)
         {
+            var lore = FloorEntryLore(floor.number);
             if (floor.number == 1)
             {
-                return $"{floor.entryNote}\n{BuildFirstFloorGoalHint()}";
+                return $"{floor.entryNote}\n{lore}\n{BuildFirstFloorGoalHint()}";
             }
 
             if (floor.number == CustomReferenceFloorNumber)
             {
-                return $"{floor.entryNote}\n좌측 책장 근처에서 말풍선의 보기 버튼을 누르면 base별 커스텀 도형을 슬롯에 들여올 수 있습니다.";
+                return $"{floor.entryNote}\n{lore}\n좌측 책장 근처에서 말풍선의 보기 버튼을 누르면 base별 커스텀 도형을 슬롯에 들여올 수 있습니다.";
             }
 
             if (floor.number == 3)
             {
-                return $"{floor.entryNote}\n시작 구간의 책장에서 3층 프리셋 도형을 가져온 뒤 강물, 깨진 구멍, 낭떠러지, 빈 공간 표식 근처에서 기본 문양과 커스텀 도형을 순서대로 사용하세요.";
+                return $"{floor.entryNote}\n{lore}\n시작 구간의 책장에서 3층 프리셋 도형을 가져온 뒤 강물, 깨진 구멍, 낭떠러지, 빈 공간 표식 근처에서 기본 문양과 커스텀 도형을 순서대로 사용하세요.";
             }
 
-            return IsFinalFloor ? $"{floor.entryNote}\n{BuildNextFinalGoalHint()}" : floor.entryNote;
+            return IsFinalFloor
+                ? $"{floor.entryNote}\n{lore}\n{BuildNextFinalGoalHint()}"
+                : $"{floor.entryNote}\n{lore}";
+        }
+
+        private static string FloorEntryLore(int floorNumber)
+        {
+            return floorNumber switch
+            {
+                1 => "이 바닥의 홈은 수천 번의 첫 획이 남긴 자국이다.",
+                2 => "벽화의 장식 문양은 먼저 지나간 입학생들의 서명이다.",
+                3 => "다리는 오래전에 끊겼고, 아무도 같은 방법으로 건너지 않았다.",
+                4 => "균열은 탑이 늙어가는 속도다.",
+                _ => "성좌심은 통과한 이름들을 별자리로 기억한다."
+            };
+        }
+
+        private static string FloorCompletionLore(int floorNumber)
+        {
+            return floorNumber switch
+            {
+                1 => "이 층이 이렇게 밝은 것은 오랜만이다.",
+                2 => "벽화가 새 서명을 기다리기 시작했다.",
+                3 => "탑이 너의 길을 지도에 더했다.",
+                4 => "탑의 통증이 한 칸 줄었다.",
+                _ => ""
+            };
         }
 
         private string BuildFirstFloorGoalHint()
@@ -5541,6 +5578,7 @@ namespace MagicExamHall
             pixelSprite.tiled = tiled;
             pixelSprite.tiledSize = tiledSize == default ? Vector2.one : tiledSize;
             pixelSprite.Apply();
+            PixelRenderSetup.ConfigureSpriteLight(body, kind, primary, secondary, name);
             RegisterElementalEntityForSprite(body, name, kind, scale, tiled, pixelSprite.tiledSize);
             return body;
         }
@@ -7561,7 +7599,8 @@ namespace MagicExamHall
                 $"{BuildProfileSummary()}\n" +
                 $"{excerptLine}\n" +
                 "보정 정책: profile은 성공/실패 판정을 뒤집지 않고 품질 설명과 다음 연습 방향에만 사용됩니다.\n\n" +
-                BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
+                BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n" +
+                (trueEnding ? "이제 탑의 별자리에 당신의 이름이 있습니다." : "탑은 당신의 문양을 기억 속에 새겼습니다.") + "\n\n" +
                 "자기 평가\n" +
                 "1. 어떤 문양이 가장 내 손에 잘 맞았나요?\n" +
                 "2. 실패했을 때 다음에 고칠 점이 보였나요?\n" +

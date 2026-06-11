@@ -24,8 +24,12 @@ namespace MagicExamHall.Tests
             yield return null;
 
             var controller = Object.FindFirstObjectByType<ExamGameController>();
+            var boot = Object.FindFirstObjectByType<GameBootController>();
 
             Assert.That(controller, Is.Not.Null);
+            Assert.That(boot, Is.Not.Null);
+            Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Title));
+            Assert.That(controller.IsGameplayInputEnabledForTests, Is.False);
             Assert.That(controller.FloorCount, Is.EqualTo(5));
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1));
             Assert.That(controller.ActiveGoalCount, Is.EqualTo(5));
@@ -295,6 +299,172 @@ namespace MagicExamHall.Tests
 
             ClearCustomSlots(controller);
             DeleteIfExists(profilePath);
+        }
+
+        [UnityTest]
+        public IEnumerator BootFlowStartsNewGameAndPausesWorldInput()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            var boot = Object.FindFirstObjectByType<GameBootController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(boot, Is.Not.Null);
+            if (File.Exists(boot.SavePath))
+            {
+                File.Delete(boot.SavePath);
+            }
+
+            boot.StartNewGameForTests();
+            yield return null;
+
+            Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Gameplay));
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1));
+            Assert.That(controller.IsGameplayInputEnabledForTests, Is.True);
+            Assert.That(boot.CodexQuickButtonVisibleForTests, Is.True);
+            Assert.That(File.Exists(boot.SavePath), Is.True);
+            Assert.That(controller.MagicNoteEntriesForTests.Count, Is.GreaterThanOrEqualTo(1));
+
+            boot.ShowPauseForTests();
+            yield return null;
+
+            Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Paused));
+            Assert.That(controller.IsGameplayInputEnabledForTests, Is.False);
+            Assert.That(Time.timeScale, Is.EqualTo(0f));
+            Assert.That(boot.CodexQuickButtonVisibleForTests, Is.False);
+
+            boot.ResumeGameplayForTests();
+            yield return null;
+
+            Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Gameplay));
+            Assert.That(controller.IsGameplayInputEnabledForTests, Is.True);
+            Assert.That(Time.timeScale, Is.EqualTo(1f));
+            Assert.That(boot.CodexQuickButtonVisibleForTests, Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator BootFlowAutoSavesCompletedFloorAndContinueRestoresProgress()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            var boot = Object.FindFirstObjectByType<GameBootController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(boot, Is.Not.Null);
+            if (File.Exists(boot.SavePath))
+            {
+                File.Delete(boot.SavePath);
+            }
+
+            boot.StartNewGameForTests();
+            controller.CompleteCurrentFloorForTests();
+            yield return null;
+
+            Assert.That(File.Exists(boot.SavePath), Is.True);
+            var saved = JsonUtility.FromJson<GameProgressSnapshot>(File.ReadAllText(boot.SavePath));
+            Assert.That(saved.floorNumber, Is.EqualTo(2));
+            Assert.That(saved.completedGoals, Is.EqualTo(5));
+            Assert.That(saved.noteLines, Is.Not.Empty);
+
+            controller.LoadFloorForTests(4);
+            yield return null;
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(5));
+
+            boot.ContinueGameForTests();
+            yield return null;
+
+            Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Gameplay));
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
+            Assert.That(controller.MagicNoteEntriesForTests.Count, Is.GreaterThanOrEqualTo(1));
+
+            boot.ShowCodexForTests();
+            yield return null;
+
+            Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Codex));
+            Assert.That(boot.CodexTextForTests, Does.Contain("1층"));
+            boot.ResumeGameplayForTests();
+        }
+
+        [UnityTest]
+        public IEnumerator SaveSlotsAndManualCodexSaveStayIndependent()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            var boot = Object.FindFirstObjectByType<GameBootController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(boot, Is.Not.Null);
+            for (var slot = 1; slot <= 3; slot++)
+            {
+                var path = boot.SavePathForSlotForTests(slot);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+
+            boot.SelectSaveSlotForTests(2);
+            boot.StartNewGameForTests();
+            controller.CompleteCurrentFloorForTests();
+            yield return null;
+
+            var slotTwo = JsonUtility.FromJson<GameProgressSnapshot>(File.ReadAllText(boot.SavePathForSlotForTests(2)));
+            Assert.That(slotTwo.slotIndex, Is.EqualTo(2));
+            Assert.That(slotTwo.floorNumber, Is.EqualTo(2));
+
+            boot.SelectSaveSlotForTests(3);
+            controller.LoadFloorForTests(4);
+            boot.ShowCodexForTests();
+            boot.ManualSaveForTests();
+            yield return null;
+
+            var slotThree = JsonUtility.FromJson<GameProgressSnapshot>(File.ReadAllText(boot.SavePathForSlotForTests(3)));
+            Assert.That(slotThree.slotIndex, Is.EqualTo(3));
+            Assert.That(slotThree.floorNumber, Is.EqualTo(5));
+            Assert.That(boot.CodexTextForTests, Does.Contain("슬롯 3에 저장"));
+
+            boot.SelectSaveSlotForTests(2);
+            boot.ContinueGameForTests();
+            yield return null;
+
+            Assert.That(boot.ActiveSaveSlotForTests, Is.EqualTo(2));
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
+        }
+
+        [UnityTest]
+        public IEnumerator FirstFloorGhostTutorialAndDiscoveryCodexWork()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            var boot = Object.FindFirstObjectByType<GameBootController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(boot, Is.Not.Null);
+
+            boot.StartNewGameForTests();
+            controller.TriggerFirstFloorGhostForTests();
+            yield return null;
+
+            Assert.That(controller.ActiveGhostTraceCountForTests, Is.GreaterThan(0));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("흐릿한 선"));
+
+            controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-5.5f, 2.6f));
+            yield return null;
+            Assert.That(controller.DiscoveredFamiliesForTests, Does.Contain(SpellFamily.Fire));
+
+            boot.ShowDiscoveryCodexForTests();
+            yield return null;
+            Assert.That(boot.CodexTextForTests, Does.Contain("Base family"));
+            Assert.That(boot.CodexTextForTests, Does.Contain("불"));
+            boot.ResumeGameplayForTests();
         }
 
         [UnityTest]
@@ -847,8 +1017,8 @@ namespace MagicExamHall.Tests
             Assert.That(editorPanel, Is.Not.Null);
             var editorRect = editorPanel.rectTransform;
             var canvasRect = editorRect.GetComponentInParent<Canvas>().GetComponent<RectTransform>();
-            Assert.That(editorRect.rect.width, Is.GreaterThan(850f));
-            Assert.That(editorRect.rect.height, Is.GreaterThan(468f));
+            Assert.That(editorRect.rect.width, Is.GreaterThanOrEqualTo(Mathf.Min(840f, canvasRect.rect.width)));
+            Assert.That(editorRect.rect.height, Is.GreaterThanOrEqualTo(Mathf.Min(460f, canvasRect.rect.height - 12f)));
             Assert.That(editorRect.rect.width, Is.LessThanOrEqualTo(canvasRect.rect.width));
             Assert.That(editorRect.rect.height, Is.LessThanOrEqualTo(canvasRect.rect.height));
             Assert.That(editorScrim.raycastTarget, Is.True);
@@ -1269,6 +1439,10 @@ namespace MagicExamHall.Tests
 
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
+            var boot = Object.FindFirstObjectByType<GameBootController>();
+            Assert.That(boot, Is.Not.Null);
+            boot.StartNewGameForTests();
+            yield return null;
 
             controller.CloseFirstFloorLetterForTests();
             controller.LoadFloorForTests(2);

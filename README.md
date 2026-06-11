@@ -2,7 +2,7 @@
 
 마법 문양을 직접 그려 주문을 시전하는 게임 경험을 검증하기 위한 프로젝트입니다.
 
-현재 저장소의 중심은 Web 기반 `Magic Recognizer V1.5` 프로토타입이며, 게임 기획 기준은 `Magic Exam Hall`입니다. `Magic Exam Hall`은 별도 입력창이 아니라 맵 위 바닥에 직접 문양을 그리고, base family와 overlay operator를 조합해 세계 상태를 바꾸는 2D top-down 마법 드로잉 퍼즐 어드벤처를 목표로 합니다.
+현재 저장소는 Web 기반 `Magic Recognizer V1.5` 연구 프로토타입과 Unity 기반 `Magic Exam Hall` 플레이어블을 함께 유지합니다. `Magic Exam Hall`은 별도 입력창이 아니라 맵 위 바닥에 직접 문양을 그리고, base family와 overlay operator를 조합해 세계 상태를 바꾸는 2D top-down 마법 드로잉 퍼즐 어드벤처입니다.
 
 현재 범위:
 
@@ -16,6 +16,10 @@
 * 문서 상태 동기화 검증
 * `Magic Exam Hall` 게임 기획/로드맵 문서화
 * Unity 기반 `Magic Exam Hall` 5층 월드 캐스팅 플레이 루프
+* Unity 타이틀, 메인 메뉴, 옵션, 일시정지, codex, 엔딩 복귀 흐름
+* Unity 3슬롯 저장, 층 완료 자동 저장, codex 수동 저장
+* 절차 생성 SFX 12종, BGM 2종, 선 인식/실패 비주얼 피드백
+* 접근성 옵션: 좌/우클릭 스왑, 이동 키 프리셋, 마우스 감도, 텍스트 크기, 색 보조, 관찰 모드
 
 ## 요구 사항
 
@@ -64,7 +68,7 @@ unity/MagicExamHall
 2. `Assets/Scenes/MagicExamHall.unity`를 엽니다.
 3. Play를 누릅니다.
 
-조작은 WASD/방향키 이동, 우클릭 hold/release 월드 드로잉입니다. 기본 플레이에서는 별도 입력 패널이나 `마법 시전` 버튼을 사용하지 않습니다.
+조작은 WASD/방향키 이동, 우클릭 hold/release 월드 드로잉입니다. 옵션에서 방향키/IJKL 이동, 좌클릭 드로잉, 텍스트 크기, 색 보조, 관찰 모드, BGM/SFX 볼륨을 바꿀 수 있습니다. 기본 플레이에서는 별도 입력 패널이나 `마법 시전` 버튼을 사용하지 않습니다.
 
 제출 후보를 만들 때는 [Release Checklist](docs/RELEASE_CHECKLIST.md)를 따라 Web 검증, Unity 테스트, Windows 빌드, player smoke, 수동 5층 완주, 로그/개인정보 확인을 함께 점검합니다.
 
@@ -227,6 +231,8 @@ Unity 검증 명령 예시:
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallSceneBuilder.BuildAll
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform editmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\TestResults.xml'
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform playmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\PlayModeTestResults.xml'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -BuildPath 'tmp\MagicExamHallFinalize\MagicExamHall.exe' -LogPath 'unity\MagicExamHall\unity-build-finalize.log'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-magic-exam-hall-player.ps1 -BuildPath 'tmp\MagicExamHallFinalize\MagicExamHall.exe' -LogPath 'tmp\MagicExamHallFinalize\player-smoke.log'
 ```
 
 ## 디렉토리 구조

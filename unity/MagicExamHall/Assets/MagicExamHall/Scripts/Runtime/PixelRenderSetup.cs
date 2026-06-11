@@ -5,8 +5,8 @@ namespace MagicExamHall
 {
     public static class PixelRenderSetup
     {
-        public const int ReferenceResolutionX = 384;
-        public const int ReferenceResolutionY = 216;
+        public const int ReferenceResolutionX = 632;
+        public const int ReferenceResolutionY = 356;
         public const int AssetsPixelsPerUnit = 32;
         public const float DefaultGlobalLightIntensity = 0.42f;
         public const float DefaultPlayerLightIntensity = 0.24f;

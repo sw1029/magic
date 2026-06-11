@@ -7,6 +7,8 @@ namespace MagicExamHall
     public sealed class WorldStrokeVisuals : MonoBehaviour
     {
         public const float DefaultStrokeVisualLifetimeSeconds = 4.2f;
+        public const float RecognizedStrokeFadeSeconds = 0.7f;
+        public const float InvalidStrokeFadeSeconds = 1.0f;
 
         public Color strokeColor = new(0.22f, 0.95f, 1f, 0.92f);
         public float lineWidth = 0.075f;
@@ -14,6 +16,7 @@ namespace MagicExamHall
 
         private readonly Dictionary<string, StrokeVisual> active = new();
         private readonly List<StrokeVisual> visuals = new();
+        private readonly List<StrokeVisual> pendingRecognition = new();
 
         public int VisualCountForTests => visuals.Count(visual => visual.body != null);
 
@@ -62,6 +65,17 @@ namespace MagicExamHall
 
             visuals.Clear();
             active.Clear();
+            pendingRecognition.Clear();
+        }
+
+        public void MarkLastCompletedSessionRecognized(Color color)
+        {
+            MarkPendingRecognition(StrokeVisualState.Recognized, new Color(color.r, color.g, color.b, 0.92f));
+        }
+
+        public void MarkLastCompletedSessionInvalid()
+        {
+            MarkPendingRecognition(StrokeVisualState.Invalid, new Color(0.76f, 0.78f, 0.86f, 0.72f));
         }
 
         public void Tick(float deltaTime)
@@ -75,15 +89,15 @@ namespace MagicExamHall
                 }
 
                 visual.age += deltaTime;
-                var alpha = Mathf.Lerp(0.92f, 0f, visual.age / Mathf.Max(lifetimeSeconds, 0.001f));
-                var color = new Color(strokeColor.r, strokeColor.g, strokeColor.b, alpha);
+                visual.stateAge += deltaTime;
+                var color = visual.ColorFor(strokeColor, lifetimeSeconds);
                 if (visual.line != null)
                 {
                     visual.line.startColor = color;
                     visual.line.endColor = color;
                 }
 
-                if (visual.age >= lifetimeSeconds)
+                if (visual.ShouldRemove(lifetimeSeconds))
                 {
                     if (visual.body != null)
                     {
@@ -113,6 +127,11 @@ namespace MagicExamHall
             if (completed)
             {
                 active.Remove(stroke.Id);
+                visual.age = 0f;
+                if (!pendingRecognition.Contains(visual))
+                {
+                    pendingRecognition.Add(visual);
+                }
             }
 
             visual.line.positionCount = stroke.Points.Count;
@@ -141,18 +160,79 @@ namespace MagicExamHall
             return new StrokeVisual(body, line);
         }
 
+        private void MarkPendingRecognition(StrokeVisualState state, Color targetColor)
+        {
+            foreach (var visual in pendingRecognition.Where(visual => visual.line != null).ToList())
+            {
+                visual.state = state;
+                visual.stateAge = 0f;
+                visual.targetColor = targetColor;
+                visual.completed = true;
+            }
+
+            pendingRecognition.Clear();
+        }
+
         private sealed class StrokeVisual
         {
             public readonly GameObject body;
             public readonly LineRenderer line;
             public bool completed;
             public float age;
+            public float stateAge;
+            public Color targetColor;
+            public StrokeVisualState state;
 
             public StrokeVisual(GameObject body, LineRenderer line)
             {
                 this.body = body;
                 this.line = line;
+                targetColor = Color.white;
             }
+
+            public bool ShouldRemove(float lifetimeSeconds)
+            {
+                return state switch
+                {
+                    StrokeVisualState.Recognized => stateAge >= RecognizedStrokeFadeSeconds,
+                    StrokeVisualState.Invalid => stateAge >= InvalidStrokeFadeSeconds,
+                    _ => age >= Mathf.Max(lifetimeSeconds, 0.001f)
+                };
+            }
+
+            public Color ColorFor(Color baseColor, float lifetimeSeconds)
+            {
+                return state switch
+                {
+                    StrokeVisualState.Recognized => RecognizedColor(baseColor),
+                    StrokeVisualState.Invalid => InvalidColor(),
+                    _ => new Color(baseColor.r, baseColor.g, baseColor.b, Mathf.Lerp(0.92f, 0f, age / Mathf.Max(lifetimeSeconds, 0.001f)))
+                };
+            }
+
+            private Color RecognizedColor(Color baseColor)
+            {
+                var tintT = Mathf.Clamp01(stateAge / 0.2f);
+                var fadeT = Mathf.Clamp01((stateAge - 0.2f) / 0.5f);
+                var color = Color.Lerp(baseColor, targetColor, tintT);
+                color.a = Mathf.Lerp(0.92f, 0f, fadeT);
+                return color;
+            }
+
+            private Color InvalidColor()
+            {
+                var fadeT = Mathf.Clamp01(stateAge / InvalidStrokeFadeSeconds);
+                var color = targetColor;
+                color.a = Mathf.Lerp(0.72f, 0f, fadeT);
+                return color;
+            }
+        }
+
+        private enum StrokeVisualState
+        {
+            Drawing,
+            Recognized,
+            Invalid
         }
     }
 }

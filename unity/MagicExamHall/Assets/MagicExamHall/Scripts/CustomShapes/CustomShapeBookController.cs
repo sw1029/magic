@@ -653,14 +653,11 @@ namespace MagicExamHall
             var parentSize = pagePanel != null
                 ? pagePanel.rect.size
                 : new Vector2(960f, 540f);
-            var horizontalScreenMargin = Mathf.Clamp(canvasSize.x * 0.026f, 20f, 42f);
-            var verticalScreenMargin = Mathf.Clamp(canvasSize.y * 0.04f, 20f, 46f);
-            var maxWidth = Mathf.Max(640f, Mathf.Min(parentSize.x - 36f, canvasSize.x - horizontalScreenMargin));
-            var maxHeight = Mathf.Max(390f, Mathf.Min(parentSize.y - 22f, canvasSize.y - verticalScreenMargin));
-            var canvasAspect = canvasSize.x / Mathf.Max(1f, canvasSize.y);
-            var desired = canvasAspect < 1.55f
-                ? new Vector2(880f, 520f)
-                : BaseEditorPopupSize;
+            var horizontalScreenMargin = 0f;
+            var verticalScreenMargin = Mathf.Clamp(canvasSize.y * 0.020f, 8f, 20f);
+            var maxWidth = Mathf.Max(640f, Mathf.Min(parentSize.x, canvasSize.x - horizontalScreenMargin));
+            var maxHeight = Mathf.Max(390f, Mathf.Min(parentSize.y - 12f, canvasSize.y - verticalScreenMargin));
+            var desired = BaseEditorPopupSize;
             var scale = Mathf.Min(maxWidth / desired.x, maxHeight / desired.y);
             scale = Mathf.Min(scale, 1.06f);
             return new Vector2(

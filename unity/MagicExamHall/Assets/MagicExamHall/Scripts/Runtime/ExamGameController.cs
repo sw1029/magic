@@ -10,7 +10,7 @@ namespace MagicExamHall
 {
     public sealed class ExamGameController : MonoBehaviour
     {
-        public const float GameplayCameraOrthographicSize = 5.55f;
+        public const float GameplayCameraOrthographicSize = PixelRenderSetup.ReferenceResolutionY / (2f * PixelRenderSetup.AssetsPixelsPerUnit);
         public const int FinalFloorPassingGoalCount = 5;
         public const float StandardFloorAdvanceDelaySeconds = 1.4f;
         public const float StageFloorAdvanceDelaySeconds = 2.6f;
@@ -94,6 +94,7 @@ namespace MagicExamHall
         private readonly List<StageGate> activeStageGates = new();
         private readonly List<GameObject> stageEntityObjects = new();
         private readonly List<GameObject> stageEffectObjects = new();
+        private readonly List<GhostTraceView> ghostTraces = new();
         private readonly List<GameObject> floorObjects = new();
         private readonly List<GameObject> customReferenceCards = new();
         private readonly List<QuestChecklistItemView> questChecklistViews = new();
@@ -102,6 +103,8 @@ namespace MagicExamHall
         private readonly Dictionary<SpellFamily, int> baseFailureCounts = new();
         private readonly Dictionary<int, QuestChecklistSnapshot> questChecklistSnapshots = new();
         private readonly HashSet<string> questImportedReferenceIdsThisFloor = new();
+        private readonly HashSet<SpellFamily> discoveredFamilies = new();
+        private readonly HashSet<OverlayOperator> discoveredOverlays = new();
 
         private ExamLogger logger = null!;
         private WorldDrawingController worldDrawing = null!;
@@ -117,6 +120,8 @@ namespace MagicExamHall
         private Rigidbody2D playerBody = null!;
         private CapsuleCollider2D playerCollider = null!;
         private MentorPresentationController mentor = null!;
+        private GameBootController bootController = null!;
+        private AudioDirector audioDirector = null!;
         private RectTransform hudPanel = null!;
         private RectTransform healthPanel = null!;
         private RectTransform notePanel = null!;
@@ -188,6 +193,13 @@ namespace MagicExamHall
         private float lastGoalProximityGuideDistance;
         private string customReferenceLastStatus = "";
         private string lastGoalProximityGuideGoalId = "";
+        private bool gameplayInputEnabled = true;
+        private float floorEnteredAt;
+        private int castsOnCurrentFloor;
+        private bool firstFloorGhostShown;
+        private bool firstFloorLongSilenceShown;
+
+        public event Action<GameProgressSnapshot> ProgressCheckpointed = delegate { };
 
         public int CurrentFloorNumber => floorController?.CurrentFloorNumber ?? 1;
         public int FloorCount => floorController?.FloorCount ?? 5;
@@ -215,6 +227,11 @@ namespace MagicExamHall
         public string EndingReportTextForTests => reportText == null ? "" : reportText.text;
         public int TrialCountForTests => trialCounter;
         public string VersionLabelForTests => versionText == null ? "" : versionText.text;
+        public bool IsGameplayInputEnabledForTests => gameplayInputEnabled;
+        public IReadOnlyList<MagicNoteEntry> MagicNoteEntriesForTests => magicNote?.Entries ?? Array.Empty<MagicNoteEntry>();
+        public IReadOnlyCollection<SpellFamily> DiscoveredFamiliesForTests => discoveredFamilies;
+        public IReadOnlyCollection<OverlayOperator> DiscoveredOverlaysForTests => discoveredOverlays;
+        public int ActiveGhostTraceCountForTests => ghostTraces.Count;
         public int ActivePulseCountForTests => pulses.Count;
         public int ActiveDefaultBarrierCountForTests => defaultBarriers.Count;
         public Color LastDefaultBarrierColorForTests => defaultBarriers.Count == 0 ? Color.clear : defaultBarriers[^1].Color;
@@ -314,11 +331,13 @@ namespace MagicExamHall
             ResolveSceneReferences();
             RefreshPlayerBlinkRenderers();
             BuildUi();
+            ConfigureAudio();
             ConfigureMentor();
             customShapeBook = new CustomShapeBookController();
             customShapeBook.Initialize(canvas, mainCamera, player, uiFont, customShapeStore);
             ConfigureWorldDrawing();
             LoadFloor(0);
+            ConfigureBoot();
         }
 
         private void Update()
@@ -353,6 +372,8 @@ namespace MagicExamHall
             TickHazards();
             TickHostileEntityContacts();
             TickPlayerBlink();
+            TickGhostTraces();
+            TickFirstFloorOnboarding();
             TickFloorAdvance();
             TickQuestChecklist();
             TickQuestScrollAnimation();
@@ -717,6 +738,101 @@ namespace MagicExamHall
             customShapeBook.Initialize(canvas, mainCamera, player, uiFont, customShapeStore);
         }
 
+        public void TriggerFirstFloorGhostForTests()
+        {
+            floorEnteredAt = Time.time - 8.1f;
+            firstFloorGhostShown = false;
+            castsOnCurrentFloor = 0;
+            TickFirstFloorOnboarding();
+        }
+
+        public void SetGameplayInputEnabled(bool enabled)
+        {
+            gameplayInputEnabled = enabled;
+            velocity = Vector2.zero;
+            if (worldDrawing != null)
+            {
+                worldDrawing.enabled = enabled;
+            }
+        }
+
+        public void StartNewGame()
+        {
+            ResetRunState();
+            LoadFloor(0);
+        }
+
+        public void LoadSavedProgress(int floorNumber, IEnumerable<string> noteLines)
+        {
+            ResetRunState();
+            LoadFloor(Mathf.Clamp(floorNumber - 1, 0, FloorCount - 1));
+            magicNote.Restore(noteLines ?? Array.Empty<string>(), CurrentFloorNumber);
+            if (noteText != null)
+            {
+                noteText.text = magicNote.Text;
+            }
+        }
+
+        public void PrepareForTitleScreen()
+        {
+            pendingAdvanceAt = -1f;
+            if (reportPanel != null)
+            {
+                reportPanel.gameObject.SetActive(false);
+            }
+            if (notePanel != null)
+            {
+                notePanel.gameObject.SetActive(false);
+            }
+            SetGameplayInputEnabled(false);
+        }
+
+        public GameProgressSnapshot CreateProgressSnapshot(int resumeFloorNumber = 0)
+        {
+            var floorNumber = resumeFloorNumber <= 0 ? CurrentFloorNumber : Mathf.Clamp(resumeFloorNumber, 1, FloorCount);
+            return new GameProgressSnapshot
+            {
+                floorNumber = floorNumber,
+                completedGoals = activeGoals.Count(goal => goal.completed),
+                totalGoals = activeGoals.Count,
+                noteLines = magicNote?.Lines.ToArray() ?? Array.Empty<string>(),
+                savedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)
+            };
+        }
+
+        private void ResetRunState()
+        {
+            sessionId = $"unity-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
+            logger = new ExamLogger(sessionId);
+            endingReport = new EndingReport();
+            trialCounter = 0;
+            castsOnCurrentFloor = 0;
+            CurrentAssistLevel = 0;
+            LastHintText = "";
+            pendingAdvanceAt = -1f;
+            finalCompletionCelebrated = false;
+            finalTrueEnding = false;
+            baseFailureCounts.Clear();
+            discoveredFamilies.Clear();
+            discoveredOverlays.Clear();
+            PlayerPrefs.SetInt("MagicExamHall.FirstFloorGhostSeen", 0);
+            magicNote.Clear();
+            if (reportPanel != null)
+            {
+                reportPanel.gameObject.SetActive(false);
+            }
+            if (toastPanel != null)
+            {
+                toastTtl = 0f;
+                toastPanel.gameObject.SetActive(false);
+            }
+        }
+
+        private void PublishProgressCheckpoint(int resumeFloorNumber)
+        {
+            ProgressCheckpointed(CreateProgressSnapshot(resumeFloorNumber));
+        }
+
         private void ResolveSceneReferences()
         {
             mainCamera ??= Camera.main;
@@ -778,6 +894,18 @@ namespace MagicExamHall
             worldDrawing.InputCancelled += OnDrawingCancelled;
         }
 
+        private void ConfigureAudio()
+        {
+            audioDirector = gameObject.GetComponent<AudioDirector>() ?? gameObject.AddComponent<AudioDirector>();
+            audioDirector.Initialize();
+        }
+
+        private void ConfigureBoot()
+        {
+            bootController = gameObject.GetComponent<GameBootController>() ?? gameObject.AddComponent<GameBootController>();
+            bootController.Initialize(this, canvas, uiFont);
+        }
+
         private void ConfigureMentor()
         {
             mentor = gameObject.GetComponent<MentorPresentationController>() ?? gameObject.AddComponent<MentorPresentationController>();
@@ -786,10 +914,7 @@ namespace MagicExamHall
 
         private static void ConfigureMainCamera(Camera camera)
         {
-            camera.orthographic = true;
-            camera.orthographicSize = GameplayCameraOrthographicSize;
-            camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.035f, 0.043f, 0.055f);
+            PixelRenderSetup.ConfigureCamera(camera, GameplayCameraOrthographicSize, new Color(0.035f, 0.043f, 0.055f));
         }
 
         private void BuildUi()
@@ -1556,9 +1681,15 @@ namespace MagicExamHall
             questImportedReferenceIdsThisFloor.Clear();
             activeStageDefinition = LoadStageDefinitionForFloor(floorController.Current.number);
             ConfigurePlatformMotion(activeStageDefinition != null);
+            ApplyFloorTheme(floorController.Current);
+            audioDirector?.PlayForFloor(floorController.Current.number);
             safePosition = activeStageDefinition == null ? new Vector2(0f, -4.05f) : activeStageDefinition.playerStart;
             MovePlayerTo(safePosition);
             floorStartedAt = Time.time;
+            floorEnteredAt = Time.time;
+            castsOnCurrentFloor = 0;
+            firstFloorGhostShown = PlayerPrefs.GetInt("MagicExamHall.FirstFloorGhostSeen", 0) == 1;
+            firstFloorLongSilenceShown = false;
             activeGoals.Clear();
             activeGoals.AddRange(floorController.Current.goals.Select(goal => goal.Clone()));
             ApplyStageGoalOverrides();
@@ -1989,6 +2120,38 @@ namespace MagicExamHall
                     return samples;
                 })
                 .ToList();
+        }
+
+        private void ApplyFloorTheme(FloorDefinition floor)
+        {
+            var baseBackground = new Color(0.035f, 0.043f, 0.055f);
+            if (mainCamera != null)
+            {
+                mainCamera.backgroundColor = Color.Lerp(baseBackground, floor.accentColor, 0.10f);
+            }
+
+            if (hudPanel != null)
+            {
+                var image = hudPanel.GetComponent<Image>();
+                if (image != null)
+                {
+                    image.color = Color.Lerp(new Color(0.04f, 0.055f, 0.075f, 0.88f), floor.accentColor, 0.08f);
+                }
+            }
+
+            if (notePanel != null)
+            {
+                var image = notePanel.GetComponent<Image>();
+                if (image != null)
+                {
+                    image.color = Color.Lerp(new Color(0.04f, 0.055f, 0.075f, 0.84f), floor.accentColor, 0.06f);
+                }
+            }
+
+            if (hudTitle != null)
+            {
+                hudTitle.color = Color.Lerp(floor.accentColor, Color.white, 0.48f);
+            }
         }
 
         private void BuildFloorArt(FloorDefinition floor)
@@ -2445,8 +2608,32 @@ namespace MagicExamHall
 
         private void ShowMagicNote(string text, MentorMood mentorMood)
         {
-            magicNote.Show(text);
+            magicNote.Show(text, InferNoteCategory(text), CurrentFloorNumber);
             mentor?.Say(mentorMood, text);
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                audioDirector?.PlaySfx(AudioCue.NoteUnlock, 0.42f);
+                audioDirector?.PlaySfx(AudioCue.NpcAppear, mentorMood == MentorMood.Neutral ? 0.18f : 0.28f);
+            }
+        }
+
+        private static MagicNoteCategory InferNoteCategory(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return MagicNoteCategory.Discovery;
+            }
+
+            if (text.StartsWith("노트:", StringComparison.Ordinal) ||
+                text.Contains("다음 목표", StringComparison.Ordinal) ||
+                text.Contains("목표:", StringComparison.Ordinal) ||
+                text.Contains("완료", StringComparison.Ordinal) ||
+                text.Contains("통과", StringComparison.Ordinal))
+            {
+                return MagicNoteCategory.FloorNote;
+            }
+
+            return MagicNoteCategory.Discovery;
         }
 
         private void ShowToast(string message, Color accent, bool strong = false)
@@ -2501,6 +2688,7 @@ namespace MagicExamHall
         private ProcessedSpell ProcessStrokeSession(StrokeInputSession session)
         {
             trialCounter++;
+            castsOnCurrentFloor++;
             var now = Time.time;
             var hadActiveSeal = HasActiveSeal(now);
             if (hadActiveSeal)
@@ -2576,7 +2764,7 @@ namespace MagicExamHall
                 CurrentAssistLevel = 1;
                 LastHintText = "커스텀 도형은 먼저 만든 기본 문양의 빛나는 원 안에 얹어야 합니다.";
                 endingReport.RecordHintShown(1);
-                magicNote.Show(LastHintText);
+                ShowMagicNote(LastHintText, MentorMood.Frown);
                 ShowBaseResultSummary(recognition.baseResult, "커스텀 부착 실패", LastHintText);
                 LogBaseAttempt(recognition.baseResult, null, "custom_followup_detached");
                 processed = new ProcessedSpell { baseResult = recognition.baseResult };
@@ -2598,7 +2786,7 @@ namespace MagicExamHall
                     $"{SpellLabels.Korean(seal.baseFamily)} 문양 위에서 지금 도형 조합은 특별한 반응을 만들지 못했습니다.\n" +
                     "표식에 적힌 조합처럼 기본 문양을 먼저 만들고, 그 위에 맞는 커스텀 도형을 얹으세요.";
                 endingReport.RecordHintShown(1);
-                magicNote.Show(LastHintText);
+                ShowMagicNote(LastHintText, MentorMood.Frown);
                 ShowBaseResultSummary(result, "커스텀 반응 실패", LastHintText);
                 pulses.Add(new ParticlePulse(center, FamilyColor(seal.baseFamily), weak: true));
                 LogBaseAttempt(result, seal, "custom_effect_unmatched");
@@ -2626,7 +2814,7 @@ namespace MagicExamHall
 
             CurrentAssistLevel = 0;
             LastHintText = "";
-            magicNote.Show(note);
+            ShowMagicNote(note, MentorMood.Happy);
             ShowBaseResultSummary(result, $"{customEffect.displayName} 반응", note);
             pulses.Add(new ParticlePulse(center, FamilyColor(seal.baseFamily)));
             LogBaseAttempt(result, seal, $"{goalEffect.worldEffect}|{customEffect.kind}");
@@ -2701,6 +2889,7 @@ namespace MagicExamHall
         private ProcessedSpell ApplySubmittedSpellOutcome(SpellCastOutcome outcome)
         {
             trialCounter++;
+            castsOnCurrentFloor++;
             var now = Time.time;
             if (HasActiveSeal(now))
             {
@@ -2730,13 +2919,15 @@ namespace MagicExamHall
         {
             var baseResult = outcome.baseResult;
             var feedbackFamily = baseResult.spell.recognizedFamily ?? baseResult.spell.targetFamily;
-            var priorFailures = GetBaseFailureCount(feedbackFamily);
+            var priorFailures = Mathf.Max(GetBaseFailureCount(feedbackFamily), MagicExamSettings.ObserverMode ? 1 : 0);
             var hintState = HintAssistance.ForAttempt(feedbackFamily, priorFailures, false, baseResult.spell);
             baseFailureCounts[feedbackFamily] = priorFailures + 1;
             CurrentAssistLevel = hintState.AssistLevelNumber;
             LastHintText = hintState.body;
             endingReport.RecordAssist(hintState);
             ShowMagicNote(BuildBaseFailureNote(baseResult.spell, hintState), MentorMood.Frown);
+            audioDirector?.PlaySfx(baseResult.spell.status == RecognitionStatus.Incomplete ? AudioCue.CastIncomplete : AudioCue.CastInvalid);
+            worldDrawing?.MarkLastBufferedStrokesInvalid();
             ShowToast("문양 불안정 - 노트를 확인", new Color(0.92f, 0.72f, 0.34f));
             ShowBaseResultSummary(baseResult, "base 실패", resultSummary: hintState.body);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
@@ -2756,6 +2947,7 @@ namespace MagicExamHall
             var view = CreateSealView(seal);
             seals.Add(view);
             endingReport.RecordBase(seal.baseFamily, seal.quality, success: true, successHintState);
+            discoveredFamilies.Add(seal.baseFamily);
             var effect = ApplyBaseToGoals(baseResult, seal.baseFamily, outcome.center);
             var customEventNote = ApplyCustomShapeEvent(baseResult, seal, outcome.center);
             var elementalNote = ApplyElementalInteractions(seal.baseFamily, baseResult.spell, outcome.center, baseResult.spell.customEventDirection, "base");
@@ -2767,6 +2959,8 @@ namespace MagicExamHall
                 eventEffect = new GoalEffect($"{eventEffect.note}\n{elementalNote}", $"{eventEffect.worldEffect}|elemental");
             }
             ShowMagicNote(BuildBaseSuccessNote(seal, eventEffect, successHintState), MentorMood.Happy);
+            audioDirector?.PlayBaseSuccess(seal.baseFamily, seal.quality);
+            worldDrawing?.MarkLastBufferedStrokesRecognized(FamilyColor(seal.baseFamily));
             var baseToastStrong = eventEffect.worldEffect != "base_off_target" && eventEffect.worldEffect != "seal_only";
             var toastMessage = eventEffect.worldEffect == "base_off_target"
                 ? $"{SpellLabels.Korean(seal.baseFamily)} 인식 - 목표 근처로 이동"
@@ -2787,6 +2981,10 @@ namespace MagicExamHall
             LastHintText = OverlayActionHint(result, seal);
             endingReport.RecordHintShown(1);
             ShowMagicNote(BuildOverlayFailureNote(result, seal), MentorMood.Frown);
+            audioDirector?.PlaySfx(result.recognizedOperator == OverlayOperator.MartialAxis && !seal.overlayStack.Contains(OverlayOperator.VoidCut)
+                ? AudioCue.CastDependencyMissing
+                : result.status == RecognitionStatus.Incomplete ? AudioCue.CastIncomplete : AudioCue.CastInvalid);
+            worldDrawing?.MarkLastBufferedStrokesInvalid();
             ShowToast("overlay 불안정 - seal 위치 확인", new Color(0.92f, 0.72f, 0.34f));
             ShowOverlayResultSummary(result, seal, "overlay 실패", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
@@ -2803,6 +3001,8 @@ namespace MagicExamHall
             LastHintText = "같은 장식 대신 아직 비어 있는 다른 장식을 seal 위에 그려 보세요.";
             endingReport.RecordHintShown(1);
             ShowMagicNote($"{SpellLabels.Korean(op)} 장식은 이미 이 seal에 붙어 있습니다.", MentorMood.Frown);
+            audioDirector?.PlaySfx(AudioCue.CastInvalid);
+            worldDrawing?.MarkLastBufferedStrokesInvalid();
             ShowToast("중복 overlay - 다른 장식 필요", OverlayColor(op));
             ShowOverlayResultSummary(result, seal, "overlay 중복", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
@@ -2819,6 +3019,8 @@ namespace MagicExamHall
             LastHintText = "새 base seal을 만든 뒤 남은 장식을 붙여 보세요.";
             endingReport.RecordHintShown(1);
             ShowMagicNote($"하나의 seal에는 overlay를 {SpellCastingService.MaxOverlayStack}개까지만 안정적으로 붙일 수 있습니다.", MentorMood.Frown);
+            audioDirector?.PlaySfx(AudioCue.CastInvalid);
+            worldDrawing?.MarkLastBufferedStrokesInvalid();
             ShowToast("overlay stack full - 새 base 필요", OverlayColor(op));
             ShowOverlayResultSummary(result, seal, "overlay 초과", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, OverlayColor(op)));
@@ -2838,10 +3040,13 @@ namespace MagicExamHall
                 sealView.AddOverlayMark(op);
             }
             endingReport.RecordOverlay(op);
+            discoveredOverlays.Add(op);
             var effect = ApplyOverlayToGoals(seal, op, outcome.center);
             CurrentAssistLevel = 0;
             LastHintText = "";
             ShowMagicNote(BuildOverlaySuccessNote(seal, op, effect), MentorMood.Happy);
+            audioDirector?.PlayOverlaySuccess(op);
+            worldDrawing?.MarkLastBufferedStrokesRecognized(OverlayColor(op));
             var overlayToastStrong = effect.worldEffect != "overlay_stack";
             ShowToast(overlayToastStrong ? "목표 반응 적용" : $"{SpellLabels.Korean(op)} overlay 연결", OverlayColor(op), overlayToastStrong);
             ShowOverlayResultSummary(result, seal, "overlay 성공", effect.note);
@@ -2864,6 +3069,8 @@ namespace MagicExamHall
             LastHintText = "먼저 base 문양으로 seal을 만든 뒤, 그 원 안쪽이나 가장자리 바로 옆에 장식을 붙여 보세요.";
             endingReport.RecordHintShown(1);
             ShowMagicNote($"노트: {result.feedbackReason}\n다음: {LastHintText}", MentorMood.Frown);
+            audioDirector?.PlaySfx(AudioCue.CastDependencyMissing);
+            worldDrawing?.MarkLastBufferedStrokesInvalid();
             ShowToast("base seal 먼저", new Color(0.92f, 0.72f, 0.34f), strong: true);
             ShowOverlayNoSealResultSummary(result, "overlay 부착 실패", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
@@ -2881,6 +3088,8 @@ namespace MagicExamHall
             LastHintText = DetachedOverlayActionHint(seal);
             endingReport.RecordHintShown(1);
             ShowMagicNote(BuildDetachedOverlayFailureNote(result, seal), MentorMood.Frown);
+            audioDirector?.PlaySfx(AudioCue.CastInvalid);
+            worldDrawing?.MarkLastBufferedStrokesInvalid();
             ShowToast("seal 가까이 다시 그리기", new Color(0.92f, 0.72f, 0.34f));
             ShowOverlayResultSummary(result, seal, "overlay 거리 오류", LastHintText);
             pulses.Add(new ParticlePulse(outcome.center, new Color(0.75f, 0.75f, 0.82f), weak: true));
@@ -3475,6 +3684,7 @@ namespace MagicExamHall
             }
             ApplyGoalReaction(goal, spell);
             endingReport.RecordDiscovery(goal.id, effect);
+            audioDirector?.PlaySfx(AudioCue.GoalSatisfied, 0.82f);
             pulses.Add(new ParticlePulse(goal.position, goal.color));
             TickQuestChecklist(forceRefresh: true);
             UpdateHud();
@@ -4045,8 +4255,10 @@ namespace MagicExamHall
                 }
 
                 ShowMagicNote(BuildFloorCompletionNote(), MentorMood.Happy);
+                audioDirector?.PlaySfx(AudioCue.FloorComplete, 0.92f);
                 ShowToast($"{floorController.CurrentFloorNumber}층 완료 - 다음 층 개방", floorController.Current.accentColor, strong: true);
                 pendingAdvanceAt = Time.time + CurrentFloorAdvanceDelaySeconds();
+                PublishProgressCheckpoint(Mathf.Min(floorController.CurrentFloorNumber + 1, FloorCount));
                 return;
             }
 
@@ -4061,8 +4273,10 @@ namespace MagicExamHall
             {
                 finalTrueEnding = true;
                 ShowMagicNote(BuildFloorCompletionNote(), MentorMood.Happy);
+                audioDirector?.PlaySfx(AudioCue.CastFinalEffect, 0.95f);
                 ShowToast("성좌심 완전 복구 - 보고서 준비", floorController.Current.accentColor, strong: true);
                 pendingAdvanceAt = Time.time + FinalFloorCompleteReportDelaySeconds;
+                PublishProgressCheckpoint(floorController.CurrentFloorNumber);
                 return;
             }
 
@@ -4072,8 +4286,10 @@ namespace MagicExamHall
             }
 
             ShowMagicNote(BuildFloorCompletionNote(), MentorMood.Happy);
+            audioDirector?.PlaySfx(AudioCue.CastFinalEffect, 0.80f);
             ShowToast("입학 시험 통과 - 보고서 준비", floorController.Current.accentColor, strong: true);
             pendingAdvanceAt = Time.time + FinalFloorPassReportDelaySeconds;
+            PublishProgressCheckpoint(floorController.CurrentFloorNumber);
         }
 
         private float CurrentFloorAdvanceDelaySeconds()
@@ -4151,7 +4367,7 @@ namespace MagicExamHall
 
         private void TickPlayer()
         {
-            if (HasEndingReport)
+            if (HasEndingReport || !gameplayInputEnabled)
             {
                 return;
             }
@@ -4377,7 +4593,7 @@ namespace MagicExamHall
             MovePlayerTo(safePosition);
             if (!string.IsNullOrWhiteSpace(note))
             {
-                magicNote.Show(note);
+                ShowMagicNote(note, MentorMood.Frown);
             }
         }
 
@@ -4421,7 +4637,7 @@ namespace MagicExamHall
 
                 TakePlayerDamage("장애물 접촉", gate.center);
                 MovePlayerTo(gate.resetPosition);
-                magicNote.Show(gate.lockedNote);
+                ShowMagicNote(gate.lockedNote, MentorMood.Frown);
                 pulses.Add(new ParticlePulse(gate.center, new Color(0.72f, 0.88f, 1f), weak: true));
                 return;
             }
@@ -4605,9 +4821,96 @@ namespace MagicExamHall
                         "균열이 몸을 밀어냈습니다. 가까운 안전 지점에서 다시 시작합니다.\n" +
                         "다음: 아직 완료하지 않은 고정 목표를 닿기 쉬운 안전 지점 앞에서 다시 겨냥하세요.",
                         MentorMood.Frown);
+                    audioDirector?.PlaySfx(AudioCue.HazardReset, 0.95f);
                     ShowToast("균열 접촉 - 안전 지점 복귀", hazard.color, strong: true);
                     pulses.Add(new ParticlePulse(hazard.position, hazard.color, weak: true));
                     return;
+                }
+            }
+        }
+
+        private void TickFirstFloorOnboarding()
+        {
+            if (!gameplayInputEnabled || HasEndingReport || floorController.Current.number != 1 || castsOnCurrentFloor > 0)
+            {
+                return;
+            }
+
+            var elapsed = Time.time - floorEnteredAt;
+            if (!firstFloorGhostShown && elapsed >= 8f)
+            {
+                firstFloorGhostShown = true;
+                PlayerPrefs.SetInt("MagicExamHall.FirstFloorGhostSeen", 1);
+                var goal = activeGoals.FirstOrDefault(item => !item.completed && item.requiredBase.HasValue) ?? activeGoals.FirstOrDefault(item => item.requiredBase.HasValue);
+                if (goal != null && goal.requiredBase.HasValue)
+                {
+                    ShowMagicNote("우클릭을 누른 채 표식 근처 바닥에 선을 그어 보세요. 흐릿한 선을 따라 첫 문양을 완성하면 됩니다.", MentorMood.Neutral);
+                    PlayGhostGesture(goal.requiredBase.Value, goal.position);
+                }
+            }
+
+            if (!firstFloorLongSilenceShown && elapsed >= 300f)
+            {
+                firstFloorLongSilenceShown = true;
+                ShowMagicNote("아직 시전하지 않았다면 목표 표식 바로 옆에서 시작하세요. 물은 닫힌 원, 바람은 평행한 세 줄입니다.", MentorMood.Neutral);
+            }
+        }
+
+        private void PlayGhostGesture(SpellFamily family, Vector2 position)
+        {
+            var strokes = Offset(GestureRecognizer.CreateCanonicalSamples(family, 1.35f, 0.03f), position, 0.8f);
+            foreach (var stroke in strokes)
+            {
+                if (stroke.Count < 2)
+                {
+                    continue;
+                }
+
+                var body = new GameObject($"Ghost Gesture {family}");
+                body.transform.SetParent(transform, true);
+                var line = body.AddComponent<LineRenderer>();
+                line.useWorldSpace = true;
+                line.positionCount = stroke.Count;
+                line.startWidth = 0.055f;
+                line.endWidth = 0.055f;
+                line.material = new Material(Shader.Find("Sprites/Default"));
+                line.startColor = new Color(1f, 1f, 1f, 0f);
+                line.endColor = new Color(1f, 1f, 1f, 0f);
+                line.sortingOrder = 37;
+                for (var index = 0; index < stroke.Count; index++)
+                {
+                    line.SetPosition(index, new Vector3(stroke[index].position.x, stroke[index].position.y, -0.24f));
+                }
+
+                ghostTraces.Add(new GhostTraceView(body, line, FamilyColor(family)));
+            }
+
+            pulses.Add(new ParticlePulse(position, FamilyColor(family), scaleMultiplier: 0.85f, durationSeconds: 0.8f, sortingOrder: 31));
+        }
+
+        private void TickGhostTraces()
+        {
+            for (var index = ghostTraces.Count - 1; index >= 0; index--)
+            {
+                var trace = ghostTraces[index];
+                trace.age += Time.deltaTime;
+                var t = Mathf.Clamp01(trace.age / 0.8f);
+                var reveal = Mathf.Sin(t * Mathf.PI);
+                if (trace.line != null)
+                {
+                    var color = Color.Lerp(Color.white, trace.tint, 0.38f);
+                    color.a = 0.68f * reveal;
+                    trace.line.startColor = color;
+                    trace.line.endColor = color;
+                }
+
+                if (trace.age >= 0.8f)
+                {
+                    if (trace.body != null)
+                    {
+                        Destroy(trace.body);
+                    }
+                    ghostTraces.RemoveAt(index);
                 }
             }
         }
@@ -4655,7 +4958,7 @@ namespace MagicExamHall
 
                 TakePlayerDamage("적대적 entity 접촉", targetPosition);
                 MovePlayerTo(safePosition);
-                magicNote.Show("적대적 대상에 너무 가까이 닿았습니다. 거리를 두고 다시 시도하세요.");
+                ShowMagicNote("적대적 대상에 너무 가까이 닿았습니다. 거리를 두고 다시 시도하세요.", MentorMood.Frown);
                 pulses.Add(new ParticlePulse(targetPosition, goal.color, weak: true, scaleMultiplier: 1.1f, durationSeconds: 0.8f, sortingOrder: 32));
                 return;
             }
@@ -4677,7 +4980,7 @@ namespace MagicExamHall
             pulses.Add(new ParticlePulse(sourcePosition, new Color(1f, 0.18f, 0.14f), weak: true, scaleMultiplier: 0.9f, durationSeconds: 0.7f, sortingOrder: 34));
             if (playerHealthHalfUnits == 0)
             {
-                magicNote.Show($"{reason}: 체력이 모두 사라졌습니다. 안전 지점에서 다시 움직임을 정리하세요.");
+                ShowMagicNote($"{reason}: 체력이 모두 사라졌습니다. 안전 지점에서 다시 움직임을 정리하세요.", MentorMood.Frown);
             }
 
             return true;
@@ -4754,7 +5057,8 @@ namespace MagicExamHall
                 pulse.body.transform.localScale = Vector3.one * Mathf.Lerp(pulse.weak ? 0.35f : 0.45f, pulse.weak ? 1.4f : 2.5f, t) * pulse.scaleMultiplier;
                 var renderer = pulse.body.GetComponent<SpriteRenderer>();
                 renderer.sharedMaterial = PixelMaterialProvider.SpriteMaterial;
-                renderer.color = new Color(1f, 1f, 1f, Mathf.Lerp(0.8f, 0f, t));
+                var pulseColor = MagicExamSettings.ColorAssist ? Color.Lerp(pulse.color, Color.white, 0.42f) : pulse.color;
+                renderer.color = new Color(pulseColor.r, pulseColor.g, pulseColor.b, Mathf.Lerp(0.8f, 0f, t));
                 if (t >= 1f)
                 {
                     Destroy(pulse.body);
@@ -4782,7 +5086,7 @@ namespace MagicExamHall
             var duration = Mathf.Max(1.2f, seal.seal.expiresAt - Time.time);
             defaultBarriers.Add(new CharacterBarrierView(player, seal.seal.sealId, color, duration));
             pulses.Add(new ParticlePulse(player.position, color, weak: true, scaleMultiplier: 1.05f, durationSeconds: 0.8f, sortingOrder: 31));
-            magicNote.Show($"{SpellLabels.Korean(seal.seal.baseFamily)} seal이 기본 보호막으로 안정화되었습니다.");
+            ShowMagicNote($"{SpellLabels.Korean(seal.seal.baseFamily)} seal이 기본 보호막으로 안정화되었습니다.", MentorMood.Neutral);
         }
 
         private void UpdateHud()
@@ -4939,6 +5243,7 @@ namespace MagicExamHall
             resultPanel.gameObject.SetActive(false);
             floorSkipButton.gameObject.SetActive(false);
             questScrollPanel.gameObject.SetActive(false);
+            audioDirector?.PlaySfx(AudioCue.EndingReportOpened, 0.88f);
             mentor?.Say(MentorMood.Neutral, "");
             if (toastPanel != null)
             {
@@ -4960,7 +5265,13 @@ namespace MagicExamHall
                 completedTrials = endingReport.DiscoveryCount,
                 totalAttempts = trialCounter
             });
-            reportText.text = endingReport.BuildText(trialCounter, OutputDirectory, finalTrueEnding, completedFinalGoals, activeGoals.Count);
+            reportText.text = endingReport.BuildText(
+                trialCounter,
+                OutputDirectory,
+                finalTrueEnding,
+                completedFinalGoals,
+                activeGoals.Count,
+                magicNote.DiscoveryExcerpts(3));
         }
 
         private SealView CreateSealView(CompiledSeal seal)
@@ -5198,6 +5509,14 @@ namespace MagicExamHall
             LastCustomShapeEventKindForTests = "";
             LastCustomShapeEventLabelForTests = "";
             LastCustomShapeEventDirectionForTests = Vector2.right;
+            foreach (var ghostTrace in ghostTraces)
+            {
+                if (ghostTrace.body != null)
+                {
+                    Destroy(ghostTrace.body);
+                }
+            }
+            ghostTraces.Clear();
         }
 
         private void ShowDamagePopup(Vector2 position, string text, Color color)
@@ -6565,6 +6884,21 @@ namespace MagicExamHall
             }
         }
 
+        private sealed class GhostTraceView
+        {
+            public readonly GameObject body;
+            public readonly LineRenderer line;
+            public readonly Color tint;
+            public float age;
+
+            public GhostTraceView(GameObject body, LineRenderer line, Color tint)
+            {
+                this.body = body;
+                this.line = line;
+                this.tint = tint;
+            }
+        }
+
         private sealed class SealView
         {
             public readonly GameObject root;
@@ -7035,16 +7369,98 @@ namespace MagicExamHall
         }
     }
 
+    public enum MagicNoteCategory
+    {
+        Dialogue,
+        FloorNote,
+        Discovery
+    }
+
+    public sealed class MagicNoteEntry
+    {
+        public MagicNoteCategory category;
+        public int floorNumber;
+        public string text = "";
+        public float timestamp;
+
+        public string DisplayLine => $"[{CategoryLabel(category)}] {floorNumber}층 - {text.Replace("\n", " / ")}";
+
+        private static string CategoryLabel(MagicNoteCategory category)
+        {
+            return category switch
+            {
+                MagicNoteCategory.Dialogue => "대사",
+                MagicNoteCategory.FloorNote => "층노트",
+                _ => "발견"
+            };
+        }
+    }
+
     public sealed class MagicNote
     {
+        private readonly List<MagicNoteEntry> entries = new();
         private float ttl;
         public string Text { get; private set; } = "";
         public bool Visible => ttl > 0f && !string.IsNullOrWhiteSpace(Text);
+        public IReadOnlyList<MagicNoteEntry> Entries => entries;
+        public IReadOnlyList<string> Lines => entries.Select(entry => entry.DisplayLine).ToList();
 
-        public void Show(string text)
+        public void Show(string text, MagicNoteCategory category, int floorNumber)
         {
             Text = text;
             ttl = 4.4f;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                entries.Add(new MagicNoteEntry
+                {
+                    category = category,
+                    floorNumber = Mathf.Max(1, floorNumber),
+                    text = text,
+                    timestamp = Time.time
+                });
+            }
+        }
+
+        public void Restore(IEnumerable<string> lines, int floorNumber)
+        {
+            Clear();
+            foreach (var line in lines ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                entries.Add(new MagicNoteEntry
+                {
+                    category = MagicNoteCategory.FloorNote,
+                    floorNumber = Mathf.Max(1, floorNumber),
+                    text = line,
+                    timestamp = Time.time
+                });
+            }
+
+            Text = entries.Count == 0 ? "" : entries[^1].text;
+            ttl = entries.Count == 0 ? 0f : 4.4f;
+        }
+
+        public void Clear()
+        {
+            entries.Clear();
+            Text = "";
+            ttl = 0f;
+        }
+
+        public string[] DiscoveryExcerpts(int count)
+        {
+            return entries
+                .Where(entry => entry.category == MagicNoteCategory.Discovery)
+                .Select(entry => entry.text.Replace("\n", " / "))
+                .Distinct()
+                .Reverse()
+                .Take(Mathf.Max(0, count))
+                .Reverse()
+                .ToArray();
         }
 
         public void Tick(float deltaTime)
@@ -7119,13 +7535,16 @@ namespace MagicExamHall
             questChecklistTotal = Math.Max(0, total);
         }
 
-        public string BuildText(int totalAttempts, string outputDirectory, bool trueEnding, int completedFinalGoals, int totalFinalGoals)
+        public string BuildText(int totalAttempts, string outputDirectory, bool trueEnding, int completedFinalGoals, int totalFinalGoals, IReadOnlyList<string> noteExcerpts)
         {
             var favoriteBase = baseUse.Count == 0 ? "없음" : SpellLabels.Korean(baseUse.OrderByDescending(item => item.Value).First().Key);
             var favoriteOverlay = overlayUse.Count == 0 ? "없음" : SpellLabels.Korean(overlayUse.OrderByDescending(item => item.Value).First().Key);
             var averageQuality = qualityScores.Count == 0 ? 0f : qualityScores.Average() * 100f;
             var endingName = trueEnding ? "진엔딩 (6/6 완전 복구)" : $"통과 엔딩 ({completedFinalGoals}/{totalFinalGoals})";
             var header = trueEnding ? "입학 시험 완전 통과 - 성좌심 완전 복구 보고서" : "입학 시험 통과 - 성좌심 복구 보고서";
+            var excerptLine = noteExcerpts == null || noteExcerpts.Count == 0
+                ? "대표 관찰문: 기록 없음"
+                : "대표 관찰문:\n- " + string.Join("\n- ", noteExcerpts);
             return
                 $"{header}\n" +
                 $"도달 상태: {endingName}\n\n" +
@@ -7140,6 +7559,7 @@ namespace MagicExamHall
                 $"퀘스트 체크: {questChecklistCompleted}/{questChecklistTotal}\n" +
                 $"{questChecklistSummary}\n" +
                 $"{BuildProfileSummary()}\n" +
+                $"{excerptLine}\n" +
                 "보정 정책: profile은 성공/실패 판정을 뒤집지 않고 품질 설명과 다음 연습 방향에만 사용됩니다.\n\n" +
                 BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
                 "자기 평가\n" +

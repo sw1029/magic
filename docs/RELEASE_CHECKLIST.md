@@ -21,8 +21,8 @@ PowerShell에서 저장소 루트 기준으로 실행한다.
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallSceneBuilder.BuildAll
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform editmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\EditModeTestResults.xml'
 & 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -runTests -testPlatform playmode -testResults 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\PlayModeTestResults.xml'
-& 'C:\Program Files\Unity\Hub\Editor\6000.3.14f1\Editor\Unity.com' -batchmode -quit -projectPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall' -executeMethod MagicExamHall.Editor.MagicExamHallBuildPipeline.BuildWindowsPlayer -magicExamHallBuildPath 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\Builds\MagicExamHall.exe' -logFile 'C:\Users\silve\source\repos\magic\unity\MagicExamHall\unity-build.log'
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-magic-exam-hall-player.ps1 -BuildPath 'unity/MagicExamHall/Builds/MagicExamHall.exe' -LogPath 'unity/MagicExamHall/player-smoke.log'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -BuildPath 'tmp\MagicExamHallFinalize\MagicExamHall.exe' -LogPath 'unity\MagicExamHall\unity-build-finalize.log'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-magic-exam-hall-player.ps1 -BuildPath 'tmp\MagicExamHallFinalize\MagicExamHall.exe' -LogPath 'tmp\MagicExamHallFinalize\player-smoke.log'
 ```
 
 - [ ] EditMode 결과가 `Passed`, failed `0`이다.
@@ -36,6 +36,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-magic-exam-h
 
 Unity Editor Play 또는 생성된 `unity/MagicExamHall/Builds/MagicExamHall.exe`로 확인한다.
 
+- [ ] 타이틀 → 메인 메뉴 → 저장 슬롯 선택 → 새 게임 흐름이 끊기지 않는다.
+- [ ] 이어하기가 선택 슬롯의 저장 상태를 복원한다.
+- [ ] 옵션에서 BGM/SFX, 마우스 감도, 좌/우클릭 스왑, 이동 키, 텍스트 크기, 색 보조, 관찰 모드가 동작한다.
+- [ ] Tab으로 codex를 열고 대사/층노트/발견 탭과 수동 저장을 확인할 수 있다.
 - [ ] WASD 또는 방향키로 이동할 수 있다.
 - [ ] 우클릭 hold로 바닥에 stroke가 보이고, release 후 주문이 판정된다.
 - [ ] 1층에서 base family 실험과 목표 완료가 가능하다.

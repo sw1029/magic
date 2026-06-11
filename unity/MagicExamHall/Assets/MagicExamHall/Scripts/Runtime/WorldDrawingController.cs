@@ -112,6 +112,18 @@ namespace MagicExamHall
             return hadInput || canceledActive;
         }
 
+        public void MarkLastBufferedStrokesRecognized(Color color)
+        {
+            EnsureComponents();
+            strokeVisuals.MarkLastCompletedSessionRecognized(color);
+        }
+
+        public void MarkLastBufferedStrokesInvalid()
+        {
+            EnsureComponents();
+            strokeVisuals.MarkLastCompletedSessionInvalid();
+        }
+
         public void BufferStrokeForTests(List<StrokeSample> stroke)
         {
             if (stroke == null || stroke.Count < 2)
@@ -230,7 +242,7 @@ namespace MagicExamHall
             }
 
             drawingAudio.pitch = UnityEngine.Random.Range(0.94f, 1.06f);
-            drawingAudio.PlayOneShot(clips[UnityEngine.Random.Range(0, clips.Length)], volume);
+            drawingAudio.PlayOneShot(clips[UnityEngine.Random.Range(0, clips.Length)], volume * MagicExamSettings.SfxVolume);
             drawingAudio.pitch = 1f;
         }
 

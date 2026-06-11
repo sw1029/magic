@@ -202,6 +202,8 @@ namespace MagicExamHall.Editor
             drawing.ApplyPlayableDefaults();
             PixelRenderSetup.EnsureGlobalLight(controllerObject.transform);
             PixelRenderSetup.EnsurePlayerCastingLight(player);
+            controllerObject.AddComponent<GameBootController>();
+            controllerObject.AddComponent<AudioDirector>();
         }
 
         private static void SavePrefabs(GameObject player)

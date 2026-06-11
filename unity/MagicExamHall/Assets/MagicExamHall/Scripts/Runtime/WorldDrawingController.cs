@@ -19,6 +19,10 @@ namespace MagicExamHall
         private StrokeSessionBuffer sessionBuffer = null!;
         private WorldPointerInputSource inputSource = null!;
         private WorldStrokeVisuals strokeVisuals = null!;
+        private AudioSource drawingAudio = null!;
+        private AudioClip[] penTickClips = Array.Empty<AudioClip>();
+        private AudioClip[] penCompleteClips = Array.Empty<AudioClip>();
+        private float lastPenTickAt = -10f;
         private bool wired;
 
         public event Action<StrokeInputSession> StrokeSessionCompleted = delegate { };
@@ -44,6 +48,7 @@ namespace MagicExamHall
             mainCamera ??= Camera.main;
             EnsureComponents();
             SyncOptions();
+            ConfigureDrawingAudio();
         }
 
         private void OnDestroy()
@@ -54,8 +59,11 @@ namespace MagicExamHall
             }
 
             inputSource.StrokeStarted -= strokeVisuals.HandleStrokeStarted;
+            inputSource.StrokeStarted -= OnStrokeAudioStarted;
             inputSource.StrokeUpdated -= strokeVisuals.HandleStrokeUpdated;
+            inputSource.StrokeUpdated -= OnStrokeAudioUpdated;
             inputSource.StrokeCompleted -= strokeVisuals.HandleStrokeCompleted;
+            inputSource.StrokeCompleted -= OnStrokeAudioCompleted;
             inputSource.StrokeCompleted -= OnStrokeCompleted;
             inputSource.StrokeCanceled -= strokeVisuals.HandleStrokeCanceled;
             sessionBuffer.SessionCompleted -= OnSessionCompleted;
@@ -138,8 +146,11 @@ namespace MagicExamHall
             }
 
             inputSource.StrokeStarted += strokeVisuals.HandleStrokeStarted;
+            inputSource.StrokeStarted += OnStrokeAudioStarted;
             inputSource.StrokeUpdated += strokeVisuals.HandleStrokeUpdated;
+            inputSource.StrokeUpdated += OnStrokeAudioUpdated;
             inputSource.StrokeCompleted += strokeVisuals.HandleStrokeCompleted;
+            inputSource.StrokeCompleted += OnStrokeAudioCompleted;
             inputSource.StrokeCompleted += OnStrokeCompleted;
             inputSource.StrokeCanceled += strokeVisuals.HandleStrokeCanceled;
             sessionBuffer.SessionCompleted += OnSessionCompleted;
@@ -169,6 +180,58 @@ namespace MagicExamHall
         private void OnStrokeCompleted(StrokeInputStroke stroke)
         {
             sessionBuffer.PushCompletedStroke(stroke, Time.time);
+        }
+
+        private void OnStrokeAudioStarted(StrokeInputStroke stroke)
+        {
+            PlayRandomDrawingClip(penTickClips, 0.26f);
+            lastPenTickAt = Time.time;
+        }
+
+        private void OnStrokeAudioUpdated(StrokeInputStroke stroke)
+        {
+            if (Time.time - lastPenTickAt < 0.18f)
+            {
+                return;
+            }
+
+            PlayRandomDrawingClip(penTickClips, 0.16f);
+            lastPenTickAt = Time.time;
+        }
+
+        private void OnStrokeAudioCompleted(StrokeInputStroke stroke)
+        {
+            PlayRandomDrawingClip(penCompleteClips, 0.22f);
+        }
+
+        private void ConfigureDrawingAudio()
+        {
+            drawingAudio = GetComponent<AudioSource>();
+            if (drawingAudio == null)
+            {
+                drawingAudio = gameObject.AddComponent<AudioSource>();
+            }
+
+            drawingAudio.playOnAwake = false;
+            drawingAudio.spatialBlend = 0f;
+            drawingAudio.volume = 1f;
+            drawingAudio.ignoreListenerPause = true;
+            penTickClips = Resources.LoadAll<AudioClip>("Sfx/PenAndPaper01")
+                .Where(clip => clip.name.IndexOf("SFX_Penv", StringComparison.OrdinalIgnoreCase) >= 0)
+                .ToArray();
+            penCompleteClips = Resources.LoadAll<AudioClip>("Sfx/HydrographicPen01");
+        }
+
+        private void PlayRandomDrawingClip(AudioClip[] clips, float volume)
+        {
+            if (drawingAudio == null || clips == null || clips.Length == 0)
+            {
+                return;
+            }
+
+            drawingAudio.pitch = UnityEngine.Random.Range(0.94f, 1.06f);
+            drawingAudio.PlayOneShot(clips[UnityEngine.Random.Range(0, clips.Length)], volume);
+            drawingAudio.pitch = 1f;
         }
 
         private void OnSessionCompleted(StrokeInputSession session)

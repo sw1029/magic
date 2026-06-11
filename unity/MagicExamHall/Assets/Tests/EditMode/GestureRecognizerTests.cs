@@ -83,6 +83,44 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void PixelArtFactoryCreatesProceduralMentorSprites()
+        {
+            PixelArtFactory.ResetExternalSpriteCache();
+
+            foreach (var kind in System.Enum.GetValues(typeof(PixelSpriteKind)).Cast<PixelSpriteKind>().Where(kind => kind.ToString().StartsWith("Mentor")))
+            {
+                var sprite = PixelArtFactory.CreateSprite($"procedural-sentinel-{kind}", Color.magenta, Color.green, kind);
+
+                Assert.That(sprite, Is.Not.Null, kind.ToString());
+                Assert.That(sprite.texture.width, Is.EqualTo(32), kind.ToString());
+                Assert.That(sprite.texture.height, Is.EqualTo(32), kind.ToString());
+                Assert.That(sprite.texture.name, Does.StartWith($"procedural-sentinel-{kind}"), kind.ToString());
+            }
+        }
+
+        [Test]
+        public void PixelSpriteViewAppliesRuntimeTint()
+        {
+            var body = new GameObject("Tinted Pulse Test");
+            try
+            {
+                body.AddComponent<SpriteRenderer>();
+                var view = body.AddComponent<PixelSpriteView>();
+                var tint = new Color(0.25f, 0.75f, 1f, 0.6f);
+                view.kind = PixelSpriteKind.Pulse;
+                view.rendererTint = tint;
+
+                view.Apply();
+
+                Assert.That(body.GetComponent<SpriteRenderer>().color, Is.EqualTo(tint));
+            }
+            finally
+            {
+                Object.DestroyImmediate(body);
+            }
+        }
+
+        [Test]
         public void OpenTriangleIsIncompleteInsteadOfFalsePositive()
         {
             var stroke = new List<StrokeSample>

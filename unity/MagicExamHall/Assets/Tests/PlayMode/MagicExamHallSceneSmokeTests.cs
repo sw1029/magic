@@ -38,6 +38,9 @@ namespace MagicExamHall.Tests
             Assert.That(drawing, Is.Not.Null);
             Assert.That(drawing.bufferSeconds, Is.EqualTo(WorldDrawingController.DefaultBufferSeconds).Within(0.001f));
             Assert.That(drawing.minPointDistance, Is.EqualTo(WorldDrawingController.DefaultMinPointDistance).Within(0.001f));
+            Assert.That(Object.FindFirstObjectByType<MentorPresentationController>(), Is.Not.Null);
+            Assert.That(controller.IsMentorVisibleForTests, Is.True);
+            Assert.That(controller.MentorSpeechTextForTests, Is.EqualTo(controller.LastMagicNoteText));
             Assert.That(controller.OutputDirectory, Does.Contain("MagicExamHallLogs"));
             Assert.That(controller.IsResultPanelVisible, Is.False);
             Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(0));

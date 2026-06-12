@@ -232,11 +232,15 @@ namespace MagicExamHall
         private Canvas canvas = null!;
         private Font uiFont = null!;
         private RectTransform overlayRoot = null!;
+        private Image overlayRootImage = null!;
         private RectTransform titlePanel = null!;
         private RectTransform menuPanel = null!;
         private RectTransform optionsPanel = null!;
         private RectTransform pausePanel = null!;
         private RectTransform codexPanel = null!;
+        private CanvasGroup codexPanelGroup = null!;
+        private RectTransform codexTextContent = null!;
+        private ScrollRect codexScrollRect = null!;
         private RectTransform endingPromptPanel = null!;
         private Image fadeCurtain = null!;
         private Image codexQuickImage = null!;
@@ -270,6 +274,13 @@ namespace MagicExamHall
         public bool HasSaveForTests => File.Exists(SavePath);
         public string CodexTextForTests => codexText == null ? "" : codexText.text;
         public bool CodexQuickButtonVisibleForTests => codexQuickButton != null && codexQuickButton.gameObject.activeSelf;
+        public Vector2 CodexQuickButtonPositionForTests => codexQuickButton == null ? Vector2.zero : ((RectTransform)codexQuickButton.transform).anchoredPosition;
+        public Vector2 CodexQuickButtonSizeForTests => codexQuickButton == null ? Vector2.zero : ((RectTransform)codexQuickButton.transform).sizeDelta;
+        public bool CodexPanelVisibleForTests => codexPanelGroup != null && codexPanelGroup.alpha > 0.5f && codexPanelGroup.blocksRaycasts;
+        public string CodexPanelParentForTests => codexPanel != null && codexPanel.parent != null ? codexPanel.parent.name : "";
+        public Vector2 CodexPanelPositionForTests => codexPanel == null ? Vector2.zero : codexPanel.anchoredPosition;
+        public bool CodexBackdropBlocksRaycastsForTests => overlayRootImage != null && overlayRootImage.raycastTarget;
+        public bool CodexPanelDrawsAboveBackdropForTests => codexPanel != null && overlayRoot != null && codexPanel.GetSiblingIndex() > overlayRoot.GetSiblingIndex();
 
         public void Initialize(ExamGameController gameController, Canvas targetCanvas, Font font)
         {
@@ -305,6 +316,7 @@ namespace MagicExamHall
             }
 
             TickCodexQuickButton();
+            TickCodexPointerFallback();
 
             if (StateForTests == GameBootState.Title && Input.anyKeyDown)
             {
@@ -409,6 +421,7 @@ namespace MagicExamHall
         private void BuildUi()
         {
             overlayRoot = CreatePanel("Boot Overlay", canvas.transform, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0.012f, 0.015f, 0.023f, 0.94f));
+            overlayRootImage = overlayRoot.GetComponent<Image>();
             overlayRoot.gameObject.SetActive(true);
 
             titlePanel = CreatePanel("Title Screen", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
@@ -458,14 +471,29 @@ namespace MagicExamHall
             CreateButton("Pause Options", pausePanel, "옵션", new Vector2(-310f, -20f), () => ShowOptions(GameBootState.Paused));
             CreateButton("Back To Title", pausePanel, "타이틀로", new Vector2(-310f, -78f), ShowTitleWithFade);
 
-            codexPanel = CreatePanel("Codex Panel", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
-            CreateText("Codex Title", codexPanel, "마법 노트", 32, FontStyle.Bold, new Vector2(-300f, 220f), new Vector2(420, 44), Anchor.Center, TextAnchor.MiddleLeft, new Color(1f, 0.86f, 0.48f));
-            CreateButton("Codex Dialogue Tab", codexPanel, "대사", new Vector2(-300f, 164f), () => SetCodexTab(MagicNoteCategory.Dialogue));
-            CreateButton("Codex Floor Tab", codexPanel, "층노트", new Vector2(-52f, 164f), () => SetCodexTab(MagicNoteCategory.FloorNote));
-            CreateButton("Codex Discovery Tab", codexPanel, "발견", new Vector2(196f, 164f), () => SetCodexTab(MagicNoteCategory.Discovery));
-            codexText = CreateText("Codex Text", codexPanel, "", 15, FontStyle.Normal, new Vector2(0f, 12f), new Vector2(820, 380), Anchor.Center, TextAnchor.UpperLeft, new Color(0.93f, 0.96f, 1f));
-            CreateButton("Codex Manual Save", codexPanel, "수동 저장", new Vector2(82f, -230f), ManualSaveFromCodex);
-            codexCloseButton = CreateButton("Codex Close", codexPanel, "닫기", new Vector2(330f, -230f), ResumeGameplay);
+            codexPanel = CreatePanel("Codex Panel", canvas.transform, new Vector2(24f, -24f), new Vector2(520, 360), Anchor.TopLeft, new Color(0.82f, 0.64f, 0.40f, 0.98f));
+            codexPanelGroup = codexPanel.gameObject.AddComponent<CanvasGroup>();
+            CreateImage("Codex Header", codexPanel, Vector2.zero, new Vector2(520, 52), Anchor.TopLeft, new Color(0.58f, 0.32f, 0.12f, 0.98f));
+            CreateImage("Codex Header Accent", codexPanel, Vector2.zero, new Vector2(8, 52), Anchor.TopLeft, new Color(1f, 0.82f, 0.38f, 0.92f));
+            CreateText("Codex Title", codexPanel, "마법 노트", 24, FontStyle.Bold, new Vector2(18f, -10f), new Vector2(230, 32), Anchor.TopLeft, TextAnchor.MiddleLeft, new Color(1f, 0.86f, 0.48f));
+            codexCloseButton = CreateButton("Codex Close", codexPanel, "닫기", new Vector2(-18f, -10f), new Vector2(86, 32), Anchor.TopRight, 15, ResumeGameplay);
+            CreateButton("Codex Dialogue Tab", codexPanel, "대사", new Vector2(18f, -66f), new Vector2(148, 34), Anchor.TopLeft, 14, () => SetCodexTab(MagicNoteCategory.Dialogue));
+            CreateButton("Codex Floor Tab", codexPanel, "층노트", new Vector2(184f, -66f), new Vector2(148, 34), Anchor.TopLeft, 14, () => SetCodexTab(MagicNoteCategory.FloorNote));
+            CreateButton("Codex Discovery Tab", codexPanel, "발견", new Vector2(350f, -66f), new Vector2(148, 34), Anchor.TopLeft, 14, () => SetCodexTab(MagicNoteCategory.Discovery));
+            var codexViewport = CreatePanel("Codex Viewport", codexPanel, new Vector2(18f, -114f), new Vector2(484, 166), Anchor.TopLeft, new Color(0.94f, 0.80f, 0.54f, 0.96f));
+            codexViewport.gameObject.AddComponent<RectMask2D>();
+            codexTextContent = CreatePanel("Codex Text Content", codexViewport, Vector2.zero, new Vector2(484, 166), Anchor.TopLeft, new Color(0f, 0f, 0f, 0f));
+            codexTextContent.GetComponent<Image>().raycastTarget = false;
+            codexText = CreateText("Codex Text", codexTextContent, "", 14, FontStyle.Normal, new Vector2(12f, -10f), new Vector2(456, 146), Anchor.TopLeft, TextAnchor.UpperLeft, new Color(0.12f, 0.08f, 0.04f));
+            codexText.verticalOverflow = VerticalWrapMode.Overflow;
+            codexScrollRect = codexViewport.gameObject.AddComponent<ScrollRect>();
+            codexScrollRect.viewport = codexViewport;
+            codexScrollRect.content = codexTextContent;
+            codexScrollRect.horizontal = false;
+            codexScrollRect.vertical = true;
+            codexScrollRect.movementType = ScrollRect.MovementType.Clamped;
+            codexScrollRect.scrollSensitivity = 28f;
+            CreateButton("Codex Manual Save", codexPanel, "수동 저장", new Vector2(18f, -306f), new Vector2(224, 38), Anchor.TopLeft, 15, ManualSaveFromCodex);
 
             endingPromptPanel = CreatePanel("Ending Prompt", overlayRoot, new Vector2(0f, -292f), new Vector2(640, 64), Anchor.Center, new Color(0.025f, 0.032f, 0.047f, 0.94f));
             CreateText("Ending Prompt Text", endingPromptPanel, "Enter 또는 클릭으로 타이틀 복귀", 17, FontStyle.Bold, Vector2.zero, new Vector2(600, 38), Anchor.Center, TextAnchor.MiddleCenter, new Color(1f, 0.86f, 0.48f));
@@ -484,6 +512,7 @@ namespace MagicExamHall
             controller.PrepareForTitleScreen();
             StateForTests = GameBootState.Title;
             overlayRoot.gameObject.SetActive(true);
+            SetOverlayBackdrop(true);
             HideAllPanels();
             titlePanel.gameObject.SetActive(true);
             SetQuickCodexVisible(false);
@@ -495,6 +524,7 @@ namespace MagicExamHall
             controller.SetGameplayInputEnabled(false);
             StateForTests = GameBootState.MainMenu;
             overlayRoot.gameObject.SetActive(true);
+            SetOverlayBackdrop(true);
             HideAllPanels();
             RefreshSaveSummary();
             menuPanel.gameObject.SetActive(true);
@@ -556,6 +586,7 @@ namespace MagicExamHall
             controller.SetGameplayInputEnabled(false);
             StateForTests = GameBootState.Paused;
             overlayRoot.gameObject.SetActive(true);
+            SetOverlayBackdrop(true);
             HideAllPanels();
             pausePanel.gameObject.SetActive(true);
             SetQuickCodexVisible(false);
@@ -566,6 +597,7 @@ namespace MagicExamHall
         {
             Time.timeScale = 1f;
             StateForTests = GameBootState.Gameplay;
+            SetCodexPanelVisible(false);
             overlayRoot.gameObject.SetActive(false);
             controller.SetGameplayInputEnabled(true);
             SetQuickCodexVisible(true);
@@ -576,6 +608,7 @@ namespace MagicExamHall
             optionsReturnState = returnState;
             StateForTests = GameBootState.Options;
             overlayRoot.gameObject.SetActive(true);
+            SetOverlayBackdrop(true);
             HideAllPanels();
             bgmSlider.value = MagicExamSettings.BgmVolume;
             sfxSlider.value = MagicExamSettings.SfxVolume;
@@ -602,11 +635,15 @@ namespace MagicExamHall
         {
             Time.timeScale = 0f;
             controller.SetGameplayInputEnabled(false);
+            controller.HideBlockingLetterOverlayForCodex();
             StateForTests = GameBootState.Codex;
             overlayRoot.gameObject.SetActive(true);
+            overlayRoot.SetAsLastSibling();
+            SetOverlayBackdrop(false);
             HideAllPanels();
-            codexText.text = BuildCodexText(codexTab);
-            codexPanel.gameObject.SetActive(true);
+            SetCodexPanelVisible(true);
+            codexPanel.SetAsLastSibling();
+            SetCodexText(BuildCodexText(codexTab));
             SetQuickCodexVisible(false);
             SelectButton(codexCloseButton);
         }
@@ -616,7 +653,7 @@ namespace MagicExamHall
             codexTab = category;
             if (StateForTests == GameBootState.Codex && codexText != null)
             {
-                codexText.text = BuildCodexText(codexTab);
+                SetCodexText(BuildCodexText(codexTab));
             }
         }
 
@@ -626,6 +663,7 @@ namespace MagicExamHall
             controller.SetGameplayInputEnabled(false);
             StateForTests = GameBootState.Ending;
             overlayRoot.gameObject.SetActive(true);
+            SetOverlayBackdrop(true);
             HideAllPanels();
             endingPromptPanel.gameObject.SetActive(true);
             SetQuickCodexVisible(false);
@@ -840,12 +878,12 @@ namespace MagicExamHall
         {
             if (controller.IsPracticeMode)
             {
-                codexText.text = BuildCodexText(codexTab) + "\n\n연습장의 진행은 저장하지 않습니다.";
+                SetCodexText(BuildCodexText(codexTab) + "\n\n연습장의 진행은 저장하지 않습니다.");
                 return;
             }
 
             SaveProgress(controller.CreateProgressSnapshot(), activeSaveSlotIndex);
-            codexText.text = BuildCodexText(codexTab) + $"\n\n슬롯 {activeSaveSlotIndex + 1}에 저장했습니다.";
+            SetCodexText(BuildCodexText(codexTab) + $"\n\n슬롯 {activeSaveSlotIndex + 1}에 저장했습니다.");
         }
 
         private string SavePathForSlot(int slotIndex)
@@ -942,6 +980,26 @@ namespace MagicExamHall
             }
         }
 
+        private void TickCodexPointerFallback()
+        {
+            if (StateForTests != GameBootState.Codex || codexCloseButton == null || !Input.GetMouseButtonDown(0))
+            {
+                return;
+            }
+
+            var closeRect = codexCloseButton.transform as RectTransform;
+            if (closeRect == null)
+            {
+                return;
+            }
+
+            var eventCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            if (RectTransformUtility.RectangleContainsScreenPoint(closeRect, Input.mousePosition, eventCamera))
+            {
+                ResumeGameplay();
+            }
+        }
+
         private void SetQuickCodexVisible(bool visible)
         {
             if (codexQuickButton != null)
@@ -958,14 +1016,67 @@ namespace MagicExamHall
             }
         }
 
+        private void SetOverlayBackdrop(bool dimmed)
+        {
+            if (overlayRootImage == null)
+            {
+                return;
+            }
+
+            overlayRootImage.color = dimmed
+                ? new Color(0.012f, 0.015f, 0.023f, 0.94f)
+                : new Color(0.012f, 0.015f, 0.023f, 0.18f);
+            overlayRootImage.raycastTarget = dimmed;
+        }
+
+        private void SetCodexText(string text)
+        {
+            if (codexText == null)
+            {
+                return;
+            }
+
+            codexText.text = text;
+            UpdateCodexTextLayout();
+        }
+
+        private void UpdateCodexTextLayout()
+        {
+            if (codexText == null || codexTextContent == null || codexScrollRect == null)
+            {
+                return;
+            }
+
+            Canvas.ForceUpdateCanvases();
+            var viewportHeight = codexScrollRect.viewport == null ? 166f : codexScrollRect.viewport.rect.height;
+            var contentHeight = Mathf.Max(viewportHeight, Mathf.Ceil(codexText.preferredHeight) + 24f);
+            codexTextContent.sizeDelta = new Vector2(484f, contentHeight);
+            codexText.rectTransform.sizeDelta = new Vector2(456f, Mathf.Max(146f, contentHeight - 20f));
+            Canvas.ForceUpdateCanvases();
+            codexScrollRect.verticalNormalizedPosition = 1f;
+        }
+
         private void HideAllPanels()
         {
             titlePanel.gameObject.SetActive(false);
             menuPanel.gameObject.SetActive(false);
             optionsPanel.gameObject.SetActive(false);
             pausePanel.gameObject.SetActive(false);
-            codexPanel.gameObject.SetActive(false);
+            SetCodexPanelVisible(false);
             endingPromptPanel.gameObject.SetActive(false);
+        }
+
+        private void SetCodexPanelVisible(bool visible)
+        {
+            if (codexPanel == null || codexPanelGroup == null)
+            {
+                return;
+            }
+
+            codexPanel.gameObject.SetActive(true);
+            codexPanelGroup.alpha = visible ? 1f : 0f;
+            codexPanelGroup.interactable = visible;
+            codexPanelGroup.blocksRaycasts = visible;
         }
 
         private void UpdateVolumeSummary()
@@ -1035,7 +1146,12 @@ namespace MagicExamHall
 
         private Button CreateButton(string name, Transform parent, string label, Vector2 anchoredPosition, UnityEngine.Events.UnityAction action)
         {
-            var body = CreatePanel(name, parent, anchoredPosition, new Vector2(236, 44), Anchor.Center, new Color(0.045f, 0.058f, 0.085f, 0.96f));
+            return CreateButton(name, parent, label, anchoredPosition, new Vector2(236, 44), Anchor.Center, 18, action);
+        }
+
+        private Button CreateButton(string name, Transform parent, string label, Vector2 anchoredPosition, Vector2 size, Anchor anchor, int labelSize, UnityEngine.Events.UnityAction action)
+        {
+            var body = CreatePanel(name, parent, anchoredPosition, size, anchor, new Color(0.045f, 0.058f, 0.085f, 0.96f));
             var image = body.GetComponent<Image>();
             var button = body.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
@@ -1046,8 +1162,8 @@ namespace MagicExamHall
             colors.pressedColor = new Color(0.020f, 0.030f, 0.045f, 1f);
             colors.disabledColor = new Color(0.025f, 0.028f, 0.034f, 0.72f);
             button.colors = colors;
-            CreateImage($"{name} Accent", body, Vector2.zero, new Vector2(5, 44), Anchor.TopLeft, new Color(1f, 0.82f, 0.38f, 0.84f));
-            CreateText($"{name} Text", body, label, 18, FontStyle.Bold, Vector2.zero, new Vector2(210, 32), Anchor.Center, TextAnchor.MiddleCenter, Color.white);
+            CreateImage($"{name} Accent", body, Vector2.zero, new Vector2(5, size.y), Anchor.TopLeft, new Color(1f, 0.82f, 0.38f, 0.84f));
+            CreateText($"{name} Text", body, label, labelSize, FontStyle.Bold, Vector2.zero, new Vector2(Mathf.Max(20f, size.x - 26f), Mathf.Max(20f, size.y - 10f)), Anchor.Center, TextAnchor.MiddleCenter, Color.white);
             return button;
         }
 
@@ -1076,7 +1192,7 @@ namespace MagicExamHall
 
         private Button CreateQuickCodexButton(Transform parent)
         {
-            var body = CreatePanel("Codex Quick Button", parent, new Vector2(-74f, -30f), new Vector2(118, 42), Anchor.TopRight, new Color(0.045f, 0.058f, 0.085f, 0.96f));
+            var body = CreatePanel("Codex Quick Button", parent, new Vector2(-478f, -30f), new Vector2(104, 42), Anchor.TopRight, new Color(0.045f, 0.058f, 0.085f, 0.96f));
             codexQuickImage = body.GetComponent<Image>();
             var button = body.gameObject.AddComponent<Button>();
             button.targetGraphic = codexQuickImage;
@@ -1087,7 +1203,7 @@ namespace MagicExamHall
             colors.pressedColor = new Color(0.020f, 0.030f, 0.045f, 1f);
             button.colors = colors;
             CreateImage("Codex Quick Accent", body, Vector2.zero, new Vector2(5, 42), Anchor.TopLeft, new Color(1f, 0.82f, 0.38f, 0.84f));
-            CreateText("Codex Quick Text", body, "노트", 17, FontStyle.Bold, Vector2.zero, new Vector2(96, 30), Anchor.Center, TextAnchor.MiddleCenter, Color.white);
+            CreateText("Codex Quick Text", body, "노트", 17, FontStyle.Bold, Vector2.zero, new Vector2(82, 30), Anchor.Center, TextAnchor.MiddleCenter, Color.white);
             return button;
         }
 

@@ -306,6 +306,7 @@ namespace MagicExamHall
         public bool IsPlatformMotionActiveForTests => platformMotionActive;
         public Vector2 CurrentStageSafePositionForTests => safePosition;
         public Vector2 CustomReferenceShelfPositionForTests => CurrentCustomReferencePosition();
+        public Vector2 CustomReferenceInteractionPositionForTests => CurrentCustomReferenceInteractionPosition();
         public bool IsQuestScrollVisibleForTests => questScrollPanel != null && questScrollPanel.gameObject.activeInHierarchy;
         public bool IsQuestScrollCollapsedForTests => questScrollCollapsed;
         public bool IsQuestScrollBodyActiveForTests => questScrollBodyRoot != null && questScrollBodyRoot.gameObject.activeSelf;
@@ -1220,16 +1221,21 @@ namespace MagicExamHall
             questScrollBodyRoot.pivot = new Vector2(0f, 1f);
             questScrollBodyGroup = questScrollBodyRoot.gameObject.AddComponent<CanvasGroup>();
 
-            CreateImage("Quest Log Divider", questScrollBodyRoot, new Vector2(QuestScrollContentInset, -208f), new Vector2(QuestScrollContentWidth, 2.5f), Anchor.TopLeft, new Color(0.33f, 0.16f, 0.055f, 0.62f)).raycastTarget = false;
-            questStatusText = CreateText("Quest Status Text", questScrollBodyRoot, "", 13, FontStyle.Bold, new Vector2(QuestScrollContentInset, -218f), new Vector2(QuestScrollContentWidth, 58f), Anchor.TopLeft);
+            CreateImage("Quest Log Divider", questScrollBodyRoot, new Vector2(QuestScrollContentInset, -190f), new Vector2(QuestScrollContentWidth, 2.5f), Anchor.TopLeft, new Color(0.33f, 0.16f, 0.055f, 0.62f)).raycastTarget = false;
+            questStatusText = CreateText("Quest Status Text", questScrollBodyRoot, "", 13, FontStyle.Bold, new Vector2(QuestScrollContentInset, -200f), new Vector2(QuestScrollContentWidth, 54f), Anchor.TopLeft);
             ApplyQuestScrollReadableText(questStatusText, new Color(0.13f, 0.055f, 0.020f, 1f), emphasized: false);
             questStatusText.alignment = TextAnchor.UpperLeft;
             questStatusText.verticalOverflow = VerticalWrapMode.Truncate;
             questStatusText.raycastTarget = false;
 
-            questProgressText = CreateText("Quest Progress Text", questScrollBodyRoot, "", 13, FontStyle.Bold, new Vector2(QuestScrollContentInset, -282f), new Vector2(QuestScrollContentWidth, 28f), Anchor.TopLeft);
+            questProgressText = CreateText("Quest Progress Text", questScrollBodyRoot, "", 12, FontStyle.Bold, new Vector2(QuestScrollContentInset, 17f), new Vector2(QuestScrollContentWidth, 24f), Anchor.BottomLeft);
             ApplyQuestScrollReadableText(questProgressText, new Color(0.16f, 0.070f, 0.025f, 1f), emphasized: false);
             questProgressText.alignment = TextAnchor.MiddleLeft;
+            questProgressText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            questProgressText.verticalOverflow = VerticalWrapMode.Truncate;
+            questProgressText.resizeTextForBestFit = true;
+            questProgressText.resizeTextMinSize = 10;
+            questProgressText.resizeTextMaxSize = 12;
             questProgressText.raycastTarget = false;
 
             ApplyQuestScrollAnimationState();
@@ -1386,6 +1392,11 @@ namespace MagicExamHall
         }
 
         private void CloseFirstFloorLetter()
+        {
+            HideFirstFloorLetter();
+        }
+
+        public void HideBlockingLetterOverlayForCodex()
         {
             HideFirstFloorLetter();
         }
@@ -1974,8 +1985,9 @@ namespace MagicExamHall
             }
 
             var shelfPosition = CurrentCustomReferencePosition();
+            var interactionPosition = CurrentCustomReferenceInteractionPosition();
             var hasReferences = CurrentCustomShapeReferences().Count > 0;
-            var closeToShelf = hasReferences && Vector2.Distance(player.position, shelfPosition) <= CustomReferenceShelfRadius;
+            var closeToShelf = hasReferences && Vector2.Distance(player.position, interactionPosition) <= CustomReferenceShelfRadius;
             var shouldShowBubble = closeToShelf &&
                                    !IsPlayerNearActiveGoalSymbol(CustomReferenceGoalSuppressRadius) &&
                                    !IsCustomReferencePanelOpenForTests &&
@@ -1987,6 +1999,13 @@ namespace MagicExamHall
                 return;
             }
 
+            mentor?.HideSpeech();
+            if (notePanel != null)
+            {
+                notePanel.gameObject.SetActive(false);
+            }
+
+            customReferenceBubble.SetAsLastSibling();
             customReferenceBubble.anchoredPosition = WorldToCanvasPosition(shelfPosition + CustomReferenceBubbleShelfOffset);
         }
 
@@ -2097,6 +2116,16 @@ namespace MagicExamHall
             return activeStageDefinition == null ? WestBookcasePosition : activeStageDefinition.customReferencePosition;
         }
 
+        private Vector2 CurrentCustomReferenceInteractionPosition()
+        {
+            if (activeStageDefinition == null)
+            {
+                return WestBookcasePosition;
+            }
+
+            return new Vector2(activeStageDefinition.customReferencePosition.x, activeStageDefinition.playerStart.y + 0.08f);
+        }
+
         private IReadOnlyList<CustomShapeReferenceDefinition> CurrentCustomShapeReferences()
         {
             return floorController?.Current.number switch
@@ -2124,6 +2153,12 @@ namespace MagicExamHall
             RebuildCustomReferenceCards();
             customReferencePanel.gameObject.SetActive(true);
             customReferencePanel.SetAsLastSibling();
+            mentor?.HideSpeech();
+            if (notePanel != null)
+            {
+                notePanel.gameObject.SetActive(false);
+            }
+
             questReferencePanelOpenedThisFloor = true;
             TickQuestChecklist(forceRefresh: true);
             if (customReferenceBubble != null)
@@ -5396,7 +5431,7 @@ namespace MagicExamHall
                 var goal = CurrentFirstFloorTutorialGoal() ?? activeGoals.FirstOrDefault(item => item.requiredBase.HasValue);
                 if (goal != null && goal.requiredBase.HasValue)
                 {
-                    ShowMagicNote("우클릭을 누른 채 표식 근처 바닥에 선을 그어 보세요. 흐릿한 선을 따라 첫 문양을 완성하면 됩니다.", MentorMood.Neutral);
+                    ShowMagicNote("우클릭 누르고\n흐릿한 선만 따라 그려 봐.", MentorMood.Neutral);
                     PlayGhostGesture(goal.requiredBase.Value, goal.position);
                 }
             }
@@ -5404,7 +5439,7 @@ namespace MagicExamHall
             if (!firstFloorLongSilenceShown && elapsed >= 300f)
             {
                 firstFloorLongSilenceShown = true;
-                ShowMagicNote("아직 시전하지 않았다면 목표 표식 바로 옆에서 시작하세요. 물은 닫힌 원, 바람은 평행한 세 줄입니다.", MentorMood.Neutral);
+                ShowMagicNote("표식 바로 옆에서 시작해 봐.\n물은 둥글게, 바람은 세 줄이야.", MentorMood.Neutral);
             }
         }
 
@@ -5640,7 +5675,7 @@ namespace MagicExamHall
             var duration = Mathf.Max(1.2f, seal.seal.expiresAt - Time.time);
             defaultBarriers.Add(new CharacterBarrierView(player, seal.seal.sealId, color, duration));
             pulses.Add(new ParticlePulse(player.position, color, weak: true, scaleMultiplier: 1.05f, durationSeconds: 0.8f, sortingOrder: 31));
-            ShowMagicNote($"{SpellLabels.Korean(seal.seal.baseFamily)} seal이 기본 보호막으로 안정화되었습니다.", MentorMood.Neutral);
+            ShowMagicNote($"{SpellLabels.Korean(seal.seal.baseFamily)} 기초 속성 마법진을 그렸어. 보호막으로 굳었어.", MentorMood.Neutral);
         }
 
         private void UpdateHud()
@@ -5710,7 +5745,10 @@ namespace MagicExamHall
                 return;
             }
 
-            notePanel.gameObject.SetActive(magicNote.Visible && (mentor == null || !mentor.IsVisible));
+            var referenceUiActive =
+                (customReferenceBubble != null && customReferenceBubble.gameObject.activeInHierarchy) ||
+                (customReferencePanel != null && customReferencePanel.gameObject.activeInHierarchy);
+            notePanel.gameObject.SetActive(magicNote.Visible && !referenceUiActive && (mentor == null || !mentor.IsVisible));
         }
 
         private void RefreshQuestLogText()

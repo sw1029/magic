@@ -2,6 +2,8 @@
 
 P8-3의 발표 자료 초안. 슬라이드 단위로 구성하며, `(데이터)` 표시는 플레이테스트 1·2차 결과로 채운다. 시연 영상 2분을 백업으로 준비한다.
 
+> **슬라이드 덱**: 이 아웃라인 기반 7장 뼈대가 [presentation/MagicExamHall_Presentation_Skeleton.pptx](presentation/MagicExamHall_Presentation_Skeleton.pptx)에 있다 (2026-06-12). `(데이터)` 칸은 점선 박스로 표시돼 있어 플레이테스트 결과로 채우면 된다. 스크린샷·QR 자리도 점선 placeholder. 검증 수치(웹 테스트 181, EditMode 105, PlayMode 47)는 2026-06-12 로컬 실행 기준.
+
 ## 슬라이드 구성
 
 ### 1. 제목 (30초)

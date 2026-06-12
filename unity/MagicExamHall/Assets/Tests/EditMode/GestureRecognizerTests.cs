@@ -453,8 +453,8 @@ namespace MagicExamHall.Tests
         [Test]
         public void LoggerWritesAttemptAndSurveyFiles()
         {
-            var sessionId = "test-session-" + System.Guid.NewGuid().ToString("N");
-            var logger = new ExamLogger(sessionId);
+            var sessionId = "logger-schema-" + System.Guid.NewGuid().ToString("N");
+            var logger = CreateEnabledLoggerForTest(sessionId);
             logger.LogAttempt(new AttemptLog
             {
                 sessionId = sessionId,
@@ -495,6 +495,176 @@ namespace MagicExamHall.Tests
             Assert.That(attemptsCsv, Does.Contain("phase,baseFamily,overlayStack,sealId,floorId,targetObject,worldEffect"));
             Assert.That(attemptsCsv, Does.Contain("hintShown,assistLevel,assisted"));
             AssertLastAttemptCsvFields(logger, success: true, hintShown: true, assistLevel: 2, assisted: true);
+        }
+
+        [Test]
+        public void LoggerWritesCumulativeGqmHciResultFiles()
+        {
+            var sessionId = "logger-result-" + System.Guid.NewGuid().ToString("N");
+            var logger = CreateEnabledLoggerForTest(sessionId);
+
+            logger.LogAttempt(new AttemptLog
+            {
+                sessionId = sessionId,
+                trialId = "1",
+                phase = SpellPhase.Base.ToString(),
+                floorId = "1",
+                targetObject = "puddle",
+                recognizedFamily = "earth",
+                status = RecognitionStatus.Ambiguous.ToString(),
+                confidence = 0.56f,
+                closure = 0.42f,
+                smoothness = 0.68f,
+                tempo = 0.72f,
+                stability = 0.58f,
+                rotationBias = 0.16f,
+                elapsedMs = 9000,
+                attemptIndex = 1,
+                hintShown = true,
+                assistLevel = 1,
+                success = false
+            });
+            logger.LogAttempt(new AttemptLog
+            {
+                sessionId = sessionId,
+                trialId = "2",
+                phase = SpellPhase.Base.ToString(),
+                floorId = "1",
+                targetObject = "puddle",
+                recognizedFamily = "water",
+                status = RecognitionStatus.Recognized.ToString(),
+                confidence = 0.88f,
+                closure = 0.92f,
+                smoothness = 0.84f,
+                tempo = 0.80f,
+                stability = 0.86f,
+                rotationBias = 0.08f,
+                elapsedMs = 18000,
+                attemptIndex = 2,
+                success = true
+            });
+            logger.LogQuestChecklist(new QuestChecklistLog
+            {
+                sessionId = sessionId,
+                floorId = "1",
+                floorTitle = "First floor",
+                reason = "floor_change",
+                completed = 5,
+                total = 5,
+                globalCompleted = 5,
+                globalTotal = 5,
+                elapsedMs = 22000,
+                items = "puddle:done"
+            });
+            logger.LogAttempt(new AttemptLog
+            {
+                sessionId = sessionId,
+                trialId = "3",
+                phase = SpellPhase.Overlay.ToString(),
+                floorId = "2",
+                targetObject = "custom_water",
+                recognizedFamily = "ice",
+                status = RecognitionStatus.Recognized.ToString(),
+                confidence = 0.78f,
+                smoothness = 0.74f,
+                stability = 0.82f,
+                elapsedMs = 11000,
+                attemptIndex = 3,
+                success = true
+            });
+            logger.LogQuestChecklist(new QuestChecklistLog
+            {
+                sessionId = sessionId,
+                floorId = "2",
+                floorTitle = "Second floor",
+                reason = "ending",
+                completed = 3,
+                total = 5,
+                globalCompleted = 8,
+                globalTotal = 10,
+                elapsedMs = 19000,
+                items = "custom_water:done"
+            });
+
+            var result = logger.WriteSessionResult(new SessionResultContextLog
+            {
+                sessionId = sessionId,
+                buildVersion = ExamGameController.BuildVersion,
+                generatedAtUtc = "2026-06-12T00:00:00.0000000Z",
+                floorCount = 2,
+                floorTitles = new[] { "First floor", "Second floor" },
+                totalElapsedMs = 41000,
+                trueEnding = true,
+                completedFinalGoals = 6,
+                totalFinalGoals = 6,
+                discoveryCount = 2
+            });
+
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.floorCount, Is.EqualTo(2));
+            Assert.That(result.totalAttempts, Is.EqualTo(3));
+            Assert.That(result.floors.Length, Is.EqualTo(2));
+            Assert.That(result.floors[0].floorId, Is.EqualTo(1));
+            Assert.That(result.floors[0].failures, Is.EqualTo(1));
+            Assert.That(result.floors[1].floorId, Is.EqualTo(2));
+            Assert.That(System.IO.File.Exists(logger.SessionResultJsonPath), Is.True);
+            Assert.That(System.IO.File.Exists(logger.SessionResultCsvPath), Is.True);
+            Assert.That(System.IO.File.Exists(logger.FloorResultsCsvPath), Is.True);
+
+            var resultJson = System.IO.File.ReadAllText(logger.SessionResultJsonPath);
+            var floorCsv = System.IO.File.ReadAllText(logger.FloorResultsCsvPath);
+            var globalCsv = System.IO.File.ReadAllText(System.IO.Path.Combine(System.IO.Directory.GetParent(logger.OutputDirectory)!.FullName, "session-results.csv"));
+            Assert.That(resultJson, Does.Contain("gqm-hci-v1"));
+            Assert.That(resultJson, Does.Contain("gqmA1ShapeDifficultyScore"));
+            Assert.That(floorCsv, Does.Contain("floorId,floorTitle"));
+            Assert.That(floorCsv, Does.Contain("\"First floor\""));
+            Assert.That(floorCsv, Does.Contain("\"Second floor\""));
+            Assert.That(globalCsv, Does.Contain(sessionId));
+        }
+
+        [Test]
+        public void LoggerSuppressesDefaultTestSessionCollection()
+        {
+            var prefixedSessionId = "test-session-" + System.Guid.NewGuid().ToString("N");
+            var prefixedLogger = new ExamLogger(prefixedSessionId);
+
+            prefixedLogger.LogAttempt(new AttemptLog
+            {
+                sessionId = prefixedSessionId,
+                trialId = "1-1",
+                recognizedFamily = "fire",
+                status = RecognitionStatus.Recognized.ToString(),
+                success = true
+            });
+            prefixedLogger.LogSurvey(new SurveyLog
+            {
+                sessionId = prefixedSessionId,
+                clarity = 5,
+                fairness = 5,
+                feedbackHelpfulness = 5,
+                controlFeeling = 5,
+                immersion = 5
+            });
+
+            Assert.That(prefixedLogger.IsCollectionEnabled, Is.False);
+            Assert.That(prefixedLogger.OutputDirectory, Is.EqualTo(ExamLogger.DisabledOutputDirectory));
+            Assert.That(System.IO.Directory.Exists(System.IO.Path.Combine(Application.persistentDataPath, "MagicExamHallLogs", prefixedSessionId)), Is.False);
+
+            var runnerSessionId = "logger-runner-" + System.Guid.NewGuid().ToString("N");
+            var runnerLogger = new ExamLogger(runnerSessionId);
+
+            runnerLogger.LogAttempt(new AttemptLog
+            {
+                sessionId = runnerSessionId,
+                trialId = "1-2",
+                recognizedFamily = "water",
+                status = RecognitionStatus.Recognized.ToString(),
+                success = true
+            });
+
+            Assert.That(runnerLogger.IsCollectionEnabled, Is.False);
+            Assert.That(runnerLogger.OutputDirectory, Is.EqualTo(ExamLogger.DisabledOutputDirectory));
+            Assert.That(System.IO.Directory.Exists(System.IO.Path.Combine(Application.persistentDataPath, "MagicExamHallLogs", runnerSessionId)), Is.False);
         }
 
         [Test]
@@ -614,7 +784,7 @@ namespace MagicExamHall.Tests
             Assert.That(hintState.currentLevel, Is.EqualTo(AssistLevel.Checklist));
 
             var sessionId = "assist-success-" + System.Guid.NewGuid().ToString("N");
-            var logger = new ExamLogger(sessionId);
+            var logger = CreateEnabledLoggerForTest(sessionId);
             logger.LogAttempt(new AttemptLog
             {
                 sessionId = sessionId,
@@ -986,6 +1156,15 @@ namespace MagicExamHall.Tests
             Assert.That(fields[^3], Is.EqualTo(hintShown ? "true" : "false"));
             Assert.That(fields[^2], Is.EqualTo(assistLevel.ToString()));
             Assert.That(fields[^1], Is.EqualTo(assisted ? "true" : "false"));
+        }
+
+        private static ExamLogger CreateEnabledLoggerForTest(string sessionId)
+        {
+            var outputRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "MagicExamHallLoggerTests",
+                System.Guid.NewGuid().ToString("N"));
+            return new ExamLogger(sessionId, outputRoot, enableCollection: true);
         }
 
         private sealed class StubBaseRecognizer : IBaseGestureRecognizer

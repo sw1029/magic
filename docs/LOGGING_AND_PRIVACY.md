@@ -1,5 +1,19 @@
 # Logging and Privacy
 
+## Generated Result Files And GQM/HCI Metrics
+
+Completed non-test sessions generate per-session result files under `Application.persistentDataPath/MagicExamHallLogs/<sessionId>/`: `session-result.json`, `session-result.csv`, and `floor-results.csv`. The parent `Application.persistentDataPath/MagicExamHallLogs/session-results.csv` is a cross-session cumulative index with one row per completed session.
+
+The result files are derived from attempt, quest checklist, survey, and ending context. They do not store raw stroke point lists.
+
+- GQM A-1: `gqmA1ShapeDifficultyScore`, first-attempt outcome, failure pressure, hint rate, and quality averages.
+- GQM A-2: `gqmA2WordInferenceAccuracy`, success rate, confidence, and intent correction fields already present in attempts.
+- GQM B-1: `gqmB1UnderstandingDeltaProxy`, early-vs-late success delta proxy.
+- GQM B-2: `gqmB2LearningBurdenScore`, hint/assist/failure/time-to-first-success pressure.
+- HCI floor summary: `elapsedMs`, `timeToFirstSuccessMs`, `sameTargetFailureStreakMax`, `questCompletionRate`, `weakestQuality`, and `dominantPhase`.
+
+`coverageNotes` records the current measurement boundary. Cancel count, backtrack distance, panel open count, and movement-path burden require additional event instrumentation and are not inferred from raw movement.
+
 작성 기준일: 2026-06-10
 
 ## 원칙
@@ -7,6 +21,7 @@
 - 로그는 플레이 품질 분석용으로만 사용한다.
 - 실명, 연락처, 학번, 이메일, 음성, 화면 녹화 원본 같은 직접 식별 정보는 저장하지 않는다.
 - raw stroke 좌표는 현재 Unity 로그에 저장하지 않는다. 저장되는 값은 판정 결과, 품질 요약, world position, floor/goal metadata다.
+- Unity Test Runner, `test-` session id, 또는 `MAGIC_EXAM_HALL_DISABLE_LOG_COLLECTION=1` 환경에서는 로그 수집을 no-op으로 처리해 테스트 데이터가 연구 로그에 섞이지 않게 한다.
 - 공유용 데이터는 session id를 재매핑한 뒤 `outputs/playtest-*` 아래에 둔다.
 
 ## 저장 위치
@@ -23,6 +38,13 @@ Application.persistentDataPath/MagicExamHallLogs/<sessionId>/
 - `attempts.csv`
 - `survey.jsonl`
 - `survey.csv`
+- `quest-checklist.jsonl`
+- `quest-checklist.csv`
+- `session-result.json`
+- `session-result.csv`
+- `floor-results.csv`
+
+`Application.persistentDataPath/MagicExamHallLogs/session-results.csv` is the cross-session cumulative index. Each completed session appends one summary row. Per-session `session-result.json` keeps the full 1~5 floor array and GQM/HCI derived metrics.
 
 ## attempts 스키마
 
@@ -84,6 +106,7 @@ Application.persistentDataPath/MagicExamHallLogs/<sessionId>/
 ## 확인 체크
 
 - [ ] 로그 파일 4종이 생성된다.
+- [ ] Unity Test Runner 실행에서는 로그 파일이 생성되지 않는다.
 - [ ] raw stroke point list가 없다.
 - [ ] 직접 식별 정보가 없다.
 - [ ] 공유본의 session id가 재매핑됐다.

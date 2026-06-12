@@ -433,6 +433,32 @@ Unity playable game
 | E3 | 결과 분석 notebook 또는 dashboard export 작성 | P1 | 미구현 |
 | E4 | raw capture 저장 정책 확정 | P1 | 구현됨 |
 | E5 | 제출용 anonymized sample log 포함 여부 결정 | P2 | 미구현 |
+| E6 | Unity HCI telemetry event schema를 GQM 지표와 1:1 대응 | P0 | 신규 |
+| E7 | cold start/개인화 보정 개입량을 attempt 로그에 평탄화 | P0 | 부분 구현 |
+| E8 | custom shape follow capture와 contrast 판정을 별도 로그로 수집 | P1 | 부분 구현 |
+| E9 | rule-probe/word-guess 미니 체크를 게임 흐름에 비방해 삽입 | P1 | 신규 |
+| E10 | 플레이 부담 지표(정체, 되돌아감, 취소, 노트 열람)를 floor 로그로 수집 | P1 | 신규 |
+
+#### Unity HCI telemetry backlog
+
+Implemented result aggregation: non-test playthroughs now write per-session `session-result.json`, `session-result.csv`, `floor-results.csv`, and append one row to parent `MagicExamHallLogs/session-results.csv`. Current GQM/HCI derived metrics cover attempt success, first-success timing, hint/assist pressure, quest completion, quality averages, same-target failure streak, and early-vs-late success delta. Movement-path metrics such as cancel count, panel open count, and backtrack distance remain future instrumentation.
+
+원칙: 플레이 중에는 별도 팝업으로 방해하지 않고 자동 수집하되, 연구 시작 전 익명 로그 수집 동의와 raw stroke 미저장 기본값을 유지한다. Unity Test Runner와 `test-` session id는 수집하지 않으며, raw stroke 또는 point list가 필요한 실험은 별도 opt-in 빌드/플래그에서만 켠다.
+
+| ID | 수집 지표 | Unity 삽입 지점 | 최소 필드 | 연결 GQM/분석 |
+| --- | --- | --- | --- | --- |
+| U-HCI-01 | session/floor timeline | `ExamGameController.LoadFloor`, `EvaluateFloorCompletion`, ending report | `sessionId`, `buildVersion`, `conditionId`, `floorId`, `enteredAtMs`, `elapsedMs`, `exitReason`, `completedGoalCount`, `totalGoalCount` | 층 완료 시간, 막힘 지점, B-2 학습 부담 |
+| U-HCI-02 | attempt baseline vs final recognition | `ProcessStrokeSession`, `LogBaseAttempt`, `LogOverlayAttempt` | `trialId`, `phase`, `targetGoalId`, `preIntentFamily`, `preIntentConfidence`, `recognizedFamily`, `status`, `confidence`, `success`, `worldEffect` | 성공률과 시스템 보정 효과 분리, A-2 정확도 |
+| U-HCI-03 | target/family first-attempt outcome | base/custom 목표 판정 직전/직후 | `targetGoalId`, `targetFamily`, `attemptOrdinalForTarget`, `isFirstAttemptForTarget`, `attemptsSinceLastSuccess`, `firstSuccessElapsedMs` | A-1 도형 표현 난이도, 첫 시도 성공률 |
+| U-HCI-04 | hint and mentor exposure | `HintAssistance`, `ShowMagicNote`, mentor speech 출력 | `hintId`, `hintType`, `assistLevel`, `mentorMood`, `shownAtMs`, `triggerTrialId`, `nextTrialId`, `nextAttemptSuccess` | B-1 설명 전후 변화, B-2 보조 의존도 |
+| U-HCI-05 | embedded rule probe / word guess | 튜토리얼 checkpoint, 층 전환 직후, ending 직전 | `probeId`, `probeKind`, `targetFamilyOrRule`, `answer`, `correct`, `confidenceLikert`, `responseMs`, `hintVisible`, `effectPlayed` | A-2 단어 추론 정확도/확신도, B-1 이해도 변화 |
+| U-HCI-06 | cold start personalization delta | `TutorialPersonalizationStore.EvaluateAgainstCaptures` 결과를 attempt에 복사 | `tutorialSampleCount`, `targetSampleCount`, `localModelScore`, `baselineConfidence`, `adjustedConfidence`, `thresholdBias`, `repeatedCaseCount`, `repeatedCaseFailureCount`, `repeatedCaseLift`, `repeatedCaseContrastPenalty`, `acceleratedByRepeatedCase`, `extremeColdStartCorrection` | 사용자 학습과 시스템 극보정 구분, threshold 정책 검증 |
+| U-HCI-07 | custom shape follow capture | `CustomShapeBookController.TryAddNotebookCapture`, `CustomShapeProfileStore.RecordFollowCapture` | `shapeId`, `shapeToken`, `mappedFamily`, `similarity`, `accepted`, `followCaptureCount`, `goldCaptureCount`, `autoCaptureCount`, `reason` | custom 도형 학습 습관, contrast 보정 타당성 |
+| U-HCI-08 | custom/default contrast decision | `CustomShapeRecognition.ScoreSlot`, `ApplyPostSealContrastPreference` | `customShapeId`, `customScore`, `defaultSimilarityScore`, `defaultFamily`, `contrastMargin`, `contrastBoost`, `acceptThreshold`, `holdThreshold`, `defaultConflict`, `decision` | 기본 도형 오인식과 custom 채택 경계 분석 |
+| U-HCI-09 | burden/backtracking summary | player movement tick, input cancel, codex/quest panel open/close | `floorId`, `idleBeforeDrawMs`, `cancelCount`, `redrawCount`, `codexOpenCount`, `questPanelOpenCount`, `distanceTravelled`, `backtrackDistance`, `sameGoalFailureStreak` | B-2 학습 부담, 막힘 지점 자동 탐지 |
+| U-HCI-10 | post-game survey bridge | ending report survey 저장 | `sessionId`, `completedTrials`, `totalAttempts`, `clarity`, `fairness`, `feedbackHelpfulness`, `controlFeeling`, `immersion`, `comment`, 선택 문항별 `responseMs` | 주관 지표와 자동 로그 결합 |
+
+우선순위는 U-HCI-01/02/03/06을 P0로 둔다. 이 네 항목이 있어야 첫 시도 성공률, 층 완료 시간, cold start 보정량, family별 오인식이 한 번에 분석된다. U-HCI-05/09는 부담이 크므로 1차 playtest 이후 막힘 지점이 실제로 확인되면 삽입한다.
 
 ### Epic F. Web research lab
 
@@ -515,15 +541,21 @@ Unity playable game
 
 ### HCI 측정 지표
 
-| 지표 | 의미 |
-| --- | --- |
-| 첫 시도 성공률 | 모범 문양을 보고 바로 성공하는 비율 |
-| 층 완료 시간 | 각 시험을 완료하는 데 걸린 시간 |
-| 재시도 수 | 문양별 난이도와 피드백 효과 |
-| assist level 사용률 | 힌트 escalator가 얼마나 필요한지 |
-| 실패 피드백 이해도 | 사용자가 다음에 무엇을 고칠지 설명할 수 있는지 |
-| 공정성 평가 | 실패/성공이 납득 가능했는지 |
-| 몰입감 | 직접 마법을 시전한다고 느꼈는지 |
+| 지표 | 의미 | Unity 수집/계산 방법 |
+| --- | --- | --- |
+| 첫 시도 성공률 | 모범 문양 또는 목표 표식을 보고 바로 성공하는 비율 | U-HCI-03의 `isFirstAttemptForTarget` + `success`를 family/goal/floor별 집계 |
+| 도형 표현 난이도 | 추상 단어를 도형으로 표현할 때의 조작 난이도 | `attemptsSinceLastSuccess`, `bufferStrokeCount`, quality vector, 사후 5점 난이도 문항 결합 |
+| 단어 추론 정확도 | 다른 도형을 보고 의미를 맞히는 비율 | U-HCI-05 `correct`, `answer`, `responseMs`, `confidenceLikert` |
+| 설명 전후 이해도 변화 | 튜토리얼/힌트/effect 전후 규칙 이해 점수 차이 | 동일 rule-probe를 노출 전후로 배치하고 `correct`/`confidenceLikert` delta 계산 |
+| 층 완료 시간 | 각 시험을 완료하는 데 걸린 시간 | U-HCI-01 `elapsedMs`, `exitReason`, `completedGoalCount` |
+| 재시도 수 | 문양별 난이도와 피드백 효과 | `targetGoalId`별 실패 streak, `attemptOrdinalForTarget`, redraw/cancel count |
+| assist level 사용률 | 힌트 escalator가 얼마나 필요한지 | U-HCI-04 `assistLevel`, `hintType`, `nextAttemptSuccess` |
+| cold start 보정 의존도 | 성공이 사용자 학습 때문인지 threshold 보정 때문인지 | U-HCI-06 `baselineConfidence`, `adjustedConfidence`, `thresholdBias`, `acceleratedByRepeatedCase` |
+| custom/default 충돌률 | custom 도형이 기본 도형으로 오인식되거나 보류되는 비율 | U-HCI-08 `defaultConflict`, `customScore`, `defaultSimilarityScore`, `decision` |
+| 실패 피드백 이해도 | 사용자가 다음에 무엇을 고칠지 설명할 수 있는지 | U-HCI-04 이후 성공률 + 인터뷰/사후 설문 자유응답 |
+| 학습 부담 | 과제 난이도, 정체, 되돌아감, 노트 의존도 | U-HCI-09 `idleBeforeDrawMs`, `backtrackDistance`, `codexOpenCount`, `sameGoalFailureStreak` |
+| 공정성 평가 | 실패/성공이 납득 가능했는지 | survey `fairness`, attempt의 `preIntentConfidence`/`intentScoreLift`와 교차 분석 |
+| 몰입감 | 직접 마법을 시전한다고 느꼈는지 | survey `immersion`, assist 과다 노출/막힘 지표와 교차 분석 |
 
 ## 14. 위험과 대응
 

@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
@@ -16,6 +17,20 @@ namespace MagicExamHall.Tests
 {
     public sealed class MagicExamHallSceneSmokeTests
     {
+        [UnityTest]
+        public IEnumerator SceneLoggerSuppressesCollectionDuringPlayModeTests()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(controller.IsLogCollectionEnabledForTests, Is.False);
+            Assert.That(controller.OutputDirectory, Is.EqualTo(ExamLogger.DisabledOutputDirectory));
+        }
+
         [UnityTest]
         public IEnumerator SceneLoadsWithWorldCastingGameObjects()
         {
@@ -58,11 +73,25 @@ namespace MagicExamHall.Tests
             Assert.That(Object.FindFirstObjectByType<MentorPresentationController>(), Is.Not.Null);
             Assert.That(controller.IsMentorVisibleForTests, Is.True);
             Assert.That(controller.MentorSpeechTextForTests, Is.EqualTo(controller.LastMagicNoteText));
-            Assert.That(controller.OutputDirectory, Does.Contain("MagicExamHallLogs"));
+            Assert.That(controller.IsLogCollectionEnabledForTests, Is.False);
+            Assert.That(controller.OutputDirectory, Is.EqualTo(ExamLogger.DisabledOutputDirectory));
             Assert.That(controller.IsResultPanelVisible, Is.False);
             Assert.That(controller.VisibleOverlayGuideCountForTests, Is.EqualTo(0));
             Assert.That(controller.ActiveShelfGuideArrowCountForTests, Is.EqualTo(0));
             Assert.That(controller.ActiveSpriteAccentAnimationCountForTests, Is.GreaterThanOrEqualTo(7));
+            var globalLight = Object.FindObjectsByType<Light2D>(FindObjectsSortMode.None)
+                .FirstOrDefault(light => light.lightType == Light2D.LightType.Global);
+            Assert.That(globalLight, Is.Not.Null);
+            Assert.That(globalLight.intensity, Is.GreaterThanOrEqualTo(0.60f));
+            Assert.That(Camera.main.backgroundColor.grayscale, Is.GreaterThan(0.065f));
+            var northwestLight = GameObject.Find("Northwest Candle Flame Light 2D")?.GetComponent<Light2D>();
+            var northwestGlow = GameObject.Find("Northwest Candle Light Spread")?.GetComponent<SpriteRenderer>();
+            Assert.That(northwestLight, Is.Not.Null);
+            Assert.That(northwestLight.pointLightOuterRadius, Is.GreaterThanOrEqualTo(4.0f));
+            Assert.That(northwestGlow, Is.Not.Null);
+            Assert.That(northwestGlow.sprite, Is.Not.Null);
+            Assert.That(northwestGlow.bounds.size.x, Is.GreaterThan(5.0f));
+            Assert.That(northwestGlow.color.a, Is.GreaterThan(0.30f));
             Assert.That(GameObject.Find("West Bookcase Guide Arrow"), Is.Null);
             Assert.That(GameObject.Find("East Bookcase Guide Arrow"), Is.Null);
             Assert.That(controller.VersionLabelForTests, Is.EqualTo(ExamGameController.BuildVersion));
@@ -94,6 +123,29 @@ namespace MagicExamHall.Tests
             var candleScale = controller.SpriteAccentScaleForTests("Northwest Candle");
             yield return new WaitForSeconds(0.24f);
             Assert.That(Vector3.Distance(controller.SpriteAccentScaleForTests("Northwest Candle"), candleScale), Is.GreaterThan(0.001f));
+        }
+
+        [UnityTest]
+        public IEnumerator StageTorchLightSpreadAppearsOnCrossingFloor()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(2);
+            yield return null;
+
+            var torchLight = GameObject.Find("Crossing West Torch Flame Light 2D")?.GetComponent<Light2D>();
+            var torchGlow = GameObject.Find("Crossing West Torch Light Spread")?.GetComponent<SpriteRenderer>();
+            Assert.That(torchLight, Is.Not.Null);
+            Assert.That(torchLight.pointLightOuterRadius, Is.GreaterThanOrEqualTo(4.0f));
+            Assert.That(torchGlow, Is.Not.Null);
+            Assert.That(torchGlow.sprite, Is.Not.Null);
+            Assert.That(torchGlow.bounds.size.x, Is.GreaterThan(5.5f));
+            Assert.That(torchGlow.color.a, Is.GreaterThan(0.30f));
         }
 
         [UnityTest]
@@ -210,7 +262,7 @@ namespace MagicExamHall.Tests
             Assert.That(controller.QuestChecklistGlobalTotalForTests, Is.EqualTo(7));
             Assert.That(controller.QuestChecklistTitleForTests, Does.Contain("층 2"));
             Assert.That(controller.QuestChecklistSnapshotSummaryForTests, Does.Contain("1층 1/3 - skip"));
-            Assert.That(File.ReadAllText(Path.Combine(controller.OutputDirectory, "quest-checklist.csv")), Does.Contain("skip"));
+            Assert.That(controller.IsLogCollectionEnabledForTests, Is.False);
 
             var floorTwoLabels = ActiveQuestLabels();
             Assert.That(floorTwoLabels.Any(label => label.Contains("책장", StringComparison.Ordinal)), Is.True);
@@ -1023,6 +1075,59 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator WaterGoalMisreadSpeechUsesShortConversationalCoaching()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+            controller.CloseFirstFloorLetterForTests();
+
+            var result = new BaseRecognitionResult
+            {
+                spell = new SpellResult
+                {
+                    status = RecognitionStatus.Ambiguous,
+                    targetFamily = SpellFamily.Water,
+                    preIntentFamily = SpellFamily.Earth,
+                    confidence = 0.64f,
+                    quality = new QualityVector
+                    {
+                        closure = 0.42f,
+                        smoothness = 0.78f,
+                        tempo = 0.72f,
+                        stability = 0.60f,
+                        rotationBias = 0.18f
+                    },
+                    feedbackReason = "물 표식 근처 입력으로 의도는 감지했지만 땅 후보와 아직 가깝습니다."
+                },
+                bufferStrokeCount = 1
+            };
+            var method = typeof(ExamGameController).GetMethod(
+                "ShowBaseResultSummary",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            method!.Invoke(controller, new object[]
+            {
+                result,
+                "base 실패",
+                "물은 닫힌 원입니다. 한 번에 둥글게 돌리고 끝점을 시작점 바로 옆에 놓으세요."
+            });
+            yield return null;
+
+            Assert.That(result.spell.targetFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(controller.IsResultPanelVisible, Is.False);
+            Assert.That(controller.MentorSpeechTextForTests, Does.Contain("물 의도는 보여"));
+            Assert.That(controller.MentorSpeechTextForTests, Does.Contain("땅 쪽도 섞였어"));
+            Assert.That(controller.MentorSpeechTextForTests, Does.Contain("끝점만 시작점"));
+            Assert.That(controller.MentorSpeechTextForTests, Does.Not.Contain("표식 근처 입력"));
+            Assert.That(controller.MentorSpeechTextForTests, Does.Not.Contain("후보와 아직"));
+            Assert.That(controller.MentorSpeechTextForTests, Does.Not.Contain("닫힌 원입니다"));
+        }
+
+        [UnityTest]
         public IEnumerator SyntheticBaseCastCreatesWorldSealAndResultSummary()
         {
             SceneManager.LoadScene("MagicExamHall");
@@ -1057,7 +1162,17 @@ namespace MagicExamHall.Tests
             Assert.That(speechPanel.anchorMax, Is.EqualTo(Vector2.zero));
             Assert.That(speechPanel.pivot, Is.EqualTo(Vector2.zero));
             Assert.That(speechPanel.anchoredPosition.x, Is.LessThan(160f));
-            Assert.That(speechPanel.anchoredPosition.y, Is.LessThan(60f));
+            Assert.That(speechPanel.anchoredPosition.y, Is.InRange(48f, 64f));
+            Assert.That(speechPanel.GetComponent<Image>(), Is.Null);
+            var speechBody = GameObject.Find("Mentor Speech Body")?.GetComponent<RectTransform>();
+            var speechTail = GameObject.Find("Mentor Speech Tail")?.GetComponent<RectTransform>();
+            var speaker = GameObject.Find("Mentor Speaker")?.GetComponent<Text>();
+            Assert.That(speechBody, Is.Not.Null);
+            Assert.That(speechTail, Is.Not.Null);
+            Assert.That(speechBody.sizeDelta.x, Is.LessThan(400f));
+            Assert.That(speechTail.localEulerAngles.z, Is.EqualTo(45f).Within(0.1f));
+            Assert.That(speaker, Is.Not.Null);
+            Assert.That(speaker.text, Is.EqualTo("입문 조교"));
         }
 
         [UnityTest]
@@ -2420,7 +2535,8 @@ namespace MagicExamHall.Tests
             Assert.That(controller.EndingReportTextForTests, Does.Contain("문양 습관"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("보정 정책"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("자기 평가"));
-            Assert.That(controller.EndingReportTextForTests, Does.Contain("MagicExamHallLogs"));
+            Assert.That(controller.EndingReportTextForTests, Does.Contain(ExamLogger.DisabledOutputDirectory));
+            Assert.That(controller.EndingReportTextForTests, Does.Not.Contain("MagicExamHallLogs"));
         }
 
         private static void ClearCustomSlots(ExamGameController controller)

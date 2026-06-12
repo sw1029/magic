@@ -16,6 +16,7 @@ namespace MagicExamHall
 
         private PixelSpriteView spriteView = null!;
         private RectTransform speechPanel = null!;
+        private RectTransform speechBody = null!;
         private Text speakerText = null!;
         private Text bodyText = null!;
         private MentorProfile profile;
@@ -117,11 +118,15 @@ namespace MagicExamHall
             }
 
             var bubbleColor = new Color(0.035f, 0.045f, 0.062f, 0.92f);
-            speechPanel = CreatePanel("Mentor Speech", canvas.transform, new Vector2(108f, 28f), new Vector2(430f, 118f), Anchor.BottomLeft, bubbleColor);
-            var tail = CreatePanel("Mentor Speech Tail", speechPanel, new Vector2(30f, -4f), new Vector2(18f, 18f), Anchor.BottomLeft, bubbleColor);
+            var borderColor = new Color(0.30f, 0.50f, 0.72f, 0.78f);
+            speechPanel = CreateRect("Mentor Speech", canvas.transform, new Vector2(92f, 52f), new Vector2(390f, 104f), Anchor.BottomLeft);
+            var tail = CreatePanel("Mentor Speech Tail", speechPanel, new Vector2(22f, -4f), new Vector2(26f, 26f), Anchor.BottomLeft, bubbleColor);
             tail.localRotation = Quaternion.Euler(0f, 0f, 45f);
-            speakerText = CreateText("Mentor Speaker", speechPanel, profile.name, 13, FontStyle.Bold, new Vector2(14, -10), new Vector2(396, 20), Anchor.TopLeft, font);
-            bodyText = CreateText("Mentor Speech Text", speechPanel, "", 13, FontStyle.Normal, new Vector2(14, -34), new Vector2(396, 72), Anchor.TopLeft, font);
+            tail.SetAsFirstSibling();
+            speechBody = CreatePanel("Mentor Speech Body", speechPanel, new Vector2(0f, 8f), new Vector2(382f, 92f), Anchor.BottomLeft, bubbleColor);
+            AddSimpleBorder(speechBody, borderColor, 2f);
+            speakerText = CreateText("Mentor Speaker", speechBody, profile.name, 12, FontStyle.Bold, new Vector2(14, -9), new Vector2(348, 18), Anchor.TopLeft, font);
+            bodyText = CreateText("Mentor Speech Text", speechBody, "", 13, FontStyle.Normal, new Vector2(14, -30), new Vector2(348, 54), Anchor.TopLeft, font);
             speechPanel.gameObject.SetActive(false);
         }
 
@@ -138,15 +143,38 @@ namespace MagicExamHall
 
         private static RectTransform CreatePanel(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
         {
+            var rect = CreateRect(name, parent, anchoredPosition, size, anchor);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.color = color;
+            image.raycastTarget = false;
+            return rect;
+        }
+
+        private static RectTransform CreateRect(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor)
+        {
             var panelObject = new GameObject(name);
             panelObject.transform.SetParent(parent, false);
             var rect = panelObject.AddComponent<RectTransform>();
             ApplyAnchor(rect, anchor);
             rect.anchoredPosition = anchoredPosition;
             rect.sizeDelta = size;
-            var image = panelObject.AddComponent<Image>();
-            image.color = color;
             return rect;
+        }
+
+        private static void AddSimpleBorder(RectTransform target, Color color, float thickness)
+        {
+            var borderObject = new GameObject($"{target.name} Border");
+            borderObject.transform.SetParent(target, false);
+            var rect = borderObject.AddComponent<RectTransform>();
+            ApplyAnchor(rect, Anchor.Stretch);
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            var border = borderObject.AddComponent<CustomShapeRectBorder>();
+            border.color = color;
+            border.thickness = thickness;
+            border.material = PixelMaterialProvider.UiMaterial;
+            border.raycastTarget = false;
+            borderObject.transform.SetAsLastSibling();
         }
 
         private static Text CreateText(string name, Transform parent, string content, int size, FontStyle style, Vector2 anchoredPosition, Vector2 rectSize, Anchor anchor, Font font)
@@ -186,6 +214,11 @@ namespace MagicExamHall
                     rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
                     rect.pivot = new Vector2(0f, 1f);
                     break;
+                case Anchor.Stretch:
+                    rect.anchorMin = Vector2.zero;
+                    rect.anchorMax = Vector2.one;
+                    rect.pivot = new Vector2(0.5f, 0.5f);
+                    break;
             }
         }
 
@@ -193,7 +226,8 @@ namespace MagicExamHall
         {
             TopLeft,
             BottomLeft,
-            BottomRight
+            BottomRight,
+            Stretch
         }
     }
 
@@ -242,7 +276,7 @@ namespace MagicExamHall
         {
             return floor switch
             {
-                1 => new MentorProfile("발착층 조교", new Color(0.95f, 0.84f, 0.70f), new Color(0.52f, 0.32f, 0.86f), PixelSpriteKind.MentorNeutral, PixelSpriteKind.MentorHappy, PixelSpriteKind.MentorFrown, new Vector3(-7.05f, -3.72f, 0f), 0.88f),
+                1 => new MentorProfile("입문 조교", new Color(0.95f, 0.84f, 0.70f), new Color(0.52f, 0.32f, 0.86f), PixelSpriteKind.MentorNeutral, PixelSpriteKind.MentorHappy, PixelSpriteKind.MentorFrown, new Vector3(-7.05f, -3.72f, 0f), 0.88f),
                 2 => new MentorProfile("벽화 연구원", new Color(0.92f, 0.82f, 0.66f), new Color(0.18f, 0.62f, 0.72f), PixelSpriteKind.MentorScholarNeutral, PixelSpriteKind.MentorScholarHappy, PixelSpriteKind.MentorScholarFrown, new Vector3(-7.05f, -3.72f, 0f), 0.90f),
                 3 => new MentorProfile("다리 안내원", new Color(0.96f, 0.86f, 0.68f), new Color(0.42f, 0.70f, 0.36f), PixelSpriteKind.MentorGuideNeutral, PixelSpriteKind.MentorGuideHappy, PixelSpriteKind.MentorGuideFrown, new Vector3(-7.05f, -3.72f, 0f), 0.90f),
                 4 => new MentorProfile("균열 감시자", new Color(0.94f, 0.78f, 0.66f), new Color(0.70f, 0.24f, 0.28f), PixelSpriteKind.MentorWatcherNeutral, PixelSpriteKind.MentorWatcherHappy, PixelSpriteKind.MentorWatcherFrown, new Vector3(-7.05f, -3.72f, 0f), 0.88f),

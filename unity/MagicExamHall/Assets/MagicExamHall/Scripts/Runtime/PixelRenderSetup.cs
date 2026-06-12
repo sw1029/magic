@@ -8,8 +8,8 @@ namespace MagicExamHall
         public const int ReferenceResolutionX = 632;
         public const int ReferenceResolutionY = 356;
         public const int AssetsPixelsPerUnit = 32;
-        public const float DefaultGlobalLightIntensity = 0.42f;
-        public const float DefaultPlayerLightIntensity = 0.24f;
+        public const float DefaultGlobalLightIntensity = 0.62f;
+        public const float DefaultPlayerLightIntensity = 0.32f;
         public const string GlobalLightName = "Global 2D Light";
         public const string PlayerCastingLightName = "Player Casting Light 2D";
 
@@ -85,7 +85,7 @@ namespace MagicExamHall
         {
             return kind switch
             {
-                PixelSpriteKind.Candle => EnsurePointLight(target, $"{spriteName} Flame Light 2D", secondary, 0.88f, 0.12f, 1.95f),
+                PixelSpriteKind.Candle => EnsurePointLight(target, $"{spriteName} Flame Light 2D", secondary, 1.35f, 0.28f, 4.15f),
                 PixelSpriteKind.RuneCircle => EnsurePointLight(target, $"{spriteName} Rune Light 2D", primary, 0.52f, 0.16f, 2.35f),
                 PixelSpriteKind.Pulse => EnsurePointLight(target, $"{spriteName} Pulse Light 2D", primary, 0.46f, 0.02f, 1.45f),
                 PixelSpriteKind.Station => EnsurePointLight(target, $"{spriteName} Core Light 2D", primary, 0.32f, 0.10f, 1.55f),
@@ -118,7 +118,7 @@ namespace MagicExamHall
             light.pointLightOuterRadius = outerRadius;
             light.pointLightInnerAngle = 360f;
             light.pointLightOuterAngle = 360f;
-            light.falloffIntensity = 0.72f;
+            light.falloffIntensity = 0.58f;
             light.blendStyleIndex = 0;
             light.volumetricEnabled = false;
             light.shadowsEnabled = false;

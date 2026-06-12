@@ -38,7 +38,29 @@
 | assist level 도달률 | assistLevel 1/2/3 사용 횟수 | attempts.csv |
 | 막힘 지점 | 2분 이상 진행 정체 또는 같은 목표 3회 이상 실패 | 관찰 |
 | 피드백 이해도 | 실패 후 다음 행동을 말로 설명 가능한지 | 인터뷰 |
+| 피드백 이해의 행동 검증 | 참가자가 말한 교정 방향대로 다음 시도가 실제로 변했는지 (발화 ↔ attempts.csv 대조 코딩) | 인터뷰 + attempts.csv |
 | 몰입감 | 직접 마법을 시전한다는 느낌 | 설문 |
+| SUS 점수 | System Usability Scale 10문항 (0~100) | 설문 |
+
+## 사후 설문 구성
+
+1. 커스텀 5문항 (5점 척도): 명확성, 공정성, 피드백 도움, 조작감, 몰입감 + 자유 의견
+2. SUS 10문항 (5점 척도, 표준 채점: 홀수 문항 점수-1, 짝수 문항 5-점수, 합계 ×2.5)
+
+SUS 문항 (한국어 번안, "이 시스템" = 이 게임의 드로잉 입력):
+
+1. 이 게임을 자주 하고 싶다.
+2. 이 게임의 조작이 불필요하게 복잡하다고 느꼈다.
+3. 이 게임의 조작이 쉬웠다.
+4. 이 게임을 하려면 누군가의 도움이 필요할 것 같다.
+5. 이 게임의 여러 기능이 잘 어우러져 있었다.
+6. 이 게임의 동작이 일관되지 않다고 느꼈다.
+7. 대부분의 사람들이 이 게임의 조작을 빨리 익힐 것 같다.
+8. 이 게임의 조작이 매우 번거로웠다.
+9. 게임을 하는 동안 자신감을 느꼈다.
+10. 이 게임을 시작하기 전에 알아야 할 것이 많았다.
+
+기준선: SUS 68점이 통상적 평균. 68 이상이면 평균 이상의 사용성으로 보고한다.
 
 ## 입력 버퍼 A/B
 
@@ -54,9 +76,14 @@
 
 1. `attempts.csv`를 session 단위로 모은다.
 2. 직접 식별 정보가 없는지 확인한다.
-3. floor, phase, recognizedFamily, worldEffect, success, assistLevel을 pivot한다.
-4. 상위 오인식/막힘 3개를 Phase 4/5 백로그로 옮긴다.
-5. 입력 버퍼 D3 결정을 `docs/FINAL_COMPLETION_PLAN.md` 결정 로그에 기록한다.
+3. `python scripts/playtest-attempts-analysis.py <세션폴더...> --out outputs/playtest-1/analysis`를 실행한다. 산출:
+   - RQ1: 세션 내 학습 곡선(rolling 성공률 기울기), 층별 첫 성공까지 시도 수
+   - RQ2: 목표 단위 힌트 노출 전후 성공률 비교, assist level별 직후 성공률
+   - RQ3: family별 첫 시도 성공률 분포와 편차
+4. floor, phase, recognizedFamily, worldEffect, success, assistLevel을 pivot한다.
+5. 상위 오인식/막힘 3개를 Phase 4/5 백로그로 옮긴다.
+6. 입력 버퍼 D3 결정을 `docs/FINAL_COMPLETION_PLAN.md` 결정 로그에 기록한다.
+7. SUS를 표준 채점해 세션별 점수와 평균을 기록한다.
 
 ## 보고 산출물
 

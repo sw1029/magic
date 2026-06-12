@@ -15,7 +15,8 @@
 
 | 자산 | 작가 | 출처 | 라이선스 | 사용 위치 |
 | --- | --- | --- | --- | --- |
-| 절차 생성 SFX/BGM | 프로젝트 내부 제작 | `AudioDirector.cs` | 프로젝트 라이선스 | 시전 성공/실패, 목표 완료, 층 완료, 노트, NPC, hazard, 타이틀/클라이맥스 BGM |
+| 절차 생성 SFX/BGM | 프로젝트 내부 제작 | `AudioDirector.cs` | 프로젝트 라이선스 | 시전 성공/실패, 목표 완료, 층 완료, 노트, NPC, hazard, 클라이맥스 BGM |
+| Loopable Dungeon Ambience (`ambient_tower.ogg`) | JaggedStone | <https://opengameart.org/content/loopable-dungeon-ambience> | CC0 | 1~4층 탑 ambient BGM (`Resources/Bgm/ambient_tower.ogg`) |
 
 ## 폰트
 

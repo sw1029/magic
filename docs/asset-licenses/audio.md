@@ -1,8 +1,20 @@
 # Audio Asset Notes
 
-작성 기준일: 2026-06-10
+작성 기준일: 2026-06-10 (외부 BGM 추가: 2026-06-12)
 
-현재 `Magic Exam Hall`의 최종화 브랜치는 외부 오디오 파일을 포함하지 않는다. 런타임 사운드는 [AudioDirector.cs](../../unity/MagicExamHall/Assets/MagicExamHall/Scripts/Runtime/AudioDirector.cs)에서 절차적으로 생성된다.
+런타임 SFX와 `climax_seal` BGM은 [AudioDirector.cs](../../unity/MagicExamHall/Assets/MagicExamHall/Scripts/Runtime/AudioDirector.cs)에서 절차적으로 생성된다. `ambient_tower` BGM은 외부 CC0 음원을 사용한다 (아래 참조).
+
+## External BGM
+
+| 파일 | 원제 | 작가 | 출처 | 라이선스 |
+| --- | --- | --- | --- | --- |
+| `Assets/MagicExamHall/Resources/Bgm/ambient_tower.ogg` | Loopable Dungeon Ambience (`dungeon_ambient_1.ogg`) | JaggedStone | <https://opengameart.org/content/loopable-dungeon-ambience> | CC0 (Public Domain) |
+
+- 선정 사유: 저주파 바람 + 물방울 소리의 끊김 없는 루프. 탑 내부 ambient에 부합하고 CC0라 표기 의무가 없다.
+- 로더: `AudioDirector.ExternalBgm`이 `Resources/Bgm/ambient_tower`를 우선 로드하고, 없으면 절차 생성 패드로 fallback.
+- 청취 후 교체용 대안 후보 (미사용, 저장소에 미포함):
+  - Dungeon Ambience (`dungeon002.ogg`) — yd, CC0, <https://opengameart.org/content/dungeon-ambience> (로컬 보관: `outputs/bgm-candidates/`)
+  - Dark Ambient Loop 13 — Lucas Calvo (MundoSound), CC-BY 3.0 (표기 의무 발생), <https://opengameart.org/content/dark-ambient-loop-13>
 
 ## Procedural Cues
 

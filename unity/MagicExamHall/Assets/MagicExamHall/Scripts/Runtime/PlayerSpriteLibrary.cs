@@ -33,6 +33,35 @@ namespace MagicExamHall
 
         public bool HasExternalFrames { get; }
 
+        internal bool IsUsable
+        {
+            get
+            {
+                if (fallback == null)
+                {
+                    return false;
+                }
+
+                foreach (var frameSet in frames.Values)
+                {
+                    if (frameSet == null || frameSet.Length == 0)
+                    {
+                        return false;
+                    }
+
+                    foreach (var frame in frameSet)
+                    {
+                        if (frame == null)
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            }
+        }
+
         public Sprite GetFrame(PlayerAnimationState state, PlayerFacing facing, int frameIndex)
         {
             var resolvedFrames = GetFrames(state, facing);
@@ -70,11 +99,12 @@ namespace MagicExamHall
 
         public static PlayerSpriteSet Load(Color fallbackSkin, Color fallbackRobe)
         {
-            if (cachedSet != null)
+            if (cachedSet != null && cachedSet.IsUsable)
             {
                 return cachedSet;
             }
 
+            cachedSet = null;
             var frames = new Dictionary<string, Sprite[]>();
             var loadedAllFrames = true;
 
@@ -135,6 +165,12 @@ namespace MagicExamHall
         public static void ResetCache()
         {
             cachedSet = null;
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetCacheOnRuntimeStart()
+        {
+            ResetCache();
         }
 
         private static IEnumerable<PlayerFacing> DirectionalFacings()

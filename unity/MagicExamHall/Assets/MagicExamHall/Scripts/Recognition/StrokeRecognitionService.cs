@@ -16,6 +16,7 @@ namespace MagicExamHall
     {
         public IReadOnlyList<CompiledSeal> activeSeals = Array.Empty<CompiledSeal>();
         public BaseRecognitionIntent baseIntent;
+        public bool allowCustomShapes = true;
         public bool customShapesOnlyWhenSealActive;
         public bool hasCastCenter;
         public Vector2 castCenter;
@@ -76,7 +77,13 @@ namespace MagicExamHall
                 : (SpellFamily?)null;
             if (context.customShapesOnlyWhenSealActive && hasActiveSeal)
             {
-                var customOnlyBase = RecognizeBaseCandidate(strokes, context.baseIntent, targetSeal?.baseFamily ?? intentPreferredFamily);
+                var customOnlyBase = RecognizeBaseCandidate(
+                    strokes,
+                    context.baseIntent,
+                    targetSeal?.baseFamily ?? intentPreferredFamily,
+                    context.allowCustomShapes,
+                    recordColdStartAttempt: false,
+                    now: context.now);
                 if (!customOnlyBase.spell.isCustomShape)
                 {
                     RejectNonCustomPostSealInput(customOnlyBase);
@@ -97,7 +104,13 @@ namespace MagicExamHall
             {
                 var overlayResult = OverlayRecognizer.Recognize(strokes, targetSeal);
                 PersonalizationStore.ApplyOverlayPersonalization(overlayResult, strokes);
-                var baseResult = RecognizeBaseCandidate(strokes, context.baseIntent, targetSeal.baseFamily);
+                var baseResult = RecognizeBaseCandidate(
+                    strokes,
+                    context.baseIntent,
+                    targetSeal.baseFamily,
+                    context.allowCustomShapes,
+                    recordColdStartAttempt: false,
+                    now: context.now);
                 if (baseResult.spell.status == RecognitionStatus.Recognized &&
                     baseResult.spell.recognizedFamily.HasValue &&
                     !SpellCastingService.ShouldPreferOverlayNearSeal(overlayResult))
@@ -125,7 +138,13 @@ namespace MagicExamHall
                 };
             }
 
-            var recognizedBase = RecognizeBaseCandidate(strokes, context.baseIntent, intentPreferredFamily);
+            var recognizedBase = RecognizeBaseCandidate(
+                strokes,
+                context.baseIntent,
+                intentPreferredFamily,
+                context.allowCustomShapes,
+                recordColdStartAttempt: context.baseIntent?.IsActive == true,
+                now: context.now);
             if (recognizedBase.spell.status == RecognitionStatus.Recognized && recognizedBase.spell.recognizedFamily.HasValue)
             {
                 return new StrokeRecognitionResult
@@ -169,12 +188,83 @@ namespace MagicExamHall
         private BaseRecognitionResult RecognizeBaseCandidate(
             List<List<StrokeSample>> strokes,
             BaseRecognitionIntent intent,
-            SpellFamily? preferredCustomFamily = null)
+            SpellFamily? preferredCustomFamily = null,
+            bool allowCustomShapes = true,
+            bool recordColdStartAttempt = false,
+            float now = 0f)
         {
-            var baseResult = SpellRuntime.RecognizeBase(strokes, PrepareBaseIntent(intent));
-            PersonalizationStore.ApplyBasePersonalization(baseResult.spell, strokes);
-            CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, CustomShapeStore, preferredCustomFamily);
+            var preparedIntent = PrepareBaseIntent(intent);
+            var baseResult = SpellRuntime.RecognizeBase(strokes, preparedIntent);
+            var personalizationTarget = preparedIntent?.IsActive == true ? preparedIntent.family : (SpellFamily?)null;
+            var rawColdStartSpell = recordColdStartAttempt &&
+                preparedIntent?.IsActive == true &&
+                preparedIntent.tutorialCaptureCount < 3
+                    ? CloneColdStartSpellResult(baseResult.spell)
+                    : null;
+            PersonalizationStore.ApplyBasePersonalization(baseResult.spell, strokes, personalizationTarget);
+            if (rawColdStartSpell != null)
+            {
+                PersonalizationStore.RecordColdStartAttempt(preparedIntent.family, strokes, rawColdStartSpell, now);
+            }
+
+            if (allowCustomShapes)
+            {
+                CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, CustomShapeStore, preferredCustomFamily);
+            }
+
             return baseResult;
+        }
+
+        private static SpellResult CloneColdStartSpellResult(SpellResult source)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+
+            return new SpellResult
+            {
+                status = source.status,
+                recognizedFamily = source.recognizedFamily,
+                targetFamily = source.targetFamily,
+                confidence = source.confidence,
+                quality = source.quality,
+                feedbackReason = source.feedbackReason,
+                nextHint = source.nextHint,
+                success = source.success,
+                isCustomShape = source.isCustomShape,
+                customShapeId = source.customShapeId,
+                customShapeLabel = source.customShapeLabel,
+                customShapeToken = source.customShapeToken,
+                mappedFamily = source.mappedFamily,
+                customScore = source.customScore,
+                defaultSimilarityScore = source.defaultSimilarityScore,
+                customEventId = source.customEventId,
+                customEventLabel = source.customEventLabel,
+                customEventKind = source.customEventKind,
+                customEventRole = source.customEventRole,
+                customEventUsesDirection = source.customEventUsesDirection,
+                customEventOperatorOnly = source.customEventOperatorOnly,
+                customEventBlocks = source.customEventBlocks,
+                customEventBlocked = source.customEventBlocked,
+                customEventBlockedBy = source.customEventBlockedBy,
+                customEventPersistence = source.customEventPersistence,
+                customEventLifetimeSeconds = source.customEventLifetimeSeconds,
+                customEventOrigin = source.customEventOrigin,
+                customEventDirection = source.customEventDirection,
+                customEventStartPoint = source.customEventStartPoint,
+                customEventEndPoint = source.customEventEndPoint,
+                intentFamily = source.intentFamily,
+                intentGoalId = source.intentGoalId,
+                intentSource = source.intentSource,
+                intentStrength = source.intentStrength,
+                intentSimilarityScore = source.intentSimilarityScore,
+                intentWeakConsiderationApplied = source.intentWeakConsiderationApplied,
+                intentStrongConsiderationApplied = source.intentStrongConsiderationApplied,
+                intentScoreLift = source.intentScoreLift,
+                preIntentFamily = source.preIntentFamily,
+                preIntentConfidence = source.preIntentConfidence
+            };
         }
 
         private BaseRecognitionIntent PrepareBaseIntent(BaseRecognitionIntent intent)

@@ -33,6 +33,12 @@ namespace MagicExamHall
         CurveProjectile
     }
 
+    public enum CustomShapeEventPersistence
+    {
+        Timed,
+        Permanent
+    }
+
     public enum CustomSpellEffectKind
     {
         None,
@@ -153,7 +159,9 @@ namespace MagicExamHall
             bool emitsFromEndPoint = false,
             bool blocksOverlappedEvent = false,
             CustomShapeEventKind operatorOnlyKind = CustomShapeEventKind.None,
-            CustomShapeEventKind operatorTargetKind = CustomShapeEventKind.None)
+            CustomShapeEventKind operatorTargetKind = CustomShapeEventKind.None,
+            CustomShapeEventPersistence visualPersistence = CustomShapeEventPersistence.Timed,
+            float visualLifetimeSeconds = 0f)
         {
             this.token = token;
             this.eventId = eventId;
@@ -166,6 +174,10 @@ namespace MagicExamHall
             this.blocksOverlappedEvent = blocksOverlappedEvent;
             this.operatorOnlyKind = operatorOnlyKind == CustomShapeEventKind.None ? eventKind : operatorOnlyKind;
             this.operatorTargetKind = operatorTargetKind == CustomShapeEventKind.None ? eventKind : operatorTargetKind;
+            this.visualPersistence = visualPersistence;
+            this.visualLifetimeSeconds = visualLifetimeSeconds > 0f
+                ? visualLifetimeSeconds
+                : CustomShapeEventCatalog.VisualLifetimeFor(eventKind);
         }
 
         public readonly string token;
@@ -179,6 +191,8 @@ namespace MagicExamHall
         public readonly bool usesDirection;
         public readonly bool emitsFromEndPoint;
         public readonly bool blocksOverlappedEvent;
+        public readonly CustomShapeEventPersistence visualPersistence;
+        public readonly float visualLifetimeSeconds;
         public bool IsOperator => role == CustomShapeEventRole.Operator;
     }
 
@@ -198,6 +212,8 @@ namespace MagicExamHall
         public bool blocksEvent;
         public bool eventBlocked;
         public string blockedByToken = "";
+        public CustomShapeEventPersistence visualPersistence = CustomShapeEventPersistence.Timed;
+        public float visualLifetimeSeconds;
         public Vector2 origin;
         public Vector2 startPoint;
         public Vector2 endPoint;
@@ -221,6 +237,8 @@ namespace MagicExamHall
                 blocksEvent = blocksEvent,
                 eventBlocked = eventBlocked,
                 blockedByToken = blockedByToken,
+                visualPersistence = visualPersistence,
+                visualLifetimeSeconds = visualLifetimeSeconds,
                 origin = origin,
                 startPoint = startPoint,
                 endPoint = endPoint,
@@ -235,7 +253,7 @@ namespace MagicExamHall
         {
             new("line", "line_slash_damage", "절단 피해", CustomShapeEventRole.Effect, CustomShapeEventKind.SlashDamage, "이벤트: 절단 피해", usesDirection: true),
             new("arrow", "arrow_operator", "방향 사출", CustomShapeEventRole.Operator, CustomShapeEventKind.DirectionalProjectile, "연산자: 끝점 방향 사출", usesDirection: true, emitsFromEndPoint: true, operatorOnlyKind: CustomShapeEventKind.AttributeLaser, operatorTargetKind: CustomShapeEventKind.DirectionalProjectile),
-            new("rect", "rect_wall_entity", "벽 생성", CustomShapeEventRole.Effect, CustomShapeEventKind.WallEntity, "이벤트: 벽 구조물"),
+            new("rect", "rect_wall_entity", "벽 생성", CustomShapeEventRole.Effect, CustomShapeEventKind.WallEntity, "이벤트: 벽 구조물", visualPersistence: CustomShapeEventPersistence.Permanent),
             new("roundRect", "round_rect_guard_buff", "방어 버프", CustomShapeEventRole.Effect, CustomShapeEventKind.GuardBuff, "이벤트: 방어 버프"),
             new("ellipse", "ellipse_barrier", "배리어", CustomShapeEventRole.Effect, CustomShapeEventKind.Barrier, "이벤트: 배리어"),
             new("triangle", "triangle_trap", "함정", CustomShapeEventRole.Effect, CustomShapeEventKind.Trap, "이벤트: 함정 설치"),
@@ -292,6 +310,8 @@ namespace MagicExamHall
                 emitsFromEndPoint = definition.emitsFromEndPoint,
                 operatorOnly = definition.IsOperator && operatorOnly,
                 blocksEvent = definition.blocksOverlappedEvent,
+                visualPersistence = VisualPersistenceFor(definition, eventKind),
+                visualLifetimeSeconds = VisualLifetimeFor(definition, eventKind),
                 origin = origin,
                 startPoint = geometry.startPoint,
                 endPoint = geometry.endPoint,
@@ -352,6 +372,7 @@ namespace MagicExamHall
                 target.blockedByToken = operatorDefinition.token;
                 target.blocksEvent = true;
                 target.uiSummary = $"{operatorDefinition.displayName}: {target.displayName}";
+                ApplyVisualPolicy(target, CustomShapeEventKind.EventBlock);
                 return target;
             }
 
@@ -365,7 +386,56 @@ namespace MagicExamHall
             target.endPoint = op.endPoint;
             target.direction = op.direction;
             target.uiSummary = $"{operatorDefinition.displayName}: {target.displayName}";
+            ApplyVisualPolicy(target, operatorDefinition.operatorTargetKind);
             return target;
+        }
+
+        public static CustomShapeEventPersistence VisualPersistenceFor(CustomShapeEventKind eventKind)
+        {
+            return eventKind == CustomShapeEventKind.WallEntity
+                ? CustomShapeEventPersistence.Permanent
+                : CustomShapeEventPersistence.Timed;
+        }
+
+        public static float VisualLifetimeFor(CustomShapeEventKind eventKind)
+        {
+            return eventKind switch
+            {
+                CustomShapeEventKind.WallEntity => 0f,
+                CustomShapeEventKind.SlashDamage => 1.0f,
+                CustomShapeEventKind.DirectionalProjectile => 1.15f,
+                CustomShapeEventKind.AttributeLaser => 1.25f,
+                CustomShapeEventKind.CurveProjectile => 1.25f,
+                CustomShapeEventKind.BuffDispel => 1.1f,
+                CustomShapeEventKind.RandomBuffDispel => 1.1f,
+                CustomShapeEventKind.EventBlock => 1.2f,
+                CustomShapeEventKind.Stun => 2.4f,
+                CustomShapeEventKind.PiercingMark => 2.8f,
+                CustomShapeEventKind.Trap => 4.0f,
+                CustomShapeEventKind.Barrier => 1.4f,
+                CustomShapeEventKind.AttackBuff => 1.6f,
+                CustomShapeEventKind.MoveSpeedBuff => 1.6f,
+                CustomShapeEventKind.SpecialAttackBoost => 1.6f,
+                CustomShapeEventKind.MagicAmplify => 1.6f,
+                CustomShapeEventKind.GuardBuff => 1.6f,
+                _ => 1.5f
+            };
+        }
+
+        private static CustomShapeEventPersistence VisualPersistenceFor(CustomShapeEventDefinition definition, CustomShapeEventKind eventKind)
+        {
+            return eventKind == definition.eventKind ? definition.visualPersistence : VisualPersistenceFor(eventKind);
+        }
+
+        private static float VisualLifetimeFor(CustomShapeEventDefinition definition, CustomShapeEventKind eventKind)
+        {
+            return eventKind == definition.eventKind ? definition.visualLifetimeSeconds : VisualLifetimeFor(eventKind);
+        }
+
+        private static void ApplyVisualPolicy(CustomShapeEventPayload payload, CustomShapeEventKind eventKind)
+        {
+            payload.visualPersistence = VisualPersistenceFor(eventKind);
+            payload.visualLifetimeSeconds = VisualLifetimeFor(eventKind);
         }
 
         private static string NormalizeToken(string token)

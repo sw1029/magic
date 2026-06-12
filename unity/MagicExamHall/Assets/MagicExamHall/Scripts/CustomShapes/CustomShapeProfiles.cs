@@ -113,6 +113,7 @@ namespace MagicExamHall
         public SpellFamily mappedFamily = SpellFamily.Wind;
         public List<CustomShapeCaptureRecord> goldCaptures = new();
         public List<CustomShapeCaptureRecord> autoCaptures = new();
+        public List<CustomShapeCaptureRecord> followCaptures = new();
         public string createdAtIso = "";
         public string updatedAtIso = "";
 
@@ -132,13 +133,18 @@ namespace MagicExamHall
             {
                 yield return capture;
             }
+
+            foreach (var capture in followCaptures)
+            {
+                yield return capture;
+            }
         }
     }
 
     [Serializable]
     public sealed class CustomShapeProfileDocument
     {
-        public int version = 1;
+        public int version = 2;
         public List<CustomShapeSlot> slots = new();
     }
 
@@ -153,8 +159,10 @@ namespace MagicExamHall
     {
         public const int SlotCount = 12;
         public const int MaxAutoCapturesPerSlot = 18;
+        public const int MaxFollowCapturesPerSlot = 12;
         public const int MaxLabelLength = 32;
         public const int MaxRegexLength = 140;
+        public const float MinFollowCaptureSimilarity = 0.50f;
 
         public static readonly string[] HelperTokens =
         {
@@ -200,7 +208,7 @@ namespace MagicExamHall
 
         public static CustomShapeProfileStore LoadDefault()
         {
-            return LoadFromPath(DefaultStoragePath());
+            return new CustomShapeProfileStore(DefaultStoragePath());
         }
 
         public static CustomShapeProfileStore LoadFromPath(string path)
@@ -264,6 +272,29 @@ namespace MagicExamHall
             IReadOnlyList<IReadOnlyList<StrokeSample>> goldStrokes,
             out string message)
         {
+            return TrySaveSlot(
+                slotIndex,
+                label,
+                regexPattern,
+                shapeToken,
+                eventShapeTokens,
+                mappedFamily,
+                goldStrokes,
+                Array.Empty<IReadOnlyList<IReadOnlyList<StrokeSample>>>(),
+                out message);
+        }
+
+        public bool TrySaveSlot(
+            int slotIndex,
+            string label,
+            string regexPattern,
+            string shapeToken,
+            IReadOnlyList<string> eventShapeTokens,
+            SpellFamily mappedFamily,
+            IReadOnlyList<IReadOnlyList<StrokeSample>> goldStrokes,
+            IEnumerable<IReadOnlyList<IReadOnlyList<StrokeSample>>> followCaptureStrokes,
+            out string message)
+        {
             if (!IsValidSlotIndex(slotIndex))
             {
                 message = "슬롯 번호가 올바르지 않습니다.";
@@ -291,6 +322,9 @@ namespace MagicExamHall
             var now = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
             var slot = slots[slotIndex];
             var createdAt = slot.IsOccupied ? slot.createdAtIso : now;
+            var followCaptures = LastItems(slot.followCaptures ?? new List<CustomShapeCaptureRecord>(), MaxFollowCapturesPerSlot).ToList();
+            followCaptures.AddRange(BuildFollowCaptures(safeShapeToken, followCaptureStrokes));
+            followCaptures = LastItems(followCaptures, MaxFollowCapturesPerSlot).ToList();
             slots[slotIndex] = new CustomShapeSlot
             {
                 slotIndex = slotIndex,
@@ -302,12 +336,54 @@ namespace MagicExamHall
                 mappedFamily = mappedFamily,
                 goldCaptures = new List<CustomShapeCaptureRecord> { gold },
                 autoCaptures = LastItems(slot.autoCaptures, MaxAutoCapturesPerSlot).ToList(),
+                followCaptures = followCaptures,
                 createdAtIso = createdAt,
                 updatedAtIso = now
             };
 
             Save();
             message = "저장되었습니다.";
+            return true;
+        }
+
+        public bool RecordFollowCapture(
+            string shapeId,
+            string shapeToken,
+            IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
+            out float similarity)
+        {
+            similarity = 0f;
+            if (string.IsNullOrWhiteSpace(shapeId))
+            {
+                return false;
+            }
+
+            var slot = slots.FirstOrDefault(item => item.shapeId == shapeId && item.IsOccupied);
+            if (slot == null)
+            {
+                return false;
+            }
+
+            similarity = CustomShapeRecognition.TemplateSimilarity(strokes, NormalizeShapeToken(shapeToken));
+            if (similarity < MinFollowCaptureSimilarity)
+            {
+                return false;
+            }
+
+            var capture = CustomShapeCaptureRecord.FromStrokes(strokes, similarity);
+            if (capture.ToStrokeSamples().Count == 0)
+            {
+                return false;
+            }
+
+            slot.followCaptures.Add(capture);
+            while (slot.followCaptures.Count > MaxFollowCapturesPerSlot)
+            {
+                slot.followCaptures.RemoveAt(0);
+            }
+
+            slot.updatedAtIso = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            Save();
             return true;
         }
 
@@ -443,8 +519,10 @@ namespace MagicExamHall
 
                 slot.goldCaptures ??= new List<CustomShapeCaptureRecord>();
                 slot.autoCaptures ??= new List<CustomShapeCaptureRecord>();
+                slot.followCaptures ??= new List<CustomShapeCaptureRecord>();
                 slot.eventShapeTokens = NormalizeShapeTokens(slot.eventShapeTokens, slot.shapeToken);
                 slot.autoCaptures = LastItems(slot.autoCaptures, MaxAutoCapturesPerSlot).ToList();
+                slot.followCaptures = LastItems(slot.followCaptures, MaxFollowCapturesPerSlot).ToList();
                 slot.shapeToken = NormalizeShapeToken(string.IsNullOrWhiteSpace(slot.shapeToken)
                     ? InferShapeToken(slot.regexPattern)
                     : slot.shapeToken);
@@ -473,9 +551,30 @@ namespace MagicExamHall
                 mappedFamily = SpellFamily.Wind,
                 goldCaptures = new List<CustomShapeCaptureRecord>(),
                 autoCaptures = new List<CustomShapeCaptureRecord>(),
+                followCaptures = new List<CustomShapeCaptureRecord>(),
                 createdAtIso = "",
                 updatedAtIso = ""
             };
+        }
+
+        private static IEnumerable<CustomShapeCaptureRecord> BuildFollowCaptures(
+            string shapeToken,
+            IEnumerable<IReadOnlyList<IReadOnlyList<StrokeSample>>> followCaptureStrokes)
+        {
+            foreach (var strokes in followCaptureStrokes ?? Array.Empty<IReadOnlyList<IReadOnlyList<StrokeSample>>>())
+            {
+                var similarity = CustomShapeRecognition.TemplateSimilarity(strokes, shapeToken);
+                if (similarity < MinFollowCaptureSimilarity)
+                {
+                    continue;
+                }
+
+                var capture = CustomShapeCaptureRecord.FromStrokes(strokes, similarity);
+                if (capture.ToStrokeSamples().Count > 0)
+                {
+                    yield return capture;
+                }
+            }
         }
 
         private static bool IsValidSlotIndex(int index)

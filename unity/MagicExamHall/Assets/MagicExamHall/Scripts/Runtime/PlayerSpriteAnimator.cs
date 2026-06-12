@@ -100,12 +100,18 @@ namespace MagicExamHall
 
         private void Initialize()
         {
-            if (initialized)
+            if (initialized && spriteRenderer != null && spriteSet != null)
             {
                 return;
             }
 
             spriteRenderer = GetComponent<SpriteRenderer>();
+            if (spriteRenderer == null)
+            {
+                initialized = false;
+                return;
+            }
+
             staticSpriteView = GetComponent<PixelSpriteView>();
             if (staticSpriteView != null)
             {
@@ -126,6 +132,16 @@ namespace MagicExamHall
 
         private void Tick(float deltaTime)
         {
+            if (spriteSet == null || spriteRenderer == null)
+            {
+                initialized = false;
+                Initialize();
+                if (spriteSet == null || spriteRenderer == null)
+                {
+                    return;
+                }
+            }
+
             if (IsCasting)
             {
                 castTimer += deltaTime;
@@ -172,6 +188,16 @@ namespace MagicExamHall
 
         private void ApplyFrame()
         {
+            if (spriteSet == null || spriteRenderer == null)
+            {
+                initialized = false;
+                Initialize();
+                if (spriteSet == null || spriteRenderer == null)
+                {
+                    return;
+                }
+            }
+
             spriteRenderer.sprite = spriteSet.GetFrame(state, facing, frameIndex);
             spriteRenderer.sharedMaterial = PixelMaterialProvider.SpriteMaterial;
             spriteRenderer.color = Color.white;

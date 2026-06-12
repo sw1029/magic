@@ -46,7 +46,7 @@ namespace MagicExamHall
             }
 
             var texture = CreateProceduralTexture(name, primary, secondary, kind, variantIndex);
-            return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), SpritePixelsPerUnit);
+            return CreateFullRectSprite(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), SpritePixelsPerUnit);
         }
 
         public static Texture2D CreateProceduralTexture(string name, Color primary, Color secondary, PixelSpriteKind kind, int variantIndex = NoVariantIndex)
@@ -297,7 +297,7 @@ namespace MagicExamHall
 
                     texture.filterMode = FilterMode.Point;
                     texture.wrapMode = TextureWrapMode.Clamp;
-                    sprite = Sprite.Create(
+                    sprite = CreateFullRectSprite(
                         texture,
                         new Rect(0, 0, texture.width, texture.height),
                         new Vector2(0.5f, 0.5f),
@@ -417,9 +417,14 @@ namespace MagicExamHall
             }
 
             texture.Apply();
-            var sprite = Sprite.Create(texture, new Rect(0, 0, Size, Size), new Vector2(0.5f, 0.5f), SpritePixelsPerUnit);
+            var sprite = CreateFullRectSprite(texture, new Rect(0, 0, Size, Size), new Vector2(0.5f, 0.5f), SpritePixelsPerUnit);
             ApprenticeFrameCache[key] = sprite;
             return sprite;
+        }
+
+        private static Sprite CreateFullRectSprite(Texture2D texture, Rect rect, Vector2 pivot, float pixelsPerUnit)
+        {
+            return Sprite.Create(texture, rect, pivot, pixelsPerUnit, 0u, SpriteMeshType.FullRect);
         }
 
         private static void DrawApprentice(

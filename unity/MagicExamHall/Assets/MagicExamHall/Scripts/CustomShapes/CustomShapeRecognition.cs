@@ -15,8 +15,11 @@ namespace MagicExamHall
         public float customScore;
         public float goldScore;
         public float autoScore;
+        public float followScore;
         public float featureScore;
         public float defaultSimilarityScore;
+        public float contrastMargin;
+        public float contrastBoost;
         public float acceptThreshold;
         public float holdThreshold;
         public TutorialPersonalizationSummary summary = TutorialPersonalizationSummary.Empty;
@@ -47,16 +50,36 @@ namespace MagicExamHall
             var features = ShapeFeatures.From(drawable, normalized);
             var defaultFamily = baseResult.spell.recognizedFamily ?? baseResult.spell.targetFamily;
             var defaultSimilarity = Mathf.Clamp01(baseResult.spell.confidence);
-            var best = store.Slots
+            var candidates = store.Slots
                 .Where(slot => slot.IsOccupied)
                 .Select(slot => ScoreSlot(slot, drawable, normalized.cloud, features, defaultFamily, defaultSimilarity, preferredMappedFamily))
+                .ToList();
+
+            ApplyPostSealContrastPreference(candidates, preferredMappedFamily, defaultFamily, defaultSimilarity);
+
+            var best = candidates
                 .Where(result => result.customScore >= result.holdThreshold)
                 .OrderByDescending(result => result.accepted ? 2 : result.held ? 1 : 0)
                 .ThenByDescending(result => preferredMappedFamily.HasValue && result.slot.mappedFamily == preferredMappedFamily.Value ? 1 : 0)
+                .ThenByDescending(result => result.contrastMargin)
                 .ThenByDescending(result => result.customScore)
                 .FirstOrDefault();
 
             return best;
+        }
+
+        public static float TemplateSimilarity(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes, string shapeToken)
+        {
+            var drawable = Sanitize(strokes);
+            if (drawable.Count == 0)
+            {
+                return 0f;
+            }
+
+            var normalized = Normalize(drawable);
+            var features = ShapeFeatures.From(drawable, normalized);
+            var template = CustomShapeCaptureRecord.FromStrokes(TemplateStrokeSamples(shapeToken));
+            return ScoreCapture(template, normalized.cloud, features);
         }
 
         public static bool ApplyToBaseResult(
@@ -130,6 +153,8 @@ namespace MagicExamHall
             spell.customEventBlocks = customEvent.blocksEvent;
             spell.customEventBlocked = customEvent.eventBlocked;
             spell.customEventBlockedBy = customEvent.blockedByToken;
+            spell.customEventPersistence = customEvent.visualPersistence;
+            spell.customEventLifetimeSeconds = customEvent.visualLifetimeSeconds;
             spell.customEventOrigin = customEvent.origin;
             spell.customEventDirection = customEvent.direction;
             spell.customEventStartPoint = customEvent.startPoint;
@@ -155,13 +180,25 @@ namespace MagicExamHall
                 .OrderByDescending(score => score)
                 .Take(3)
                 .ToList();
+            var followScores = slot.followCaptures
+                .Select(capture => ScoreCapture(capture, cloud, features))
+                .Where(score => score > 0f)
+                .OrderByDescending(score => score)
+                .Take(3)
+                .ToList();
             var goldScore = goldScores.Count == 0 ? 0f : goldScores.Max();
             var autoScore = autoScores.Count == 0 ? 0f : autoScores.Average();
+            var followScore = followScores.Count == 0 ? 0f : followScores.Average();
             var featureScore = ScoreFeatureSimilarity(features, AverageCaptureFeatures(slot));
-            var maturity = Mathf.Clamp01((slot.goldCaptures.Count + slot.autoCaptures.Count) / 6f);
-            var customScore = Mathf.Clamp01(goldScore * 0.58f + featureScore * 0.22f + autoScore * 0.15f + maturity * 0.05f);
+            var maturity = Mathf.Clamp01((slot.goldCaptures.Count + slot.autoCaptures.Count + slot.followCaptures.Count * 0.7f) / 6f);
+            var customScore = Mathf.Clamp01(goldScore * 0.57f + featureScore * 0.21f + autoScore * 0.10f + followScore * 0.07f + maturity * 0.05f);
             var preferredSlot = preferredMappedFamily.HasValue && slot.mappedFamily == preferredMappedFamily.Value;
-            var acceptThreshold = Mathf.Clamp(0.73f - Mathf.Min(slot.autoCaptures.Count, 8) * 0.01f, 0.64f, 0.78f);
+            var acceptThreshold = Mathf.Clamp(
+                0.73f -
+                Mathf.Min(slot.autoCaptures.Count, 8) * 0.01f -
+                Mathf.Min(slot.followCaptures.Count, 6) * 0.008f,
+                0.62f,
+                0.78f);
             if (preferredSlot)
             {
                 acceptThreshold = Mathf.Clamp(acceptThreshold - 0.07f, 0.62f, 0.78f);
@@ -185,26 +222,111 @@ namespace MagicExamHall
                 customScore = Round(customScore),
                 goldScore = Round(goldScore),
                 autoScore = Round(autoScore),
+                followScore = Round(followScore),
                 featureScore = Round(featureScore),
                 defaultSimilarityScore = Round(defaultSimilarity),
                 acceptThreshold = Round(acceptThreshold),
                 holdThreshold = Round(holdThreshold),
                 summary = new TutorialPersonalizationSummary
                 {
-                    tutorialSampleCount = slot.goldCaptures.Count + slot.autoCaptures.Count,
-                    targetSampleCount = slot.autoCaptures.Count,
+                    tutorialSampleCount = slot.goldCaptures.Count + slot.autoCaptures.Count + slot.followCaptures.Count,
+                    targetSampleCount = slot.autoCaptures.Count + slot.followCaptures.Count,
                     localModelScore = Round(customScore),
                     baselineConfidence = Round(defaultSimilarity),
                     adjustedConfidence = Round(customScore),
                     thresholdBias = Round(Mathf.Clamp01(0.73f - acceptThreshold)),
                     acceptThreshold = Round(acceptThreshold),
                     holdThreshold = Round(holdThreshold),
-                    stage = slot.autoCaptures.Count >= 3 ? "custom_adapted" : "custom_gold",
+                    stage = slot.followCaptures.Count >= 2 ? "custom_guided" : slot.autoCaptures.Count >= 3 ? "custom_adapted" : "custom_gold",
                     decision = accepted ? TutorialDynamicDecision.Accept : held ? TutorialDynamicDecision.Hold : TutorialDynamicDecision.Retry,
                     reason = conflict
                         ? $"shadow conflict with {defaultFamily}"
-                        : $"gold={goldScore:0.000}, auto={autoScore:0.000}, feature={featureScore:0.000}"
+                        : $"gold={goldScore:0.000}, auto={autoScore:0.000}, follow={followScore:0.000}, feature={featureScore:0.000}"
                 }
+            };
+        }
+
+        private static void ApplyPostSealContrastPreference(
+            IReadOnlyList<CustomShapeRecognitionResult> candidates,
+            SpellFamily? preferredMappedFamily,
+            SpellFamily defaultFamily,
+            float defaultSimilarity)
+        {
+            if (!preferredMappedFamily.HasValue || candidates.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var candidate in candidates)
+            {
+                var bestOther = candidates
+                    .Where(other => !ReferenceEquals(other, candidate))
+                    .Select(other => other.customScore)
+                    .DefaultIfEmpty(candidate.customScore - 0.12f)
+                    .Max();
+                var margin = candidate.customScore - bestOther;
+                var contrastWinner = margin >= 0.015f || candidates.Count == 1;
+                candidate.contrastMargin = Round(Mathf.Max(0f, margin));
+                if (contrastWinner && candidate.customScore >= 0.52f)
+                {
+                    var followMaturity = Mathf.Clamp01(candidate.slot.followCaptures.Count / 3f);
+                    var contrastBoost = Mathf.Clamp((Mathf.Max(margin, 0.12f) - 0.015f) * 0.45f, 0f, 0.045f);
+                    contrastBoost += followMaturity * 0.025f;
+                    if (candidate.slot.mappedFamily == preferredMappedFamily.Value)
+                    {
+                        contrastBoost += 0.012f;
+                    }
+
+                    candidate.contrastBoost = Round(contrastBoost);
+                    candidate.acceptThreshold = Round(Mathf.Clamp(candidate.acceptThreshold - contrastBoost, 0.56f, 0.78f));
+                    candidate.holdThreshold = Round(Mathf.Clamp(candidate.acceptThreshold - 0.14f, 0.44f, 0.68f));
+                }
+
+                RefreshDecision(candidate, defaultFamily, defaultSimilarity, preferredMappedFamily, contrastWinner);
+            }
+        }
+
+        private static void RefreshDecision(
+            CustomShapeRecognitionResult result,
+            SpellFamily defaultFamily,
+            float defaultSimilarity,
+            SpellFamily? preferredMappedFamily,
+            bool contrastWinner)
+        {
+            var preferredSlot = preferredMappedFamily.HasValue && result.slot.mappedFamily == preferredMappedFamily.Value;
+            var conflict = !preferredSlot &&
+                           defaultSimilarity >= 0.78f &&
+                           defaultFamily != result.slot.mappedFamily &&
+                           result.customScore < defaultSimilarity + 0.08f;
+            if (preferredMappedFamily.HasValue &&
+                contrastWinner &&
+                result.contrastBoost > 0f &&
+                result.customScore >= result.acceptThreshold &&
+                result.contrastMargin >= 0.015f)
+            {
+                conflict = false;
+            }
+
+            result.defaultConflict = conflict;
+            result.accepted = result.customScore >= result.acceptThreshold && !conflict;
+            result.held = !result.accepted && (result.customScore >= result.holdThreshold || conflict);
+            result.summary = new TutorialPersonalizationSummary
+            {
+                tutorialSampleCount = result.slot.goldCaptures.Count + result.slot.autoCaptures.Count + result.slot.followCaptures.Count,
+                targetSampleCount = result.slot.autoCaptures.Count + result.slot.followCaptures.Count,
+                localModelScore = result.customScore,
+                baselineConfidence = Round(defaultSimilarity),
+                adjustedConfidence = result.customScore,
+                thresholdBias = Round(Mathf.Clamp01(0.73f - result.acceptThreshold)),
+                acceptThreshold = result.acceptThreshold,
+                holdThreshold = result.holdThreshold,
+                stage = result.slot.followCaptures.Count >= 2
+                    ? "custom_guided"
+                    : result.slot.autoCaptures.Count >= 3 ? "custom_adapted" : "custom_gold",
+                decision = result.accepted ? TutorialDynamicDecision.Accept : result.held ? TutorialDynamicDecision.Hold : TutorialDynamicDecision.Retry,
+                reason = conflict
+                    ? $"shadow conflict with {defaultFamily}"
+                    : $"gold={result.goldScore:0.000}, auto={result.autoScore:0.000}, follow={result.followScore:0.000}, feature={result.featureScore:0.000}, contrast={result.contrastMargin:0.000}, boost={result.contrastBoost:0.000}"
             };
         }
 
@@ -284,6 +406,15 @@ namespace MagicExamHall
                     .Select(sample => new StrokeSample(sample.position, sample.time))
                     .ToList())
                 .Where(stroke => stroke.Count >= 2)
+                .ToList();
+        }
+
+        private static List<IReadOnlyList<StrokeSample>> TemplateStrokeSamples(string shapeToken)
+        {
+            return CustomShapeUiDrawing.NormalizedStrokes(shapeToken)
+                .Select(stroke => (IReadOnlyList<StrokeSample>)stroke
+                    .Select((point, index) => new StrokeSample(point, index * 0.03f))
+                    .ToList())
                 .ToList();
         }
 

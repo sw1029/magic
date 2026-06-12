@@ -132,6 +132,41 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void ActiveSealCustomOnlyContextCanDisableSavedCustomShapes()
+        {
+            var profilePath = Path.Combine(Path.GetTempPath(), $"custom-shape-{Guid.NewGuid():N}.json");
+            try
+            {
+                var store = new CustomShapeProfileStore(profilePath);
+                var gold = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, timeStep: 0.03f);
+                Assert.That(store.TrySaveSlot(0, "test wind", "test|wind|line", SpellFamily.Wind, gold, out var message), Is.True, message);
+                var service = new HeuristicStrokeRecognitionService(null, store);
+                var seal = SpellRuntime.CreateSeal(SpellRuntime.RecognizeBase(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Earth, timeStep: 0.03f)), 0f);
+                var session = StrokeInputSessionExtensions.FromStrokeSamples(gold, "custom-disabled", 0.2f);
+
+                var result = service.Recognize(session, new RecognitionContext
+                {
+                    activeSeals = new List<CompiledSeal> { seal },
+                    allowCustomShapes = false,
+                    customShapesOnlyWhenSealActive = true,
+                    now = 0.2f
+                });
+
+                Assert.That(result.kind, Is.EqualTo(StrokeRecognitionKind.Base));
+                Assert.That(result.baseResult.spell.isCustomShape, Is.False);
+                Assert.That(result.baseResult.spell.status, Is.EqualTo(RecognitionStatus.Invalid));
+                Assert.That(result.baseResult.spell.recognizedFamily, Is.Null);
+            }
+            finally
+            {
+                if (File.Exists(profilePath))
+                {
+                    File.Delete(profilePath);
+                }
+            }
+        }
+
+        [Test]
         public void NearGoalIntentDoesNotApplyWhenNormalRecognitionAlreadySucceeds()
         {
             var service = new HeuristicStrokeRecognitionService();
@@ -280,6 +315,136 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void RecognitionServiceCollectsColdStartAttemptsEvenWhenIntentSucceeds()
+        {
+            var service = new HeuristicStrokeRecognitionService();
+            var strokes = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Water, timeStep: 0.03f);
+            var session = StrokeInputSessionExtensions.FromStrokeSamples(strokes, "water-cold-start", 0f);
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Water,
+                goalId = "puddle",
+                source = "near_goal_symbol",
+                radius = 2f,
+                strength = 1f
+            };
+
+            var result = service.Recognize(session, new RecognitionContext
+            {
+                baseIntent = intent,
+                activeSeals = new List<CompiledSeal>(),
+                now = 0f
+            });
+
+            Assert.That(result.baseResult.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(service.PersonalizationStore.ColdStartAttemptCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void RepeatedColdStartCaseAcceleratesAmbiguousBiasCorrection()
+        {
+            var store = new TutorialPersonalizationStore();
+            var strokes = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Water, timeStep: 0.03f);
+            var first = ColdStartAmbiguousResult(SpellFamily.Water, 0.73f);
+
+            store.ApplyBasePersonalization(first, strokes, SpellFamily.Water);
+            store.RecordColdStartAttempt(SpellFamily.Water, strokes, first, 0f);
+            store.RecordColdStartAttempt(
+                SpellFamily.Water,
+                Offset(strokes, new Vector2(0.025f, -0.015f)),
+                ColdStartAmbiguousResult(SpellFamily.Water, 0.73f),
+                0.5f);
+
+            var current = ColdStartAmbiguousResult(SpellFamily.Water, 0.73f);
+            store.ApplyBasePersonalization(current, Offset(strokes, new Vector2(0.015f, 0.01f)), SpellFamily.Water);
+
+            Assert.That(first.personalization.acceleratedByRepeatedCase, Is.False);
+            Assert.That(current.personalization.acceleratedByRepeatedCase, Is.True);
+            Assert.That(current.personalization.repeatedCaseCount, Is.GreaterThanOrEqualTo(3));
+            Assert.That(current.personalization.repeatedCaseLift, Is.GreaterThan(0f));
+            Assert.That(current.personalization.adjustedConfidence, Is.GreaterThan(current.personalization.baselineConfidence));
+            Assert.That(current.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(current.recognizedFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(current.success, Is.True);
+            Assert.That(current.personalization.promotedByPersonalization, Is.True);
+        }
+
+        [Test]
+        public void RepeatedColdStartFailuresUseExtremeCorrectionForInvalidInput()
+        {
+            var store = new TutorialPersonalizationStore();
+            var strokes = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Water, timeStep: 0.03f);
+            store.RecordColdStartAttempt(SpellFamily.Water, strokes, ColdStartInvalidResult(SpellFamily.Water, 0.44f), 0f);
+            store.RecordColdStartAttempt(
+                SpellFamily.Water,
+                Offset(strokes, new Vector2(0.018f, -0.012f)),
+                ColdStartInvalidResult(SpellFamily.Water, 0.44f),
+                0.4f);
+
+            var current = ColdStartInvalidResult(SpellFamily.Water, 0.44f);
+            store.ApplyBasePersonalization(current, Offset(strokes, new Vector2(-0.01f, 0.016f)), SpellFamily.Water);
+
+            Assert.That(current.personalization.extremeColdStartCorrection, Is.True);
+            Assert.That(current.personalization.repeatedCaseFailureCount, Is.GreaterThanOrEqualTo(3));
+            Assert.That(current.personalization.repeatedCaseLift, Is.GreaterThan(0.08f));
+            Assert.That(current.personalization.decision, Is.EqualTo(TutorialDynamicDecision.Accept));
+            Assert.That(current.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(current.recognizedFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(current.success, Is.True);
+        }
+
+        [Test]
+        public void RepeatedColdStartCaseCanCorrectWrongRecognizedFamilyTowardIntent()
+        {
+            var store = new TutorialPersonalizationStore();
+            var strokes = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Water, timeStep: 0.03f);
+            store.RecordColdStartAttempt(SpellFamily.Water, strokes, WrongRecognizedResult(SpellFamily.Earth, 0.74f), 0f);
+            store.RecordColdStartAttempt(
+                SpellFamily.Water,
+                Offset(strokes, new Vector2(-0.02f, 0.015f)),
+                WrongRecognizedResult(SpellFamily.Earth, 0.74f),
+                0.5f);
+
+            var current = WrongRecognizedResult(SpellFamily.Earth, 0.74f);
+            store.ApplyBasePersonalization(current, Offset(strokes, new Vector2(0.012f, -0.008f)), SpellFamily.Water);
+
+            Assert.That(current.personalization.acceleratedByRepeatedCase, Is.True);
+            Assert.That(current.personalization.decision, Is.EqualTo(TutorialDynamicDecision.Accept));
+            Assert.That(current.recognizedFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(current.targetFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(current.success, Is.True);
+            Assert.That(current.personalization.promotedByPersonalization, Is.True);
+        }
+
+        [Test]
+        public void ColdStartContrastRaisesThresholdForOtherFamilyCluster()
+        {
+            var store = new TutorialPersonalizationStore();
+            var water = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Water, timeStep: 0.03f);
+            var fire = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Fire, timeStep: 0.03f);
+            var waterSuccess = GestureRecognizer.Recognize(water, SpellFamily.Water);
+            store.RecordBaseCapture(SpellFamily.Water, water, waterSuccess, 0f);
+
+            for (var index = 0; index < 3; index++)
+            {
+                store.RecordColdStartAttempt(
+                    SpellFamily.Fire,
+                    Offset(fire, new Vector2(index * 0.012f, -index * 0.008f)),
+                    GestureRecognizer.Recognize(fire, SpellFamily.Fire),
+                    index + 1f);
+            }
+
+            var current = ColdStartAmbiguousResult(SpellFamily.Water, 0.74f);
+            store.ApplyBasePersonalization(current, fire, SpellFamily.Water);
+
+            Assert.That(current.personalization.stage, Is.EqualTo("contrast_adjusted"));
+            Assert.That(current.personalization.repeatedCaseContrastPenalty, Is.GreaterThan(0f));
+            Assert.That(current.personalization.acceleratedByRepeatedCase, Is.False);
+            Assert.That(current.personalization.decision, Is.Not.EqualTo(TutorialDynamicDecision.Accept));
+            Assert.That(current.status, Is.EqualTo(RecognitionStatus.Ambiguous));
+        }
+
+        [Test]
         public void PersonalizationDoesNotPromoteInvalidInputToSuccess()
         {
             var store = new TutorialPersonalizationStore();
@@ -313,6 +478,59 @@ namespace MagicExamHall.Tests
             return strokes
                 .Select(stroke => stroke.Select(sample => new StrokeSample(sample.position + offset, sample.time)).ToList())
                 .ToList();
+        }
+
+        private static SpellResult ColdStartAmbiguousResult(SpellFamily family, float confidence)
+        {
+            return new SpellResult
+            {
+                status = RecognitionStatus.Ambiguous,
+                targetFamily = family,
+                confidence = confidence,
+                quality = StableQuality(),
+                feedbackReason = "ambiguous cold-start",
+                nextHint = "retry"
+            };
+        }
+
+        private static SpellResult ColdStartInvalidResult(SpellFamily family, float confidence)
+        {
+            return new SpellResult
+            {
+                status = RecognitionStatus.Invalid,
+                targetFamily = family,
+                confidence = confidence,
+                quality = StableQuality(),
+                feedbackReason = "invalid cold-start",
+                nextHint = "retry"
+            };
+        }
+
+        private static SpellResult WrongRecognizedResult(SpellFamily recognizedFamily, float confidence)
+        {
+            return new SpellResult
+            {
+                status = RecognitionStatus.Recognized,
+                recognizedFamily = recognizedFamily,
+                targetFamily = recognizedFamily,
+                confidence = confidence,
+                quality = StableQuality(),
+                success = true,
+                feedbackReason = "wrong cold-start family",
+                nextHint = "retry"
+            };
+        }
+
+        private static QualityVector StableQuality()
+        {
+            return new QualityVector
+            {
+                closure = 0.86f,
+                smoothness = 0.82f,
+                tempo = 0.75f,
+                stability = 0.8f,
+                rotationBias = 0.05f
+            };
         }
 
         private static List<List<StrokeSample>> OpenFireSamples()

@@ -116,9 +116,12 @@ namespace MagicExamHall
                 return;
             }
 
-            speechPanel = CreatePanel("Mentor Speech", canvas.transform, new Vector2(-20, 20), new Vector2(440, 112), Anchor.BottomRight, new Color(0.035f, 0.045f, 0.062f, 0.90f));
-            speakerText = CreateText("Mentor Speaker", speechPanel, profile.name, 13, FontStyle.Bold, new Vector2(14, -10), new Vector2(404, 20), Anchor.TopLeft, font);
-            bodyText = CreateText("Mentor Speech Text", speechPanel, "", 13, FontStyle.Normal, new Vector2(14, -34), new Vector2(404, 66), Anchor.TopLeft, font);
+            var bubbleColor = new Color(0.035f, 0.045f, 0.062f, 0.92f);
+            speechPanel = CreatePanel("Mentor Speech", canvas.transform, new Vector2(108f, 28f), new Vector2(430f, 118f), Anchor.BottomLeft, bubbleColor);
+            var tail = CreatePanel("Mentor Speech Tail", speechPanel, new Vector2(30f, -4f), new Vector2(18f, 18f), Anchor.BottomLeft, bubbleColor);
+            tail.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            speakerText = CreateText("Mentor Speaker", speechPanel, profile.name, 13, FontStyle.Bold, new Vector2(14, -10), new Vector2(396, 20), Anchor.TopLeft, font);
+            bodyText = CreateText("Mentor Speech Text", speechPanel, "", 13, FontStyle.Normal, new Vector2(14, -34), new Vector2(396, 72), Anchor.TopLeft, font);
             speechPanel.gameObject.SetActive(false);
         }
 
@@ -175,6 +178,10 @@ namespace MagicExamHall
                     rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
                     rect.pivot = new Vector2(1f, 0f);
                     break;
+                case Anchor.BottomLeft:
+                    rect.anchorMin = rect.anchorMax = new Vector2(0f, 0f);
+                    rect.pivot = new Vector2(0f, 0f);
+                    break;
                 case Anchor.TopLeft:
                     rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
                     rect.pivot = new Vector2(0f, 1f);
@@ -185,6 +192,7 @@ namespace MagicExamHall
         private enum Anchor
         {
             TopLeft,
+            BottomLeft,
             BottomRight
         }
     }

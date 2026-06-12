@@ -65,10 +65,17 @@ namespace MagicExamHall
         public float thresholdBias;
         public float acceptThreshold;
         public float holdThreshold;
+        public int repeatedCaseCount;
+        public int repeatedCaseWindowCount;
+        public int repeatedCaseFailureCount;
+        public float repeatedCaseLift;
+        public float repeatedCaseContrastPenalty;
         public string stage = "none";
         public TutorialDynamicDecision decision;
         public string reason = "";
         public bool promotedByPersonalization;
+        public bool acceleratedByRepeatedCase;
+        public bool extremeColdStartCorrection;
     }
 
     public sealed class TutorialCaptureRecord
@@ -85,17 +92,74 @@ namespace MagicExamHall
         public float savedAt;
     }
 
+    public sealed class TutorialColdStartCaseRecord
+    {
+        public SpellFamily family;
+        public RecognitionStatus status;
+        public SpellFamily? recognizedFamily;
+        public List<Vector2> normalizedCloud = new();
+        public MagicShapeFeatureVector features = new();
+        public float baselineScore;
+        public bool targetMatched;
+        public bool failedForTarget;
+        public float savedAt;
+    }
+
     public sealed class TutorialPersonalizationStore
     {
         private const int MaxCaptures = 36;
+        private const int MaxColdStartCases = 48;
+        private const int RepeatedColdStartCaseThreshold = 3;
+        private const int RepeatedColdStartWindowSize = 5;
+        private const int RepeatedColdStartWindowMatchThreshold = 3;
+        private const int RepeatedColdStartFailureRepeatThreshold = 3;
+        private const int RepeatedColdStartFailureAcceptThreshold = 2;
+        private const float RepeatedColdStartCloudSimilarity = 0.82f;
+        private const float RepeatedColdStartFeatureSimilarity = 0.74f;
+        private const float RepeatedColdStartMaximumLift = 0.08f;
+        private const float RepeatedColdStartMaximumThresholdBias = 0.045f;
+        private const float ExtremeColdStartMaximumLift = 0.18f;
+        private const float ExtremeColdStartMaximumThresholdBias = 0.1f;
+        private const float ColdStartContrastSimilarityThreshold = 0.78f;
+        private const float ColdStartContrastMaximumPenalty = 0.06f;
         private readonly List<TutorialCaptureRecord> captures = new();
+        private readonly List<TutorialColdStartCaseRecord> coldStartCases = new();
 
         public IReadOnlyList<TutorialCaptureRecord> Captures => captures;
         public int CaptureCount => captures.Count;
+        public int ColdStartAttemptCount => coldStartCases.Count;
 
         public int CountBaseCaptures(SpellFamily family)
         {
             return captures.Count(capture => capture.kind == TutorialCaptureKind.BaseFamily && capture.family == family);
+        }
+
+        public void RecordColdStartAttempt(
+            SpellFamily family,
+            IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
+            SpellResult result,
+            float savedAt)
+        {
+            if (result == null ||
+                CountBaseCaptures(family) >= 3 ||
+                Sanitize(strokes).Count == 0)
+            {
+                return;
+            }
+
+            var targetMatched = IsColdStartTargetMatch(result.status, result.recognizedFamily, family);
+            AppendColdStartCase(new TutorialColdStartCaseRecord
+            {
+                family = family,
+                status = result.status,
+                recognizedFamily = result.recognizedFamily,
+                normalizedCloud = NormalizeStrokes(strokes).cloud,
+                features = DeriveShapeFeatures(strokes),
+                baselineScore = result.confidence,
+                targetMatched = targetMatched,
+                failedForTarget = !targetMatched,
+                savedAt = savedAt
+            });
         }
 
         public TutorialThresholdState CalculateThresholdState()
@@ -127,7 +191,7 @@ namespace MagicExamHall
             var targetCaptures = captures
                 .Where(capture => capture.kind == TutorialCaptureKind.BaseFamily && capture.family == family)
                 .ToList();
-            return EvaluateAgainstCaptures(strokes, result.confidence, targetCaptures, result.status);
+            return EvaluateAgainstCaptures(strokes, result.confidence, targetCaptures, result.status, family, result.recognizedFamily);
         }
 
         public TutorialPersonalizationSummary EvaluateOverlay(
@@ -143,17 +207,28 @@ namespace MagicExamHall
 
         public SpellResult ApplyBasePersonalization(
             SpellResult result,
-            IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)
+            IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
+            SpellFamily? personalizationTargetFamily = null)
         {
-            var family = result.recognizedFamily ?? result.targetFamily;
+            var family = personalizationTargetFamily ?? result.recognizedFamily ?? result.targetFamily;
             var summary = EvaluateBase(family, strokes, result);
             result.personalization = summary;
             result.confidence = summary.adjustedConfidence;
 
-            if (result.status == RecognitionStatus.Ambiguous && summary.decision == TutorialDynamicDecision.Accept)
+            var canPromote = result.status == RecognitionStatus.Ambiguous ||
+                summary.extremeColdStartCorrection ||
+                summary.acceleratedByRepeatedCase &&
+                result.status == RecognitionStatus.Recognized &&
+                result.recognizedFamily != family;
+            if (canPromote && summary.decision == TutorialDynamicDecision.Accept)
             {
                 result.status = RecognitionStatus.Recognized;
                 result.recognizedFamily = family;
+                if (personalizationTargetFamily.HasValue)
+                {
+                    result.targetFamily = family;
+                }
+
                 result.success = result.targetFamily == family;
                 result.feedbackReason = $"{result.feedbackReason} 이전 tutorial capture와도 안정적으로 맞아 개인화 기준에서 보강되었습니다.";
                 summary.promotedByPersonalization = true;
@@ -242,7 +317,9 @@ namespace MagicExamHall
             IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
             float baselineConfidence,
             IReadOnlyList<TutorialCaptureRecord> targetCaptures,
-            RecognitionStatus status)
+            RecognitionStatus status,
+            SpellFamily? coldStartFamily = null,
+            SpellFamily? coldStartRecognizedFamily = null)
         {
             var threshold = CalculateThresholdState();
             threshold.targetSampleCount = targetCaptures.Count;
@@ -251,9 +328,66 @@ namespace MagicExamHall
                 threshold.acceptThreshold - threshold.targetMaturity * 0.03f,
                 0.56f,
                 0.86f));
+            var repeatedCase = coldStartFamily.HasValue
+                ? EvaluateRepeatedColdStartCase(
+                    coldStartFamily.Value,
+                    strokes,
+                    targetCaptures.Count,
+                    status,
+                    coldStartRecognizedFamily)
+                : RepeatedColdStartCase.None;
 
             if (targetCaptures.Count == 0)
             {
+                if (repeatedCase.active)
+                {
+                    var repeatAdjustedConfidence = Clamp(
+                        baselineConfidence + repeatedCase.lift - repeatedCase.contrastPenalty,
+                        0f,
+                        1f);
+                    var repeatAcceptThreshold = Round(Clamp(
+                        threshold.targetAcceptThreshold - repeatedCase.thresholdBias + repeatedCase.contrastPenalty,
+                        0.54f,
+                        0.9f));
+                    var repeatHoldThreshold = Round(Clamp(
+                        threshold.holdThreshold - repeatedCase.thresholdBias * 0.5f + repeatedCase.contrastPenalty * 0.5f,
+                        0.43f,
+                        0.74f));
+                    var repeatDecision = repeatedCase.extremeCorrection ||
+                        repeatAdjustedConfidence >= repeatAcceptThreshold && repeatedCase.similarity >= 0.84f
+                        ? TutorialDynamicDecision.Accept
+                        : repeatAdjustedConfidence >= repeatHoldThreshold
+                            ? TutorialDynamicDecision.Hold
+                            : TutorialDynamicDecision.Retry;
+
+                    if (!repeatedCase.extremeCorrection && (status == RecognitionStatus.Invalid || status == RecognitionStatus.Incomplete))
+                    {
+                        repeatDecision = repeatAdjustedConfidence >= repeatHoldThreshold ? TutorialDynamicDecision.Hold : TutorialDynamicDecision.Retry;
+                    }
+
+                    return new TutorialPersonalizationSummary
+                    {
+                        tutorialSampleCount = threshold.captureCount,
+                        targetSampleCount = 0,
+                        localModelScore = Round(repeatedCase.similarity),
+                        baselineConfidence = Round(baselineConfidence),
+                        adjustedConfidence = Round(repeatAdjustedConfidence),
+                        thresholdBias = Round(repeatedCase.thresholdBias),
+                        acceptThreshold = repeatAcceptThreshold,
+                        holdThreshold = repeatHoldThreshold,
+                        repeatedCaseCount = repeatedCase.count,
+                        repeatedCaseWindowCount = repeatedCase.windowCount,
+                        repeatedCaseFailureCount = repeatedCase.failureCount,
+                        repeatedCaseLift = Round(repeatedCase.lift),
+                        repeatedCaseContrastPenalty = Round(repeatedCase.contrastPenalty),
+                        stage = repeatedCase.extremeCorrection ? "repeat_failure_override" : "repeat_cold_start",
+                        decision = repeatDecision,
+                        reason = $"repeat={repeatedCase.count}, window={repeatedCase.windowCount}/{RepeatedColdStartWindowSize}, failures={repeatedCase.failureCount}, similarity={repeatedCase.similarity:0.000}, lift={repeatedCase.lift:0.000}, contrast={repeatedCase.contrastPenalty:0.000}",
+                        acceleratedByRepeatedCase = true,
+                        extremeColdStartCorrection = repeatedCase.extremeCorrection
+                    };
+                }
+
                 return new TutorialPersonalizationSummary
                 {
                     tutorialSampleCount = threshold.captureCount,
@@ -284,20 +418,34 @@ namespace MagicExamHall
                 .ToList();
             var localModelScore = Clamp(Average(cloudScores) * 0.72f + Average(featureScores) * 0.28f, 0f, 1f);
             var targetMaturity = Clamp(targetCaptures.Count / 3f, 0f, 1f);
-            var thresholdBias = Clamp(threshold.globalScoreLift + targetMaturity * 0.03f, 0f, 0.12f);
+            var thresholdBias = Clamp(
+                threshold.globalScoreLift + targetMaturity * 0.03f + repeatedCase.thresholdBias,
+                0f,
+                0.16f);
             var adjustedConfidence = Clamp(
-                baselineConfidence * 0.72f + localModelScore * 0.28f + Mathf.Min(targetCaptures.Count, 4) * 0.012f,
+                baselineConfidence * 0.72f +
+                localModelScore * 0.28f +
+                Mathf.Min(targetCaptures.Count, 4) * 0.012f +
+                repeatedCase.lift -
+                repeatedCase.contrastPenalty,
                 0f,
                 1f);
-            var acceptThreshold = threshold.targetAcceptThreshold;
-            var holdThreshold = threshold.holdThreshold;
-            var decision = adjustedConfidence >= acceptThreshold && localModelScore >= 0.78f
+            var acceptThreshold = Round(Clamp(
+                threshold.targetAcceptThreshold - repeatedCase.thresholdBias + repeatedCase.contrastPenalty,
+                0.54f,
+                0.9f));
+            var holdThreshold = Round(Clamp(
+                threshold.holdThreshold - repeatedCase.thresholdBias * 0.5f + repeatedCase.contrastPenalty * 0.5f,
+                0.43f,
+                0.74f));
+            var decision = repeatedCase.extremeCorrection ||
+                adjustedConfidence >= acceptThreshold && localModelScore >= 0.78f
                 ? TutorialDynamicDecision.Accept
                 : adjustedConfidence >= holdThreshold
                     ? TutorialDynamicDecision.Hold
                     : TutorialDynamicDecision.Retry;
 
-            if (status == RecognitionStatus.Invalid || status == RecognitionStatus.Incomplete)
+            if (!repeatedCase.extremeCorrection && (status == RecognitionStatus.Invalid || status == RecognitionStatus.Incomplete))
             {
                 decision = adjustedConfidence >= holdThreshold ? TutorialDynamicDecision.Hold : TutorialDynamicDecision.Retry;
             }
@@ -312,10 +460,161 @@ namespace MagicExamHall
                 thresholdBias = Round(thresholdBias),
                 acceptThreshold = acceptThreshold,
                 holdThreshold = holdThreshold,
-                stage = targetCaptures.Count >= 3 ? "enough_shot" : "few_shot",
+                repeatedCaseCount = repeatedCase.count,
+                repeatedCaseWindowCount = repeatedCase.windowCount,
+                repeatedCaseFailureCount = repeatedCase.failureCount,
+                repeatedCaseLift = Round(repeatedCase.lift),
+                repeatedCaseContrastPenalty = Round(repeatedCase.contrastPenalty),
+                stage = repeatedCase.extremeCorrection
+                    ? "repeat_failure_override"
+                    : repeatedCase.active
+                    ? targetCaptures.Count >= 3 ? "repeat_accelerated" : "repeat_few_shot"
+                    : repeatedCase.contrastPenalty > 0f ? "contrast_adjusted"
+                    : targetCaptures.Count >= 3 ? "enough_shot" : "few_shot",
                 decision = decision,
-                reason = $"local={localModelScore:0.000}, threshold={acceptThreshold:0.000}, captures={targetCaptures.Count}"
+                reason = repeatedCase.active || repeatedCase.contrastPenalty > 0f
+                    ? $"local={localModelScore:0.000}, threshold={acceptThreshold:0.000}, captures={targetCaptures.Count}, repeat={repeatedCase.count}, window={repeatedCase.windowCount}/{RepeatedColdStartWindowSize}, failures={repeatedCase.failureCount}, lift={repeatedCase.lift:0.000}, contrast={repeatedCase.contrastPenalty:0.000}"
+                    : $"local={localModelScore:0.000}, threshold={acceptThreshold:0.000}, captures={targetCaptures.Count}",
+                acceleratedByRepeatedCase = repeatedCase.active,
+                extremeColdStartCorrection = repeatedCase.extremeCorrection
             };
+        }
+
+        private RepeatedColdStartCase EvaluateRepeatedColdStartCase(
+            SpellFamily family,
+            IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
+            int targetCaptureCount,
+            RecognitionStatus currentStatus,
+            SpellFamily? currentRecognizedFamily)
+        {
+            if (targetCaptureCount >= 3)
+            {
+                return RepeatedColdStartCase.None;
+            }
+
+            var valid = Sanitize(strokes);
+            if (valid.Count == 0)
+            {
+                return RepeatedColdStartCase.None;
+            }
+
+            var normalized = NormalizeStrokes(valid).cloud;
+            var features = DeriveShapeFeatures(valid);
+            var matches = coldStartCases
+                .Where(item => item.family == family)
+                .Select(item => ScoreColdStartCase(normalized, features, item))
+                .Where(IsRepeatedColdStartMatch)
+                .OrderByDescending(match => match.score)
+                .ToList();
+            var recentWindowMatches = coldStartCases
+                .Where(item => item.family == family)
+                .OrderByDescending(item => item.savedAt)
+                .Take(Mathf.Max(RepeatedColdStartWindowSize - 1, 1))
+                .Select(item => ScoreColdStartCase(normalized, features, item))
+                .Where(IsRepeatedColdStartMatch)
+                .ToList();
+            var count = matches.Count + 1;
+            var windowCount = Mathf.Min(recentWindowMatches.Count + 1, RepeatedColdStartWindowSize);
+            var currentFailed = !IsColdStartTargetMatch(currentStatus, currentRecognizedFamily, family);
+            var failureCount = matches.Count(match => match.record.failedForTarget) + (currentFailed ? 1 : 0);
+            var similarity = Average(matches
+                .OrderByDescending(match => match.score)
+                .Take(3)
+                .Select(match => match.score)
+                .ToList());
+            var contrastScore = coldStartCases
+                .Where(item => item.family != family)
+                .Select(item => ScoreColdStartCase(normalized, features, item).score)
+                .DefaultIfEmpty(0f)
+                .Max();
+            var contrastPenalty = CalculateContrastPenalty(similarity, contrastScore);
+            var active = count >= RepeatedColdStartCaseThreshold ||
+                windowCount >= RepeatedColdStartWindowMatchThreshold;
+            var extremeCorrection = active &&
+                count >= RepeatedColdStartFailureRepeatThreshold &&
+                failureCount >= RepeatedColdStartFailureAcceptThreshold;
+
+            if (!active)
+            {
+                return new RepeatedColdStartCase(
+                    false,
+                    count,
+                    windowCount,
+                    failureCount,
+                    similarity,
+                    0f,
+                    0f,
+                    contrastScore,
+                    contrastPenalty,
+                    false);
+            }
+
+            var excessRepeats = Mathf.Min(Mathf.Max(count, windowCount) - RepeatedColdStartCaseThreshold, 3);
+            var liftBase = extremeCorrection ? 0.09f : 0.025f;
+            var lift = Clamp(
+                liftBase + excessRepeats * 0.018f + Mathf.Max(0f, similarity - 0.82f) * 0.14f,
+                0f,
+                extremeCorrection ? ExtremeColdStartMaximumLift : RepeatedColdStartMaximumLift);
+            var thresholdBiasBase = extremeCorrection ? 0.055f : 0.018f;
+            var thresholdBias = Clamp(
+                thresholdBiasBase + excessRepeats * 0.012f,
+                0f,
+                extremeCorrection ? ExtremeColdStartMaximumThresholdBias : RepeatedColdStartMaximumThresholdBias);
+            return new RepeatedColdStartCase(
+                true,
+                count,
+                windowCount,
+                failureCount,
+                similarity,
+                lift,
+                thresholdBias,
+                contrastScore,
+                contrastPenalty,
+                extremeCorrection);
+        }
+
+        private static ColdStartCaseSimilarity ScoreColdStartCase(
+            IReadOnlyList<Vector2> normalized,
+            MagicShapeFeatureVector features,
+            TutorialColdStartCaseRecord record)
+        {
+            var cloud = Clamp(1f - PointCloudDistance(normalized, record.normalizedCloud) / 0.72f, 0f, 1f);
+            var feature = ScoreFeatureSimilarity(features, record.features);
+            return new ColdStartCaseSimilarity(record, cloud, feature, Clamp(cloud * 0.72f + feature * 0.28f, 0f, 1f));
+        }
+
+        private static bool IsRepeatedColdStartMatch(ColdStartCaseSimilarity similarity)
+        {
+            return similarity.cloud >= RepeatedColdStartCloudSimilarity &&
+                similarity.feature >= RepeatedColdStartFeatureSimilarity;
+        }
+
+        private static bool IsColdStartTargetMatch(
+            RecognitionStatus status,
+            SpellFamily? recognizedFamily,
+            SpellFamily targetFamily)
+        {
+            return status == RecognitionStatus.Recognized && recognizedFamily == targetFamily;
+        }
+
+        private static float CalculateContrastPenalty(float targetSimilarity, float contrastScore)
+        {
+            if (contrastScore < ColdStartContrastSimilarityThreshold)
+            {
+                return 0f;
+            }
+
+            var contrastLead = contrastScore - Mathf.Max(targetSimilarity, 0.65f);
+            return Clamp((contrastLead + 0.08f) * 0.5f, 0f, ColdStartContrastMaximumPenalty);
+        }
+
+        private void AppendColdStartCase(TutorialColdStartCaseRecord attempt)
+        {
+            coldStartCases.Add(attempt);
+            while (coldStartCases.Count > MaxColdStartCases)
+            {
+                coldStartCases.RemoveAt(0);
+            }
         }
 
         private void Append(TutorialCaptureRecord capture)
@@ -705,6 +1004,62 @@ namespace MagicExamHall
         private static float Round(float value)
         {
             return Mathf.Round(value * 10000f) / 10000f;
+        }
+
+        private readonly struct RepeatedColdStartCase
+        {
+            public static readonly RepeatedColdStartCase None = new(false, 1, 1, 0, 0f, 0f, 0f, 0f, 0f, false);
+
+            public readonly bool active;
+            public readonly int count;
+            public readonly int windowCount;
+            public readonly int failureCount;
+            public readonly float similarity;
+            public readonly float lift;
+            public readonly float thresholdBias;
+            public readonly float contrastScore;
+            public readonly float contrastPenalty;
+            public readonly bool extremeCorrection;
+
+            public RepeatedColdStartCase(
+                bool active,
+                int count,
+                int windowCount,
+                int failureCount,
+                float similarity,
+                float lift,
+                float thresholdBias,
+                float contrastScore,
+                float contrastPenalty,
+                bool extremeCorrection)
+            {
+                this.active = active;
+                this.count = count;
+                this.windowCount = windowCount;
+                this.failureCount = failureCount;
+                this.similarity = similarity;
+                this.lift = lift;
+                this.thresholdBias = thresholdBias;
+                this.contrastScore = contrastScore;
+                this.contrastPenalty = contrastPenalty;
+                this.extremeCorrection = extremeCorrection;
+            }
+        }
+
+        private readonly struct ColdStartCaseSimilarity
+        {
+            public readonly TutorialColdStartCaseRecord record;
+            public readonly float cloud;
+            public readonly float feature;
+            public readonly float score;
+
+            public ColdStartCaseSimilarity(TutorialColdStartCaseRecord record, float cloud, float feature, float score)
+            {
+                this.record = record;
+                this.cloud = cloud;
+                this.feature = feature;
+                this.score = score;
+            }
         }
 
         private readonly struct NormalizedStrokeBundle

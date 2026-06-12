@@ -92,6 +92,8 @@ namespace MagicExamHall
         public bool customEventBlocks;
         public bool customEventBlocked;
         public string customEventBlockedBy = "";
+        public CustomShapeEventPersistence customEventPersistence = CustomShapeEventPersistence.Timed;
+        public float customEventLifetimeSeconds;
         public Vector2 customEventOrigin;
         public Vector2 customEventDirection = Vector2.right;
         public Vector2 customEventStartPoint;
@@ -130,6 +132,11 @@ namespace MagicExamHall
         private const float StrongIntentMaximumScoreLift = 0.16f;
         private const float StrongIntentAcceptThreshold = 0.66f;
         private const float StrongIntentHoldThreshold = 0.54f;
+        private const float WaterColdStartMinimumSimilarity = 0.58f;
+        private const float WaterColdStartAcceptThreshold = 0.70f;
+        private const float WaterColdStartHoldThreshold = 0.56f;
+        private const float WaterColdStartClosureAcceptThreshold = 0.55f;
+        private const float WaterColdStartMarginThreshold = 0.035f;
         private const float DefaultClosureAcceptThreshold = 0.62f;
         private const float WaterClosureAcceptThreshold = 0.50f;
         private const float DefaultIntentClosureAcceptThreshold = 0.50f;
@@ -137,6 +144,8 @@ namespace MagicExamHall
         private const float DefaultClosureHintThreshold = 0.72f;
         private const float WaterClosureHintThreshold = 0.58f;
         private const float WaterClosureScoringFloor = 0.70f;
+        private const float WaterSingleStrokeLoopBonus = 0.035f;
+        private const float EarthSmoothLoopPenalty = 0.72f;
         private static readonly IReadOnlyList<SpellTemplate> Templates = BuildTemplates();
 
         public static SpellResult Recognize(IReadOnlyList<IReadOnlyList<StrokeSample>> rawStrokes, SpellFamily targetFamily)
@@ -193,6 +202,7 @@ namespace MagicExamHall
             var parallelism = EstimateParallelism(drawable);
             var windSpacing = EstimateWindSpacingBalance(drawable);
             var status = ResolveTargetStatus(targetFamily, adjustedTarget, targetMargin, quality, drawable.Count, parallelism, windSpacing);
+            status = ApplyColdStartWaterGuard(targetFamily, intent, status, adjustedTarget.score, targetMargin, quality);
             SpellFamily? recognized = status == RecognitionStatus.Recognized ? targetFamily : null;
             var success = recognized.HasValue && recognized.Value == targetFamily;
 
@@ -349,17 +359,56 @@ namespace MagicExamHall
                 return RecognitionStatus.Incomplete;
             }
 
-            if (adjustedScore >= StrongIntentAcceptThreshold && rawSimilarity >= StrongIntentMinimumSimilarity)
+            var acceptThreshold = targetFamily == SpellFamily.Water ? WaterColdStartAcceptThreshold : StrongIntentAcceptThreshold;
+            var holdThreshold = targetFamily == SpellFamily.Water ? WaterColdStartHoldThreshold : StrongIntentHoldThreshold;
+            var minimumSimilarity = targetFamily == SpellFamily.Water ? WaterColdStartMinimumSimilarity : StrongIntentMinimumSimilarity;
+            if (targetFamily == SpellFamily.Water && quality.closure < WaterColdStartClosureAcceptThreshold)
+            {
+                return RecognitionStatus.Incomplete;
+            }
+
+            if (adjustedScore >= acceptThreshold && rawSimilarity >= minimumSimilarity)
             {
                 return RecognitionStatus.Recognized;
             }
 
-            if (adjustedScore >= StrongIntentHoldThreshold)
+            if (adjustedScore >= holdThreshold)
             {
                 return RecognitionStatus.Ambiguous;
             }
 
             return RecognitionStatus.Invalid;
+        }
+
+        private static RecognitionStatus ApplyColdStartWaterGuard(
+            SpellFamily targetFamily,
+            BaseRecognitionIntent intent,
+            RecognitionStatus status,
+            float score,
+            float margin,
+            QualityVector quality)
+        {
+            if (targetFamily != SpellFamily.Water ||
+                status != RecognitionStatus.Recognized ||
+                intent == null ||
+                !intent.IsActive ||
+                !intent.strongConsiderationEnabled ||
+                intent.tutorialCaptureCount > 0)
+            {
+                return status;
+            }
+
+            if (quality.closure < WaterColdStartClosureAcceptThreshold)
+            {
+                return RecognitionStatus.Incomplete;
+            }
+
+            if (score < WaterColdStartAcceptThreshold || margin < WaterColdStartMarginThreshold)
+            {
+                return score >= WaterColdStartHoldThreshold ? RecognitionStatus.Ambiguous : RecognitionStatus.Invalid;
+            }
+
+            return status;
         }
 
         private static string BuildIntentReason(
@@ -446,6 +495,10 @@ namespace MagicExamHall
             var circularity = EstimateCircularity(normalized.cloud);
             var parallel = EstimateParallelism(strokes);
             var fill = EstimateFillRatio(strokes);
+            var smoothSingleLoop = strokes.Count == 1 &&
+                                   quality.closure >= WaterIntentClosureAcceptThreshold &&
+                                   circularity >= 0.64f &&
+                                   cornerCount <= 1;
             var score = templateScore;
 
             switch (template.family)
@@ -459,12 +512,20 @@ namespace MagicExamHall
                     break;
                 case SpellFamily.Earth:
                     score = templateScore * 0.40f + quality.closure * 0.23f + corners * 0.20f + Closeness(fill, 0.68f, 0.24f) * 0.09f + strokeScore * 0.08f;
+                    if (smoothSingleLoop)
+                    {
+                        score *= EarthSmoothLoopPenalty;
+                    }
                     break;
                 case SpellFamily.Fire:
                     score = templateScore * 0.42f + quality.closure * 0.24f + corners * 0.21f + Closeness(fill, 0.5f, 0.18f) * 0.07f + strokeScore * 0.06f;
                     break;
                 case SpellFamily.Water:
-                    score = templateScore * 0.48f + ClosureScoreFor(template.family, quality.closure) * 0.19f + circularity * 0.22f + quality.smoothness * 0.11f;
+                    score = templateScore * 0.44f + ClosureScoreFor(template.family, quality.closure) * 0.18f + circularity * 0.27f + quality.smoothness * 0.11f;
+                    if (smoothSingleLoop)
+                    {
+                        score += WaterSingleStrokeLoopBonus * Mathf.Min(circularity, quality.smoothness);
+                    }
                     break;
                 case SpellFamily.Life:
                     score = templateScore * 0.36f + ExpectedEndpointScore(strokes) * 0.28f + openness * 0.18f + strokeScore * 0.10f + Closeness(fill, 0.16f, 0.20f) * 0.08f;

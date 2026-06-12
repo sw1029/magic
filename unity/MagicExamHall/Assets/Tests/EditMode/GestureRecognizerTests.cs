@@ -99,6 +99,29 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void PlayerSpriteLibraryReloadsDestroyedCachedFrames()
+        {
+            try
+            {
+                PlayerSpriteLibrary.ResetCache();
+                var firstSet = PlayerSpriteLibrary.Load(new Color(0.95f, 0.92f, 0.78f), new Color(0.28f, 0.62f, 0.96f));
+                var firstFrame = firstSet.GetFrame(PlayerAnimationState.Idle, PlayerFacing.Down, 0);
+                UnityEngine.Object.DestroyImmediate(firstFrame);
+
+                var reloaded = PlayerSpriteLibrary.Load(new Color(0.95f, 0.92f, 0.78f), new Color(0.28f, 0.62f, 0.96f));
+                var reloadedFrame = reloaded.GetFrame(PlayerAnimationState.Idle, PlayerFacing.Down, 0);
+
+                Assert.That(reloadedFrame, Is.Not.Null);
+                Assert.That(reloadedFrame.rect.width, Is.EqualTo(PlayerSpriteLibrary.FrameWidth));
+                Assert.That(reloadedFrame.rect.height, Is.EqualTo(PlayerSpriteLibrary.FrameHeight));
+            }
+            finally
+            {
+                PlayerSpriteLibrary.ResetCache();
+            }
+        }
+
+        [Test]
         public void PixelSpriteViewAppliesRuntimeTint()
         {
             var body = new GameObject("Tinted Pulse Test");
@@ -207,6 +230,120 @@ namespace MagicExamHall.Tests
                 $"closure={result.quality.closure:0.000}, confidence={result.confidence:0.000}, reason={result.feedbackReason}");
             Assert.That(result.recognizedFamily, Is.EqualTo(SpellFamily.Water));
             Assert.That(result.success, Is.True);
+        }
+
+        [Test]
+        public void ColdStartWaterIntentAcceptsSlightlyGappedCircle()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeEllipseArc(25f, 360f, 64, new Vector2(220f, 220f), 170f, 150f, 0f)
+            };
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Water,
+                goalId = "puddle",
+                source = "near_goal_symbol",
+                radius = 2f,
+                strength = 1f,
+                tutorialCaptureCount = 0,
+                strongConsiderationEnabled = true
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Water, intent);
+
+            Assert.That(
+                result.status,
+                Is.EqualTo(RecognitionStatus.Recognized),
+                $"closure={result.quality.closure:0.000}, confidence={result.confidence:0.000}, reason={result.feedbackReason}");
+            Assert.That(result.recognizedFamily, Is.EqualTo(SpellFamily.Water));
+        }
+
+        [Test]
+        public void ColdStartWaterIntentKeepsWideGapIncomplete()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeEllipseArc(70f, 360f, 56, new Vector2(220f, 220f), 170f, 150f, 0f)
+            };
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Water,
+                goalId = "puddle",
+                source = "near_goal_symbol",
+                radius = 2f,
+                strength = 1f,
+                tutorialCaptureCount = 0,
+                strongConsiderationEnabled = true
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Water, intent);
+
+            Assert.That(result.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.recognizedFamily, Is.Null);
+        }
+
+        [Test]
+        public void WaterLikeOvalLoopDoesNotResolveAsEarth()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeEllipseArc(-8f, 355f, 56, new Vector2(220f, 220f), 180f, 105f, 0f)
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes);
+
+            Assert.That(
+                result.spell.recognizedFamily,
+                Is.Not.EqualTo(SpellFamily.Earth),
+                $"target={result.spell.targetFamily}, status={result.spell.status}, confidence={result.spell.confidence:0.000}, reason={result.spell.feedbackReason}");
+        }
+
+        [Test]
+        public void ColdStartWaterIntentKeepsOvalWaterInputOnWater()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeEllipseArc(-8f, 355f, 56, new Vector2(220f, 220f), 180f, 105f, 0f)
+            };
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Water,
+                goalId = "puddle",
+                source = "near_goal_symbol",
+                radius = 2f,
+                strength = 1f,
+                tutorialCaptureCount = 0,
+                strongConsiderationEnabled = true
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes, intent);
+
+            Assert.That(
+                result.spell.recognizedFamily,
+                Is.EqualTo(SpellFamily.Water),
+                $"target={result.spell.targetFamily}, status={result.spell.status}, confidence={result.spell.confidence:0.000}, preIntent={result.spell.preIntentFamily}");
+        }
+
+        [Test]
+        public void ColdStartWaterIntentStillAcceptsClosedCanonicalCircle()
+        {
+            var strokes = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Water, timeStep: 0.03f);
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Water,
+                goalId = "puddle",
+                source = "near_goal_symbol",
+                radius = 2f,
+                strength = 1f,
+                tutorialCaptureCount = 0,
+                strongConsiderationEnabled = true
+            };
+
+            var result = GestureRecognizer.Recognize(strokes, SpellFamily.Water, intent);
+
+            Assert.That(result.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.recognizedFamily, Is.EqualTo(SpellFamily.Water));
         }
 
         [Test]

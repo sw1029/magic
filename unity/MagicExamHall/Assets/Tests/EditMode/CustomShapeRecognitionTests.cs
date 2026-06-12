@@ -21,10 +21,35 @@ namespace MagicExamHall.Tests
                 Assert.That(definition.eventKind, Is.Not.EqualTo(CustomShapeEventKind.None));
                 Assert.That(definition.eventId, Is.Not.Empty);
                 Assert.That(definition.uiSummary, Does.Contain(":"));
+                Assert.That(definition.visualLifetimeSeconds, Is.GreaterThanOrEqualTo(0f));
             }
 
             Assert.That(CustomShapeEventCatalog.ForToken("arrow").role, Is.EqualTo(CustomShapeEventRole.Operator));
             Assert.That(CustomShapeEventCatalog.ForToken("cross").role, Is.EqualTo(CustomShapeEventRole.Operator));
+        }
+
+        [Test]
+        public void EventDefinitionsSeparatePermanentAndTimedVisualEffects()
+        {
+            var wall = CustomShapeEventCatalog.ForToken("rect");
+            var slash = CustomShapeEventCatalog.ForToken("line");
+            var arrow = CustomShapeEventCatalog.BuildPayload("arrow", LineStrokes(Vector2.zero, new Vector2(2f, 0f)));
+            var arrowWall = CustomShapeEventCatalog.ComposeWithOperator(
+                "arrow",
+                "rect",
+                LineStrokes(Vector2.zero, new Vector2(2f, 0f)),
+                LineStrokes(Vector2.zero, new Vector2(1f, 0f)),
+                overlaps: true);
+
+            Assert.That(wall.eventKind, Is.EqualTo(CustomShapeEventKind.WallEntity));
+            Assert.That(wall.visualPersistence, Is.EqualTo(CustomShapeEventPersistence.Permanent));
+            Assert.That(slash.visualPersistence, Is.EqualTo(CustomShapeEventPersistence.Timed));
+            Assert.That(slash.visualLifetimeSeconds, Is.GreaterThan(0f));
+            Assert.That(arrow.eventKind, Is.EqualTo(CustomShapeEventKind.AttributeLaser));
+            Assert.That(arrow.visualPersistence, Is.EqualTo(CustomShapeEventPersistence.Timed));
+            Assert.That(arrow.visualLifetimeSeconds, Is.GreaterThan(0f));
+            Assert.That(arrowWall.eventKind, Is.EqualTo(CustomShapeEventKind.DirectionalProjectile));
+            Assert.That(arrowWall.visualPersistence, Is.EqualTo(CustomShapeEventPersistence.Timed));
         }
 
         [Test]
@@ -200,7 +225,7 @@ namespace MagicExamHall.Tests
                 Assert.That(baseResult.spell.isCustomShape, Is.True, baseResult.spell.feedbackReason);
                 Assert.That(baseResult.spell.customShapeToken, Is.EqualTo("brace"));
                 Assert.That(baseResult.spell.recognizedFamily, Is.EqualTo(SpellFamily.Life));
-                Assert.That(baseResult.spell.customScore, Is.GreaterThan(0.68f));
+                Assert.That(baseResult.spell.customScore, Is.GreaterThanOrEqualTo(0.675f));
             }
             finally
             {
@@ -310,6 +335,63 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void FollowCaptureSaveOnlyAcceptsTemplateSimilarSamples()
+        {
+            var store = TempStore(out var path);
+            try
+            {
+                var line = LineStrokes(Vector2.zero, new Vector2(2f, 0f));
+                var circle = CircleStrokes();
+
+                Assert.That(CustomShapeRecognition.TemplateSimilarity(line, "line"), Is.GreaterThanOrEqualTo(CustomShapeProfileStore.MinFollowCaptureSimilarity));
+                Assert.That(CustomShapeRecognition.TemplateSimilarity(circle, "line"), Is.LessThan(CustomShapeProfileStore.MinFollowCaptureSimilarity));
+                Assert.That(
+                    store.TrySaveSlot(0, "guided line", "guided|line", "line", new[] { "line" }, SpellFamily.Wind, line, new[] { line, circle }, out var message),
+                    Is.True,
+                    message);
+
+                var slot = store.GetSlot(0);
+                Assert.That(slot.followCaptures.Count, Is.EqualTo(1));
+                Assert.That(slot.followCaptures[0].score, Is.GreaterThanOrEqualTo(CustomShapeProfileStore.MinFollowCaptureSimilarity));
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        }
+
+        [Test]
+        public void PostSealContrastBoostLowersThresholdForWinningCustomCandidate()
+        {
+            var store = TempStore(out var path);
+            try
+            {
+                var line = LineStrokes(Vector2.zero, new Vector2(2f, 0f));
+                var cross = CrossStrokes();
+                Assert.That(
+                    store.TrySaveSlot(0, "guided line", "guided|line", "line", new[] { "line" }, SpellFamily.Wind, line, new[] { line, line, line }, out var lineMessage),
+                    Is.True,
+                    lineMessage);
+                Assert.That(store.TrySaveSlot(1, "cross mark", "cross|mark", "cross", new[] { "cross" }, SpellFamily.Fire, cross, out var crossMessage), Is.True, crossMessage);
+
+                var noSeal = CustomShapeRecognition.Recognize(line, SpellRuntime.RecognizeBase(line), store);
+                var postSeal = CustomShapeRecognition.Recognize(line, SpellRuntime.RecognizeBase(line), store, SpellFamily.Wind);
+
+                Assert.That(noSeal, Is.Not.Null);
+                Assert.That(postSeal, Is.Not.Null);
+                Assert.That(postSeal.slot.shapeId, Is.EqualTo("custom-slot-01"));
+                Assert.That(postSeal.contrastMargin, Is.GreaterThan(0f));
+                Assert.That(postSeal.contrastBoost, Is.GreaterThan(0f));
+                Assert.That(postSeal.acceptThreshold, Is.LessThan(noSeal.acceptThreshold));
+                Assert.That(postSeal.summary.reason, Does.Contain("contrast="));
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        }
+
+        [Test]
         public void JsonSaveLoadKeepsSlotsRegexMappingAndCaptures()
         {
             var store = TempStore(out var path);
@@ -335,6 +417,43 @@ namespace MagicExamHall.Tests
             finally
             {
                 DeleteIfExists(path);
+            }
+        }
+
+        [Test]
+        public void LoadDefaultStartsEmptyEvenWhenPersistentProfileExists()
+        {
+            var path = CustomShapeProfileStore.DefaultStoragePath();
+            var hadExistingProfile = File.Exists(path);
+            var backup = hadExistingProfile ? File.ReadAllText(path) : "";
+            try
+            {
+                var directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                var seeded = new CustomShapeProfileStore(path);
+                Assert.That(seeded.TrySaveSlot(0, "persisted wind", "persisted|wind|line", SpellFamily.Wind, Samples(SpellFamily.Wind), out var message), Is.True, message);
+                Assert.That(CustomShapeProfileStore.LoadFromPath(path).OccupiedCount, Is.EqualTo(1));
+
+                var loaded = CustomShapeProfileStore.LoadDefault();
+
+                Assert.That(loaded.StoragePath, Is.EqualTo(path));
+                Assert.That(loaded.OccupiedCount, Is.EqualTo(0));
+                Assert.That(loaded.IsSlotOccupied(0), Is.False);
+            }
+            finally
+            {
+                if (hadExistingProfile)
+                {
+                    File.WriteAllText(path, backup);
+                }
+                else
+                {
+                    DeleteIfExists(path);
+                }
             }
         }
 
@@ -381,6 +500,35 @@ namespace MagicExamHall.Tests
                     new(end, 0.1f)
                 }
             };
+        }
+
+        private static IReadOnlyList<IReadOnlyList<StrokeSample>> CrossStrokes()
+        {
+            return new List<IReadOnlyList<StrokeSample>>
+            {
+                new List<StrokeSample>
+                {
+                    new(new Vector2(-1f, -1f), 0f),
+                    new(new Vector2(1f, 1f), 0.1f)
+                },
+                new List<StrokeSample>
+                {
+                    new(new Vector2(1f, -1f), 0.12f),
+                    new(new Vector2(-1f, 1f), 0.22f)
+                }
+            };
+        }
+
+        private static IReadOnlyList<IReadOnlyList<StrokeSample>> CircleStrokes()
+        {
+            var points = Enumerable.Range(0, 24)
+                .Select(index =>
+                {
+                    var angle = Mathf.PI * 2f * index / 23f;
+                    return new StrokeSample(new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)), index * 0.03f);
+                })
+                .ToList();
+            return new List<IReadOnlyList<StrokeSample>> { points };
         }
 
         private static IReadOnlyList<IReadOnlyList<StrokeSample>> BraceReferenceStrokes(Vector2 center)

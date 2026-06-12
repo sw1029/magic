@@ -30,9 +30,12 @@ namespace MagicExamHall
         private InputField labelInput = null!;
         private Text shapeEventLabel = null!;
         private Text editorStatus = null!;
+        private Text notebookStatus = null!;
+        private Text notebookCountLabel = null!;
         private CustomShapeCapturePad capturePad = null!;
         private Image captureTemplatePreview = null!;
         private Image captureStrokePreview = null!;
+        private readonly List<IReadOnlyList<IReadOnlyList<StrokeSample>>> editorFollowCaptures = new();
         private int selectedSlotIndex = -1;
         private SpellFamily editorFamily = SpellFamily.Wind;
         private string editorShapeToken = "line";
@@ -64,6 +67,8 @@ namespace MagicExamHall
         public bool IsPageOpen => modalRoot != null && modalRoot.gameObject.activeSelf;
         public bool IsBubbleVisible => bubble != null && bubble.gameObject.activeSelf;
         public bool IsEditorOpen => editorRoot != null;
+        public int EditorFollowCaptureCountForTests => editorFollowCaptures.Count;
+        public string EditorNotebookStatusForTests => notebookStatus != null ? notebookStatus.text : "";
         public bool BlocksGameplayInput => IsPageOpen;
         public int SlotCount => CustomShapeProfileStore.SlotCount;
 
@@ -191,9 +196,29 @@ namespace MagicExamHall
             return deleted;
         }
 
+        public bool AddNotebookCaptureForTests()
+        {
+            return TryAddNotebookCapture();
+        }
+
         public void RefreshFromStoreForExternalChange()
         {
             RefreshSlots();
+        }
+
+        public void CloseForFloorGate()
+        {
+            HideBubble();
+            CloseEditor();
+            if (penPopup != null)
+            {
+                penPopup.gameObject.SetActive(false);
+            }
+
+            if (modalRoot != null)
+            {
+                modalRoot.gameObject.SetActive(false);
+            }
         }
 
         private void TogglePenPopup()
@@ -430,6 +455,7 @@ namespace MagicExamHall
         private void OpenEditor(int slotIndex)
         {
             CloseEditor();
+            editorFollowCaptures.Clear();
             var slot = store.GetSlot(slotIndex);
             editorFamily = slot.mappedFamily;
             editorShapeToken = string.IsNullOrWhiteSpace(slot.shapeToken) ? "line" : slot.shapeToken;
@@ -450,6 +476,7 @@ namespace MagicExamHall
             CreateButton("Close Custom Shape Editor", editorRoot, "X", 15, new Vector2(-16f, -9f), new Vector2(38f, 32f), UiAnchor.TopRight, CloseEditor);
             labelInput = CreateInputField("Custom Shape Label Input", editorRoot, "이름", new Vector2(22f, -70f), new Vector2(270f, 42f), UiAnchor.TopLeft);
             BuildShapePalette(editorRoot);
+            BuildNotebookPanel(editorRoot);
 
             var padRoot = CreatePanel("Custom Shape Capture Panel", editorRoot, new Vector2(-42f, -74f), CapturePanelSize, UiAnchor.TopRight, new Color(0.92f, 0.94f, 0.9f, 1f));
             captureTemplatePreview = CreateShapeIcon("Custom Shape Capture Template Preview", padRoot, editorShapeToken, Vector2.zero, new Vector2(250f, 210f), UiAnchor.Center, new Color(0.12f, 0.13f, 0.12f, 0.34f), 6f);
@@ -532,9 +559,24 @@ namespace MagicExamHall
             scroll.verticalNormalizedPosition = 1f;
         }
 
+        private void BuildNotebookPanel(Transform parent)
+        {
+            var section = CreatePanel("Custom Shape Notebook", parent, new Vector2(18f, -342f), new Vector2(294f, 96f), UiAnchor.TopLeft, new Color(0.043f, 0.054f, 0.074f, 0.985f));
+            AddSimpleBorder(section, new Color(0.20f, 0.31f, 0.42f, 0.86f), 1.5f);
+            CreateText("Custom Shape Notebook Label", section, "메모장", 15, FontStyle.Bold, new Vector2(10f, -8f), new Vector2(96f, 24f), UiAnchor.TopLeft);
+            notebookCountLabel = CreateText("Custom Shape Notebook Count", section, "", 12, FontStyle.Bold, new Vector2(-12f, -9f), new Vector2(110f, 24f), UiAnchor.TopRight);
+            notebookCountLabel.alignment = TextAnchor.MiddleRight;
+            notebookCountLabel.color = new Color(0.76f, 0.92f, 0.98f, 0.92f);
+            notebookStatus = CreateText("Custom Shape Notebook Status", section, "지정 도형 따라그리기만 기록해요.", 12, FontStyle.Normal, new Vector2(10f, -34f), new Vector2(172f, 46f), UiAnchor.TopLeft);
+            notebookStatus.color = new Color(0.86f, 0.90f, 0.92f, 0.92f);
+            CreateButton("Custom Shape Notebook Add", section, "따라그리기 저장", 12, new Vector2(-10f, 16f), new Vector2(96f, 32f), UiAnchor.BottomRight, () => TryAddNotebookCapture());
+            UpdateNotebookLabels();
+        }
+
         private void SelectShapeToken(string shapeToken)
         {
             editorShapeToken = CustomShapeProfileStore.HelperTokens.Contains(shapeToken) ? shapeToken : "line";
+            editorFollowCaptures.Clear();
             capturePad?.SetTemplate(editorShapeToken);
             if (captureTemplatePreview != null)
             {
@@ -549,6 +591,7 @@ namespace MagicExamHall
             }
 
             UpdateShapeSelection();
+            UpdateNotebookLabels("도형이 바뀌어서 메모를 비웠어요.");
         }
 
         private void UpdateShapeSelection()
@@ -569,6 +612,62 @@ namespace MagicExamHall
             {
                 shapeEventLabel.text = CustomShapeEventCatalog.UiSummary(editorShapeToken);
             }
+        }
+
+        private bool TryAddNotebookCapture()
+        {
+            if (capturePad == null || !capturePad.HasPlacedShapes)
+            {
+                UpdateNotebookLabels("먼저 지정 도형을 따라 그려줘요.");
+                return false;
+            }
+
+            var strokes = capturePad.CaptureStrokes();
+            var similarity = CustomShapeRecognition.TemplateSimilarity(strokes, editorShapeToken);
+            if (similarity < CustomShapeProfileStore.MinFollowCaptureSimilarity)
+            {
+                UpdateNotebookLabels($"유사도 {Percent(similarity)}. 조금 더 비슷하게 그려줘요.");
+                return false;
+            }
+
+            editorFollowCaptures.Add(CloneStrokes(strokes));
+            while (editorFollowCaptures.Count > CustomShapeProfileStore.MaxFollowCapturesPerSlot)
+            {
+                editorFollowCaptures.RemoveAt(0);
+            }
+
+            UpdateNotebookLabels($"좋아요. 유사도 {Percent(similarity)}로 기록했어요.");
+            return true;
+        }
+
+        private void UpdateNotebookLabels(string status = "")
+        {
+            if (notebookCountLabel != null)
+            {
+                notebookCountLabel.text = $"{editorFollowCaptures.Count}개";
+            }
+
+            if (notebookStatus != null)
+            {
+                notebookStatus.text = string.IsNullOrWhiteSpace(status)
+                    ? "지정 도형 따라그리기만 기록해요."
+                    : status;
+            }
+        }
+
+        private static string Percent(float value)
+        {
+            return $"{Mathf.RoundToInt(Mathf.Clamp01(value) * 100f)}%";
+        }
+
+        private static IReadOnlyList<IReadOnlyList<StrokeSample>> CloneStrokes(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)
+        {
+            return (strokes ?? Array.Empty<IReadOnlyList<StrokeSample>>())
+                .Select(stroke => (IReadOnlyList<StrokeSample>)stroke
+                    .Select(sample => new StrokeSample(sample.position, sample.time))
+                    .ToList())
+                .Where(stroke => stroke.Count >= 2)
+                .ToList();
         }
 
         private void UpdateCaptureStrokePreview(IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)
@@ -613,7 +712,7 @@ namespace MagicExamHall
 
             var strokes = capturePad.CaptureStrokes();
             var regexPattern = CustomShapeProfileStore.BuildGeneratedRegex(labelInput.text, editorShapeToken);
-            if (store.TrySaveSlot(selectedSlotIndex, labelInput.text, regexPattern, editorShapeToken, capturePad.CaptureShapeTokens(), editorFamily, strokes, out var message))
+            if (store.TrySaveSlot(selectedSlotIndex, labelInput.text, regexPattern, editorShapeToken, capturePad.CaptureShapeTokens(), editorFamily, strokes, editorFollowCaptures, out var message))
             {
                 CloseEditor();
                 RefreshSlots();
@@ -632,6 +731,9 @@ namespace MagicExamHall
                 capturePad = null!;
                 captureTemplatePreview = null!;
                 captureStrokePreview = null!;
+                notebookStatus = null!;
+                notebookCountLabel = null!;
+                editorFollowCaptures.Clear();
             }
 
             if (editorShadow != null)

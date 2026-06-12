@@ -61,7 +61,7 @@
 
 - [x] 룬·시전 선·seal이 발광 연출을 가진다 (URP 불요 — additive halo로 충분, G-1).
 - [x] 플레이어가 4방향 이동 + idle/cast 애니메이션을 가진다 (외부 팩 허용, G-2 — 절차 생성 프레임 기본, PNG 드롭 시 자동 교체).
-- [ ] BGM 최소 1트랙(`ambient_tower`)이 실제 음원이고 라이선스가 문서화돼 있다 (G-3 — 파일 우선 로더 준비됨, 음원 소싱만 남음).
+- [x] BGM 최소 1트랙(`ambient_tower`)이 실제 음원이고 라이선스가 문서화돼 있다 (G-3 — CC0 'Loopable Dungeon Ambience' 적용, `docs/asset-licenses/audio.md` 참조, 2026-06-12).
 - [x] 1회차 완주에서 탑의 서사 암시가 최소 3곳(층 진입 노트·멘토 대사·엔딩 한 줄)에서 보인다 (G-4).
 - [x] 필수 목표 외 숨은 발견 5개 이상이 codex에 기록된다 (G-5 — 속성 반응 10종이 첫 발생 시 관찰문으로 기록, 발견 탭에 n/10 진행도).
 
@@ -335,10 +335,10 @@ ART_OVERHAUL Phase 2-2의 축소 실행판. 자체 제작하지 않고 외부 �
 
 SFX는 절차 생성을 유지한다. BGM만 실음원으로 바꾼다 — "데모 느낌"의 최대 지분.
 
-1. [ ] `ambient_tower` 대체: CC0 다크 판타지 ambient 루프 1트랙 소싱 (OpenGameArt CC0 / freesound CC0 / Kenney Music). 후보 2~3개를 팀 청취로 결정.
+1. [x] `ambient_tower` 대체: CC0 'Loopable Dungeon Ambience'(JaggedStone, OpenGameArt) 적용 (2026-06-12). 대안 후보 2종은 `docs/asset-licenses/audio.md`에 기록 — 팀 청취 후 교체 가능.
 2. [x] `AudioDirector`에 파일 우선 로더 추가 — BGM(`Resources/Bgm/<name>`)과 SFX 12종(`Resources/Sfx/<name>`) 모두 파일 존재 시 우선, 없으면 절차 생성 폴백.
-3. [ ] `climax_seal`은 절차 생성 유지 가능. 단 실음원 트랙에 톤을 맞춰 키·템포 재조정. (절차 BGM 자체는 주파수 양자화로 루프 클릭 제거 + 2코드 패드로 개선됨)
-4. [ ] 라이선스 → `docs/asset-licenses/audio.md`, CREDITS 갱신 (음원 소싱 시).
+3. [ ] `climax_seal`은 절차 생성 유지 가능. 단 실음원 트랙에 톤을 맞춰 키·템포 재조정. (절차 BGM 자체는 주파수 양자화로 루프 클릭 제거 + 2코드 패드로 개선됨) — 실음원 적용 후 청취 확인 필요.
+4. [x] 라이선스 → `docs/asset-licenses/audio.md`, CREDITS 갱신 (2026-06-12).
 
 완료 조건: 타이틀~3층에서 실음원 ambient가 루프 이음매 없이 재생. 볼륨 옵션 연동 유지.
 

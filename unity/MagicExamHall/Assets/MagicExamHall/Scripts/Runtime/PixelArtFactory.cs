@@ -13,6 +13,7 @@ namespace MagicExamHall
 
         private static readonly Dictionary<(PixelSpriteKind kind, int variantIndex), Sprite> ExternalCache = new();
         private static readonly HashSet<(PixelSpriteKind kind, int variantIndex)> ExternalMissCache = new();
+        private static readonly Dictionary<(PlayerAnimationState state, PlayerFacing facing, int frame), Sprite> ApprenticeFrameCache = new();
 
         /// <summary>
         /// Creates or loads a sprite for the given kind. If a PNG exists at
@@ -320,6 +321,7 @@ namespace MagicExamHall
         {
             ExternalCache.Clear();
             ExternalMissCache.Clear();
+            ApprenticeFrameCache.Clear();
         }
 
         private static IEnumerable<string> ExternalSpritePaths(PixelSpriteKind kind, int variantIndex)
@@ -357,6 +359,80 @@ namespace MagicExamHall
 
         private static void DrawPlayer(Texture2D texture, Color skin, Color robe)
         {
+            DrawApprentice(texture, skin, robe, PlayerFacing.Down, 0, 0, false, 0, 0);
+        }
+
+        /// <summary>
+        /// Builds one procedural animation frame for the apprentice using the
+        /// same silhouette as <see cref="PixelSpriteKind.Player"/>. Used by
+        /// <see cref="PlayerSpriteLibrary"/> when no external frame PNGs exist,
+        /// so the player still walks, breathes, and casts without assets.
+        /// Frames are cached per (state, facing, frame); the player colors are
+        /// constant so they are not part of the key.
+        /// </summary>
+        public static Sprite CreateApprenticeFrame(Color skin, Color robe, PlayerAnimationState state, PlayerFacing facing, int frame)
+        {
+            var key = (state, facing, frame);
+            if (ApprenticeFrameCache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            var leftBootLift = 0;
+            var rightBootLift = 0;
+            var armsRaised = false;
+            var sparkLevel = 0;
+            var headBob = 0;
+            switch (state)
+            {
+                case PlayerAnimationState.Idle:
+                    headBob = frame % 2;
+                    break;
+                case PlayerAnimationState.Walk:
+                    leftBootLift = frame % 4 == 1 ? 1 : 0;
+                    rightBootLift = frame % 4 == 3 ? 1 : 0;
+                    break;
+                case PlayerAnimationState.CastCharge:
+                    armsRaised = true;
+                    sparkLevel = Mathf.Clamp(frame, 0, 2);
+                    break;
+                case PlayerAnimationState.CastRelease:
+                    armsRaised = true;
+                    sparkLevel = frame == 0 ? 3 : 2;
+                    break;
+            }
+
+            var drawFacing = facing == PlayerFacing.Left ? PlayerFacing.Right : facing;
+            var texture = new Texture2D(Size, Size, TextureFormat.RGBA32, false)
+            {
+                name = $"Apprentice {state} {facing} {frame} Texture",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            Clear(texture);
+            DrawApprentice(texture, skin, robe, drawFacing, leftBootLift, rightBootLift, armsRaised, sparkLevel, headBob);
+            if (facing == PlayerFacing.Left)
+            {
+                MirrorHorizontally(texture);
+            }
+
+            texture.Apply();
+            var sprite = Sprite.Create(texture, new Rect(0, 0, Size, Size), new Vector2(0.5f, 0.5f), SpritePixelsPerUnit);
+            ApprenticeFrameCache[key] = sprite;
+            return sprite;
+        }
+
+        private static void DrawApprentice(
+            Texture2D texture,
+            Color skin,
+            Color robe,
+            PlayerFacing facing,
+            int leftBootLift,
+            int rightBootLift,
+            bool armsRaised,
+            int sparkLevel,
+            int headBob)
+        {
             var outline = new Color(0.035f, 0.032f, 0.045f, 1f);
             var robeDark = Shade(robe, 0.48f);
             var robeMid = Shade(robe, 0.78f);
@@ -371,25 +447,94 @@ namespace MagicExamHall
             Fill(texture, 10, 10, 12, 12, robeMid);
             Fill(texture, 12, 11, 8, 10, robe);
             Fill(texture, 15, 10, 2, 11, robeLight);
-            Fill(texture, 8, 12, 3, 8, outline);
-            Fill(texture, 21, 12, 3, 8, outline);
-            Fill(texture, 9, 13, 2, 6, robeDark);
-            Fill(texture, 21, 13, 2, 6, robeDark);
+
+            if (armsRaised)
+            {
+                // Both arms lifted toward the sky while casting.
+                Fill(texture, 7, 16, 3, 7, outline);
+                Fill(texture, 22, 16, 3, 7, outline);
+                Fill(texture, 8, 17, 1, 5, robeDark);
+                Fill(texture, 23, 17, 1, 5, robeDark);
+                Fill(texture, 7, 23, 2, 2, skin);
+                Fill(texture, 23, 23, 2, 2, skin);
+                if (sparkLevel > 0)
+                {
+                    var spark = sparkLevel >= 2 ? Color.white : gold;
+                    Set(texture, 8, 26, spark);
+                    Set(texture, 23, 26, spark);
+                    Set(texture, 7, 25, Mix(spark, robe, 0.4f));
+                    Set(texture, 24, 25, Mix(spark, robe, 0.4f));
+                    if (sparkLevel >= 3)
+                    {
+                        Set(texture, 9, 27, spark);
+                        Set(texture, 22, 27, spark);
+                        Set(texture, 16, 31, spark);
+                    }
+                }
+            }
+            else
+            {
+                Fill(texture, 8, 12, 3, 8, outline);
+                Fill(texture, 21, 12, 3, 8, outline);
+                Fill(texture, 9, 13, 2, 6, robeDark);
+                Fill(texture, 21, 13, 2, 6, robeDark);
+            }
+
             Set(texture, 14, 16, gold);
             Set(texture, 17, 16, gold);
-            Fill(texture, 12, 21, 8, 5, outline);
-            Fill(texture, 13, 22, 6, 4, skin);
-            Fill(texture, 12, 25, 8, 3, hair);
-            Fill(texture, 10, 27, 12, 2, outline);
-            Fill(texture, 11, 28, 10, 1, robeDark);
-            Fill(texture, 13, 29, 6, 2, robe);
-            Set(texture, 13, 23, outline);
-            Set(texture, 18, 23, outline);
-            Set(texture, 16, 21, Shade(skin, 0.75f));
-            Fill(texture, 11, 5, 4, 2, outline);
-            Fill(texture, 17, 5, 4, 2, outline);
-            Fill(texture, 12, 6, 3, 1, robeDark);
-            Fill(texture, 17, 6, 3, 1, robeDark);
+
+            // Head block by facing; headBob lowers it 1px for an idle breath.
+            var bob = -Mathf.Clamp(headBob, 0, 1);
+            Fill(texture, 12, 21 + bob, 8, 5, outline);
+            switch (facing)
+            {
+                case PlayerFacing.Up:
+                    // Back of the hood: no face, a center seam instead.
+                    Fill(texture, 13, 22 + bob, 6, 4, robeMid);
+                    Fill(texture, 15, 22 + bob, 2, 4, robeDark);
+                    Fill(texture, 12, 25 + bob, 8, 3, robeDark);
+                    break;
+                case PlayerFacing.Right:
+                    // Profile facing right: hair in the back, one eye.
+                    Fill(texture, 13, 22 + bob, 6, 4, skin);
+                    Fill(texture, 12, 22 + bob, 3, 4, hair);
+                    Fill(texture, 12, 25 + bob, 8, 3, hair);
+                    Set(texture, 18, 23 + bob, outline);
+                    Set(texture, 17, 21 + bob, Shade(skin, 0.75f));
+                    break;
+                default:
+                    Fill(texture, 13, 22 + bob, 6, 4, skin);
+                    Fill(texture, 12, 25 + bob, 8, 3, hair);
+                    Set(texture, 13, 23 + bob, outline);
+                    Set(texture, 18, 23 + bob, outline);
+                    Set(texture, 16, 21 + bob, Shade(skin, 0.75f));
+                    break;
+            }
+
+            Fill(texture, 10, 27 + bob, 12, 2, outline);
+            Fill(texture, 11, 28 + bob, 10, 1, robeDark);
+            Fill(texture, 13, 29 + bob, 6, 2, robe);
+
+            // Boots; a lifted boot reads as a stride frame.
+            Fill(texture, 11, 5 + leftBootLift, 4, 2, outline);
+            Fill(texture, 17, 5 + rightBootLift, 4, 2, outline);
+            Fill(texture, 12, 6 + leftBootLift, 3, 1, robeDark);
+            Fill(texture, 17, 6 + rightBootLift, 3, 1, robeDark);
+        }
+
+        private static void MirrorHorizontally(Texture2D texture)
+        {
+            for (var y = 0; y < texture.height; y++)
+            {
+                for (var x = 0; x < texture.width / 2; x++)
+                {
+                    var mirroredX = texture.width - 1 - x;
+                    var left = texture.GetPixel(x, y);
+                    var right = texture.GetPixel(mirroredX, y);
+                    texture.SetPixel(x, y, right);
+                    texture.SetPixel(mirroredX, y, left);
+                }
+            }
         }
 
         private static void DrawMentor(Texture2D texture, Color skin, Color robe, MentorExpression expression, int variant)

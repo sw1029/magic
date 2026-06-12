@@ -108,6 +108,9 @@ namespace MagicExamHall
 
         private ExamLogger logger = null!;
         private WorldDrawingController worldDrawing = null!;
+        private PlayerSpriteAnimator playerAnimator;
+        private readonly HashSet<ElementalReactionKind> discoveredReactions = new();
+        private bool practiceMode;
         private FloorController floorController = null!;
         private MagicNote magicNote = null!;
         private EndingReport endingReport = null!;
@@ -756,10 +759,25 @@ namespace MagicExamHall
             }
         }
 
+        public bool IsPracticeMode => practiceMode;
+        public int DiscoveredReactionCountForTests => discoveredReactions.Count;
+
         public void StartNewGame()
         {
             ResetRunState();
             LoadFloor(0);
+        }
+
+        /// <summary>
+        /// Post-ending sandbox: floor 1 with every reaction active but no
+        /// goal progression, floor advance, or save checkpoints.
+        /// </summary>
+        public void StartPracticeMode()
+        {
+            ResetRunState();
+            practiceMode = true;
+            LoadFloor(0);
+            ShowMagicNote("연습장: 목표 진행 없이 모든 문양과 반응을 자유롭게 실험할 수 있습니다.", MentorMood.Neutral);
         }
 
         public void LoadSavedProgress(int floorNumber, IEnumerable<string> noteLines)
@@ -796,7 +814,9 @@ namespace MagicExamHall
                 completedGoals = activeGoals.Count(goal => goal.completed),
                 totalGoals = activeGoals.Count,
                 noteLines = magicNote?.Lines.ToArray() ?? Array.Empty<string>(),
-                savedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)
+                savedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                discoveries = endingReport?.DiscoveryCount ?? 0,
+                endingLabel = finalTrueEnding ? "진엔딩" : finalCompletionCelebrated ? "통과 엔딩" : ""
             };
         }
 
@@ -815,6 +835,8 @@ namespace MagicExamHall
             baseFailureCounts.Clear();
             discoveredFamilies.Clear();
             discoveredOverlays.Clear();
+            discoveredReactions.Clear();
+            practiceMode = false;
             PlayerPrefs.SetInt("MagicExamHall.FirstFloorGhostSeen", 0);
             magicNote.Clear();
             if (reportPanel != null)
@@ -830,6 +852,11 @@ namespace MagicExamHall
 
         private void PublishProgressCheckpoint(int resumeFloorNumber)
         {
+            if (practiceMode)
+            {
+                return;
+            }
+
             ProgressCheckpointed(CreateProgressSnapshot(resumeFloorNumber));
         }
 
@@ -858,6 +885,7 @@ namespace MagicExamHall
                 sprite.sortingOrder = 30;
                 player = playerObject.transform;
             }
+            playerAnimator = player.GetComponent<PlayerSpriteAnimator>() ?? player.gameObject.AddComponent<PlayerSpriteAnimator>();
             EnsurePlayerPhysics();
 
             if (canvas == null)
@@ -2587,6 +2615,10 @@ namespace MagicExamHall
                 return;
             }
 
+            if (strokeCount > 0)
+            {
+                playerAnimator?.PlayCast();
+            }
             ProcessSpellGroup(strokes, center, strokeCount);
         }
 
@@ -2968,6 +3000,7 @@ namespace MagicExamHall
             ShowToast(toastMessage, eventEffect.worldEffect == "base_off_target" ? new Color(0.92f, 0.72f, 0.34f) : FamilyColor(seal.baseFamily), baseToastStrong);
             ShowBaseResultSummary(baseResult, "base 성공", resultSummary: eventEffect.note);
             pulses.Add(new ParticlePulse(outcome.center, FamilyColor(seal.baseFamily)));
+            GlowPulse.Flash(outcome.center, FamilyColor(seal.baseFamily), 1.9f, 25);
             LogBaseAttempt(baseResult, seal, eventEffect.worldEffect, successHintState);
             EvaluateFloorCompletion();
             return new ProcessedSpell { baseResult = baseResult };
@@ -3489,10 +3522,50 @@ namespace MagicExamHall
             {
                 pulses.Add(new ParticlePulse(report.position, ElementalReactionColor(report.reactionKind), weak: true, scaleMultiplier: 0.72f, durationSeconds: 0.55f, sortingOrder: 35));
             }
+            RecordElementalDiscoveries(reports);
 
             return string.IsNullOrWhiteSpace(LastElementalReactionSummaryForTests)
                 ? ""
                 : $"속성 반응: {LastElementalReactionSummaryForTests}";
+        }
+
+        /// <summary>
+        /// First time each elemental reaction kind fires in a run it becomes a
+        /// hidden discovery: one codex observation line plus an ending-report
+        /// discovery entry. Reactions are never required to pass a floor.
+        /// </summary>
+        private void RecordElementalDiscoveries(IReadOnlyList<ElementalReactionReport> reports)
+        {
+            foreach (var report in reports)
+            {
+                if (report.reactionKind == ElementalReactionKind.None || !discoveredReactions.Add(report.reactionKind))
+                {
+                    continue;
+                }
+
+                var observation = ElementalObservationLine(report.reactionKind);
+                endingReport.RecordDiscovery($"elemental_{report.reactionKind}", observation);
+                magicNote.Show(observation, MagicNoteCategory.Discovery, CurrentFloorNumber);
+                audioDirector?.PlaySfx(AudioCue.NoteUnlock, 0.4f);
+            }
+        }
+
+        private static string ElementalObservationLine(ElementalReactionKind kind)
+        {
+            return kind switch
+            {
+                ElementalReactionKind.Wet => "물기가 스며들어 표면이 어두워졌다.",
+                ElementalReactionKind.Ignite => "마른 것이 불씨를 받아 타오르기 시작했다.",
+                ElementalReactionKind.Extinguish => "물에 닿은 불이 꺼졌다.",
+                ElementalReactionKind.Freeze => "젖은 것이 얼어붙어 단단해졌다.",
+                ElementalReactionKind.Melt => "얼음이 열기에 녹아 물이 되었다.",
+                ElementalReactionKind.Steam => "불과 물이 만나 증기가 피어올랐다.",
+                ElementalReactionKind.Push => "바람이 가벼운 것을 밀어냈다.",
+                ElementalReactionKind.Conduct => "전기가 젖은 길을 따라 흘렀다.",
+                ElementalReactionKind.Grow => "생명의 기운이 마른 것을 깨웠다.",
+                ElementalReactionKind.Stabilize => "흔들리던 것이 단단히 고정되었다.",
+                _ => "탑이 낯선 반응을 기록했다."
+            };
         }
 
         private bool TryBuildEarlyTutorialSymbolDistanceEffect(WorldStateGoal goal, Vector2 center, SpellFamily family, out GoalEffect effect)
@@ -3686,6 +3759,7 @@ namespace MagicExamHall
             endingReport.RecordDiscovery(goal.id, effect);
             audioDirector?.PlaySfx(AudioCue.GoalSatisfied, 0.82f);
             pulses.Add(new ParticlePulse(goal.position, goal.color));
+            GlowPulse.Flash(goal.position, goal.color, 1.7f, 26);
             TickQuestChecklist(forceRefresh: true);
             UpdateHud();
             UpdateResultPanelLayout();
@@ -4242,7 +4316,7 @@ namespace MagicExamHall
 
         private void EvaluateFloorCompletion()
         {
-            if (HasEndingReport)
+            if (HasEndingReport || practiceMode)
             {
                 return;
             }
@@ -4303,7 +4377,7 @@ namespace MagicExamHall
         {
             if (!IsFinalFloor)
             {
-                return floorController.Current.completeNote;
+                return $"{floorController.Current.completeNote}\n{FloorCompletionLore(floorController.Current.number)}";
             }
 
             CelebrateFinalCompletion(finalTrueEnding);
@@ -4383,6 +4457,7 @@ namespace MagicExamHall
             velocity = Vector2.Lerp(velocity, input * 4.2f, Time.deltaTime * 12f);
             player.position += (Vector3)(velocity * Time.deltaTime);
             player.position = new Vector3(Mathf.Clamp(player.position.x, -7.35f, 7.35f), Mathf.Clamp(player.position.y, -4.25f, 4.25f), 0f);
+            playerAnimator?.SetMotion(input, velocity);
         }
 
         private void TickPlatformPlayer()
@@ -4420,6 +4495,7 @@ namespace MagicExamHall
 
             ClampPlatformPlayer();
             TickPlatformCamera();
+            playerAnimator?.SetMotion(new Vector2(inputX, 0f), new Vector2(platformHorizontalVelocity, playerBody.linearVelocity.y));
         }
 
         private Vector2 ReadMovementInput()
@@ -5112,7 +5188,7 @@ namespace MagicExamHall
                 return;
             }
 
-            hudTitle.text = $"층 {floor.number}: {floor.title}";
+            hudTitle.text = practiceMode ? $"연습장 - {floor.title}" : $"층 {floor.number}: {floor.title}";
             var completed = activeGoals.Count(goal => goal.completed);
             if (IsFinalFloor)
             {
@@ -5157,22 +5233,49 @@ namespace MagicExamHall
 
         private string BuildFloorEntryNote(FloorDefinition floor)
         {
+            var lore = FloorEntryLore(floor.number);
             if (floor.number == 1)
             {
-                return $"{floor.entryNote}\n{BuildFirstFloorGoalHint()}";
+                return $"{floor.entryNote}\n{lore}\n{BuildFirstFloorGoalHint()}";
             }
 
             if (floor.number == CustomReferenceFloorNumber)
             {
-                return $"{floor.entryNote}\n좌측 책장 근처에서 말풍선의 보기 버튼을 누르면 base별 커스텀 도형을 슬롯에 들여올 수 있습니다.";
+                return $"{floor.entryNote}\n{lore}\n좌측 책장 근처에서 말풍선의 보기 버튼을 누르면 base별 커스텀 도형을 슬롯에 들여올 수 있습니다.";
             }
 
             if (floor.number == 3)
             {
-                return $"{floor.entryNote}\n시작 구간의 책장에서 3층 프리셋 도형을 가져온 뒤 강물, 깨진 구멍, 낭떠러지, 빈 공간 표식 근처에서 기본 문양과 커스텀 도형을 순서대로 사용하세요.";
+                return $"{floor.entryNote}\n{lore}\n시작 구간의 책장에서 3층 프리셋 도형을 가져온 뒤 강물, 깨진 구멍, 낭떠러지, 빈 공간 표식 근처에서 기본 문양과 커스텀 도형을 순서대로 사용하세요.";
             }
 
-            return IsFinalFloor ? $"{floor.entryNote}\n{BuildNextFinalGoalHint()}" : floor.entryNote;
+            return IsFinalFloor
+                ? $"{floor.entryNote}\n{lore}\n{BuildNextFinalGoalHint()}"
+                : $"{floor.entryNote}\n{lore}";
+        }
+
+        private static string FloorEntryLore(int floorNumber)
+        {
+            return floorNumber switch
+            {
+                1 => "이 바닥의 홈은 수천 번의 첫 획이 남긴 자국이다.",
+                2 => "벽화의 장식 문양은 먼저 지나간 입학생들의 서명이다.",
+                3 => "다리는 오래전에 끊겼고, 아무도 같은 방법으로 건너지 않았다.",
+                4 => "균열은 탑이 늙어가는 속도다.",
+                _ => "성좌심은 통과한 이름들을 별자리로 기억한다."
+            };
+        }
+
+        private static string FloorCompletionLore(int floorNumber)
+        {
+            return floorNumber switch
+            {
+                1 => "이 층이 이렇게 밝은 것은 오랜만이다.",
+                2 => "벽화가 새 서명을 기다리기 시작했다.",
+                3 => "탑이 너의 길을 지도에 더했다.",
+                4 => "탑의 통증이 한 칸 줄었다.",
+                _ => ""
+            };
         }
 
         private string BuildFirstFloorGoalHint()
@@ -5541,6 +5644,7 @@ namespace MagicExamHall
             pixelSprite.tiled = tiled;
             pixelSprite.tiledSize = tiledSize == default ? Vector2.one : tiledSize;
             pixelSprite.Apply();
+            PixelRenderSetup.ConfigureSpriteLight(body, kind, primary, secondary, name);
             RegisterElementalEntityForSprite(body, name, kind, scale, tiled, pixelSprite.tiledSize);
             return body;
         }
@@ -7561,7 +7665,8 @@ namespace MagicExamHall
                 $"{BuildProfileSummary()}\n" +
                 $"{excerptLine}\n" +
                 "보정 정책: profile은 성공/실패 판정을 뒤집지 않고 품질 설명과 다음 연습 방향에만 사용됩니다.\n\n" +
-                BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n\n" +
+                BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n" +
+                (trueEnding ? "이제 탑의 별자리에 당신의 이름이 있습니다." : "탑은 당신의 문양을 기억 속에 새겼습니다.") + "\n\n" +
                 "자기 평가\n" +
                 "1. 어떤 문양이 가장 내 손에 잘 맞았나요?\n" +
                 "2. 실패했을 때 다음에 고칠 점이 보였나요?\n" +

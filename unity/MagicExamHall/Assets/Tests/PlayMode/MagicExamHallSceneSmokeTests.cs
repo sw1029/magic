@@ -390,6 +390,55 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator PracticeModeUnlocksAfterEndingAndNeverProgressesOrSaves()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            var boot = Object.FindFirstObjectByType<GameBootController>();
+            Assert.That(controller, Is.Not.Null);
+            Assert.That(boot, Is.Not.Null);
+            for (var slot = 1; slot <= 3; slot++)
+            {
+                var slotPath = boot.SavePathForSlotForTests(slot);
+                if (File.Exists(slotPath))
+                {
+                    File.Delete(slotPath);
+                }
+            }
+
+            Assert.That(boot.PracticeUnlockedForTests, Is.False);
+
+            boot.StartNewGameForTests();
+            controller.LoadFloorForTests(4);
+            controller.CompleteCurrentFloorForTests();
+            yield return null;
+
+            Assert.That(boot.PracticeUnlockedForTests, Is.True, "엔딩 도달 저장이 연습장을 해금해야 한다");
+            var savedBefore = File.ReadAllText(boot.SavePath);
+            Assert.That(savedBefore, Does.Contain("진엔딩"));
+
+            boot.StartPracticeModeForTests();
+            yield return null;
+
+            Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Gameplay));
+            Assert.That(controller.IsPracticeMode, Is.True);
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1));
+
+            controller.CompleteCurrentFloorForTests();
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1), "연습장에서는 층이 진행되지 않아야 한다");
+            Assert.That(File.ReadAllText(boot.SavePath), Is.EqualTo(savedBefore), "연습장은 저장을 건드리지 않아야 한다");
+
+            boot.ManualSaveForTests();
+            yield return null;
+            Assert.That(File.ReadAllText(boot.SavePath), Is.EqualTo(savedBefore), "연습장 수동 저장은 차단되어야 한다");
+        }
+
+        [UnityTest]
         public IEnumerator SaveSlotsAndManualCodexSaveStayIndependent()
         {
             SceneManager.LoadScene("MagicExamHall");

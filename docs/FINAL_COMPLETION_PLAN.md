@@ -55,6 +55,16 @@
 - [x] §12의 SFX 12종 + BGM 2종이 모두 재생된다.
 - [x] §15 접근성 옵션 6항목이 옵션 화면에서 동작한다.
 
+### 게이머 체감 기준 (2026-06-10 추가 — Phase G)
+
+게이머 관점 평가에서 "완성처럼 느껴지지 않는" 원인으로 확인된 항목. 기술적 완성과 별개로 아래를 충족해야 완성으로 선언한다.
+
+- [x] 룬·시전 선·seal이 발광 연출을 가진다 (URP 불요 — additive halo로 충분, G-1).
+- [x] 플레이어가 4방향 이동 + idle/cast 애니메이션을 가진다 (외부 팩 허용, G-2 — 절차 생성 프레임 기본, PNG 드롭 시 자동 교체).
+- [ ] BGM 최소 1트랙(`ambient_tower`)이 실제 음원이고 라이선스가 문서화돼 있다 (G-3 — 파일 우선 로더 준비됨, 음원 소싱만 남음).
+- [x] 1회차 완주에서 탑의 서사 암시가 최소 3곳(층 진입 노트·멘토 대사·엔딩 한 줄)에서 보인다 (G-4).
+- [x] 필수 목표 외 숨은 발견 5개 이상이 codex에 기록된다 (G-5 — 속성 반응 10종이 첫 발생 시 관찰문으로 기록, 발견 탭에 n/10 진행도).
+
 ### 기술 기준
 
 - [ ] `npm run validate:docs`, `npm test`, `npm run build` 통과 (CI green).
@@ -114,14 +124,15 @@ Phase 0  통합·정리  ──────────────────�
 Phase 1  M1 vertical slice (잔여 검수만)    │
    ▼                                       ▼
 Phase 3  사용자 테스트 1차          [OPT] Phase 2  아트 파이프라인
-   ▼                                (DoD 외 선택 트랙 — 어떤 게이트도
-Phase 4  인식·조작감 튜닝            막지 않음. 여유 인력 있을 때만)
+   │  ◄── Phase G  게이머 체감 개선  (DoD 외 선택 트랙 — 어떤 게이트도
+   ▼      (모집 대기 중 병렬,        막지 않음. 여유 인력 있을 때만)
+Phase 4  인식·조작감 튜닝   2차 테스트 전 Tier 1 완료 필수)
    ▼
 Phase 5  층별 콘텐츠 검수·보강  ◄── (모집 대기 중 병렬 선행 가능)
    ▼
 Phase 6  NPC·모먼트·폴리시 검수 ◄── (모집 대기 중 병렬 선행 가능)
    ▼
-Phase 7  접근성·리포트·사용자 테스트 2차
+Phase 7  접근성·리포트·사용자 테스트 2차 (G Tier 1 반영 빌드로)
    ▼
 Phase 8  릴리스·제출 패키지
 ```
@@ -147,10 +158,12 @@ Phase 8  릴리스·제출 패키지
 
 P0-0 머지로 기존 열린 PR의 상당 부분이 중복되거나 충돌할 수 있다. 머지가 아니라 **재평가**가 기준이다.
 
-1. [ ] [#115 pixel art phase runtime polish](https://github.com/sw1029/magic/pull/115) (100파일, URP 포함) — finalize 머지 후 rebase 시도. 중복분 제거 후 가치가 남으면(URP·2D Light) OPT 트랙용으로 유지, 아니면 close하고 필요 커밋만 cherry-pick 목록화.
-2. [ ] [#107 커스텀 도형 authoring](https://github.com/sw1029/magic/pull/107) (40파일) — 동일 기준으로 재평가.
-3. [ ] [#108 커스텀 주문 효과·3~4층 구성](https://github.com/sw1029/magic/pull/108) (91파일) — 동일 기준. **Phase 5 검수 패스와 겹치므로, 살릴 콘텐츠가 있으면 P5 체크리스트에 항목으로 흡수한다.**
-4. [ ] draft [#102](https://github.com/sw1029/magic/pull/102)/[#103](https://github.com/sw1029/magic/pull/103) — D5 결정에 따라 close하고 유효한 커밋만 cherry-pick 목록으로 #80에 코멘트.
+2026-06-11 확인: #115·#116은 main에 머지 완료. **#107, #108, #103(draft)은 HEAD 커밋이 전부 origin/main의 ancestor로 확인됨** — 내용이 이미 다른 머지 경로(1585949)로 main에 반영돼 있어 머지 없이 close만 하면 된다. close는 작성자/소유자 결정 사항이라 사람이 실행한다.
+
+1. [x] [#115](https://github.com/sw1029/magic/pull/115) — main에 머지 완료 (URP·Light2D·플레이어 애니 인프라 반영).
+2. [ ] [#107 커스텀 도형 authoring](https://github.com/sw1029/magic/pull/107) — 내용 main 반영 확인 완료. **close 클릭만 필요 (사람).**
+3. [ ] [#108 커스텀 주문 효과·3~4층 구성](https://github.com/sw1029/magic/pull/108) — 내용 main 반영 확인 완료. **close 클릭만 필요 (사람).**
+4. [ ] draft [#103](https://github.com/sw1029/magic/pull/103) — 내용 main 반영 확인 완료, #102는 이미 닫힘. **close 클릭만 필요 (사람).** user profile 잔여는 #80에서 추적.
 
 완료 조건: 열린 PR 0개. 이후 새 PR은 머지 가능 상태가 되는 즉시 처리하고, 미머지 PR 위에 다음 작업을 쌓지 않는다.
 
@@ -174,10 +187,10 @@ P0-0 머지로 기존 열린 PR의 상당 부분이 중복되거나 충돌할 �
 
 ### P0-4. 개발 환경·CI 정비 (담당 각자)
 
-- [ ] 로컬에 Node 20+ 설치, PATH 등록 (`npm test` 로컬 실행 가능 상태로).
+- [x] 로컬에 Node 20+ 설치 (이 머신: Node v24 winget 설치 완료, 2026-06-11. 다른 팀원 머신은 각자).
 - [ ] Unity 6000.3.14f1 + 라이선스 전원 확인.
-- [ ] `npm ci && npm test && npm run build` 전원 통과 확인.
-- [ ] `unity-tests.yml`용 GitHub secrets(Unity 라이선스) 등록, workflow가 실제로 green인지 확인.
+- [x] `npm ci && npm run validate:docs && npm test && npm run build` 통과 확인 (이 머신: docs 7건, 테스트 181/181, 빌드 성공 — 2026-06-11).
+- [ ] `unity-tests.yml`용 GitHub secrets(Unity 라이선스) 등록, workflow가 실제로 green인지 확인. **(사람 필요: 라이선스 시리얼/계정 정보)**
 
 ### 게이트 0 → 1
 
@@ -283,6 +296,93 @@ P0-0 머지로 기존 열린 PR의 상당 부분이 중복되거나 충돌할 �
 - 팀원 기준, 타이틀부터 엔딩 리포트까지 무설명 완주 가능.
 - SFX 7종+BGM 재생, 선 비주얼, ghost gesture, codex 동작.
 - CI green + Unity 테스트 통과 + 빌드 smoke 통과.
+
+---
+
+## Phase G — 게이머 체감 개선 패스 (Phase 3 모집 대기와 병렬, 2차 테스트 전 Tier 1 완료)
+
+목적: 게이머 관점 평가에서 확인된 격차 — "심장은 뛰는데 플레이어가 그걸 보고 들을 방법이 없다" — 를 최소 비용으로 닫는다. **기능 추가가 아니라 이미 있는 기능을 느껴지게 만드는 작업이다.**
+
+범위 규칙: Tier 1은 DoD 승격 항목(필수), Tier 2는 강력 권장(저비용 고체감), Tier 3은 기존 OPT 트랙(여기 포함 안 됨). Tier 1·2 밖의 비주얼 작업을 Phase G 명목으로 시작하지 않는다.
+
+### Tier 1 — DoD 승격 항목
+
+#### G-1. 룬·시전 선·seal 발광 (담당 B)
+
+(#115 URP 머지 후 갱신) 상시 발광은 main에 들어온 URP Light2D 인프라를 배선해 처리하고, 순간 연출만 halo 플래시로 처리한다.
+
+1. [x] 소프트 radial gradient halo 텍스처 생성 추가 (64×64, 중심→가장자리 알파 감쇠) — `GlowEffects.cs`의 `GlowSpriteFactory` (원샷 플래시용).
+2. [x] `PixelMaterialProvider.AdditiveMaterial` 추가 — URP 인지: URP 활성 시 URP sprite 셰이더(알파), 비-SRP 시 레거시 additive 체인 (URP에서 레거시 additive는 마젠타로 깨짐).
+3. [x] 상시 발광 배선 — `CreateWorldSprite`에서 `PixelRenderSetup.ConfigureSpriteLight` 호출. 양초·룬서클(goal·seal 공통)·스테이션·타겟·해저드가 색 포인트 라이트를 받음. 인프라(#115)는 있었으나 런타임에서 미호출이었음.
+4. [x] 인식 성공 순간 발광 — seal 생성·목표 달성 시 `GlowPulse.Flash` 원샷 버스트 (0.55초 페이드).
+5. [ ] 배경 바닥 톤 조정 — 현 팔레트가 이미 어두워 발광이 읽힘. 스크린샷 검수에서 필요 시 조정.
+
+완료 조건: 어두운 방에서 룬이 "빛난다"는 인상. 전후 스크린샷 비교를 PR에 첨부. HUD 텍스트 가독성 회귀 없음.
+
+#### G-2. 플레이어 4방향 + idle/walk/cast 애니메이션 (담당 B 또는 아트)
+
+ART_OVERHAUL Phase 2-2의 축소 실행판. 자체 제작하지 않고 외부 팩을 쓴다.
+
+1. [ ] (선택 업그레이드) 팩 선정: 1순위 Penzilla 계열 후드 캐릭터(크레딧 조건 확인), 2순위 Mystic Woods 마법사(무료판은 비상업+크레딧 — 본 프로젝트는 비상업 제출물이라 사용 가능, 조건을 라이선스 파일에 명기). 라이선스 → `docs/asset-licenses/`, `docs/CREDITS.md` 갱신.
+2. [ ] (선택 업그레이드) `Resources/Sprites/Player/`에 `{idle,walk,cast}_{down,up,side|right}_{n}` 규약으로 배치 — 드롭만 하면 자동 우선 적용.
+3. [x] 프레임 로더 + frame ticker — #115의 `PlayerSpriteAnimator`/`PlayerSpriteLibrary` 채택 (PNG 프레임 우선, idle 2·walk 4·cast_charge 3·cast_release 2 규약. PNG 배치 규약은 `Sprites/Player/{idle,walk}_{down,up,left,right}_{n}`, cast는 공용).
+4. [x] 게임플레이 배선 추가 — 기존에 아무도 호출하지 않던 `SetMotion`(이동 facing/walk)·`PlayCast`(시전 모션)를 `TickPlayer`·플랫폼 이동·`OnSpellBuffered`에 연결. 런타임 생성 플레이어에도 애니메이터 자동 부착.
+5. [x] PNG 부재 시 절차 생성 4방향 프레임 폴백 — `PixelArtFactory.CreateApprenticeFrame`(걷기 보폭, idle 호흡 1px 헤드밥, cast 팔 들기+스파크 진행, Left는 미러링). 기존 폴백은 정지 1장이었음.
+
+완료 조건: 4방향 걷기·idle 호흡·시전 모션이 보인다. 테스트·smoke 회귀 없음.
+
+#### G-3. BGM 실음원 도입 (담당 C, 대행 B)
+
+SFX는 절차 생성을 유지한다. BGM만 실음원으로 바꾼다 — "데모 느낌"의 최대 지분.
+
+1. [ ] `ambient_tower` 대체: CC0 다크 판타지 ambient 루프 1트랙 소싱 (OpenGameArt CC0 / freesound CC0 / Kenney Music). 후보 2~3개를 팀 청취로 결정.
+2. [x] `AudioDirector`에 파일 우선 로더 추가 — BGM(`Resources/Bgm/<name>`)과 SFX 12종(`Resources/Sfx/<name>`) 모두 파일 존재 시 우선, 없으면 절차 생성 폴백.
+3. [ ] `climax_seal`은 절차 생성 유지 가능. 단 실음원 트랙에 톤을 맞춰 키·템포 재조정. (절차 BGM 자체는 주파수 양자화로 루프 클릭 제거 + 2코드 패드로 개선됨)
+4. [ ] 라이선스 → `docs/asset-licenses/audio.md`, CREDITS 갱신 (음원 소싱 시).
+
+완료 조건: 타이틀~3층에서 실음원 ambient가 루프 이음매 없이 재생. 볼륨 옵션 연동 유지.
+
+#### G-4. 서사 레이어 — 텍스트만으로 탑에 과거를 준다 (담당 C, 대행 B)
+
+코드 변경 거의 없음. 기존 호출부에 lore 문장을 얹는다. 원칙: §3 톤 — 한 문장에 하나의 이미지, 시적이되 짧게.
+
+1. [x] 층 진입 노트(`BuildFloorEntryNote`)에 층당 lore 1줄 추가. 예시 초안:
+   - 1층 "이 바닥의 홈은 수천 번의 첫 획이 남긴 자국이다."
+   - 2층 "벽화의 장식 문양은 먼저 지나간 입학생들의 서명이다."
+   - 3층 "다리는 오래전에 끊겼고, 아무도 같은 방법으로 건너지 않았다."
+   - 4층 "균열은 탑이 늙어가는 속도다."
+   - 5층 "성좌심은 통과한 이름들을 별자리로 기억한다."
+2. [x] 층 완료 멘토 발화에 lore 변주 추가 — `FloorCompletionLore` 1~4층 ("이 층이 이렇게 밝은 것은 오랜만이다." 류), `ShowMagicNote` 경유로 멘토 발화 + codex 동시 적재.
+3. [x] 엔딩 리포트 마지막에 탑 관점 1줄, 엔딩 분기: 통과 "탑은 당신의 문양을 기억 속에 새겼습니다." / 진엔딩 "이제 탑의 별자리에 당신의 이름이 있습니다."
+4. [x] 타이틀 부제 아래 플레이버 1줄: "떠 있는 탑은 오늘도 입학생을 기다린다."
+5. [x] 추가된 줄이 codex에 쌓임 — 진입/완료 노트가 `magicNote.Show` 카테고리 분류로 적재 (PlayMode 스모크 통과로 확인).
+
+완료 조건: 1회차 완주에서 "탑이 왜 불안정한가/이곳에 누가 있었나"의 암시가 3곳 이상에서 읽힌다. 팀 외 1인에게 "탑에 대해 알게 된 것"을 물어 한 가지 이상 답하면 통과.
+
+### Tier 2 — 강력 권장 (저비용 고체감)
+
+#### G-5. 숨은 발견 5종+ (담당 A 1~3층 / B 4~5층)
+
+목표와 무관한 "비밀 반응"으로 codex를 채울 가치와 2회차 동기를 만든다. 각 항목 = 작은 world effect + codex 발견 1줄.
+
+1. [x] 후보 구현 — #108로 들어온 `ElementalInteractionSystem`의 속성 반응 10종(증기·점화·진화·빙결·융해·습윤·밀기·전도·생장·고정)이 world effect를 이미 제공. 발견 기록 경로가 없던 것을 연결.
+2. [x] 각 반응 종류의 첫 발생 시 codex 발견 관찰문 + `note_unlock` + 엔딩 리포트 발견 수 합산 (`RecordElementalDiscoveries`). codex 발견 탭에 "속성 반응 발견 n/10" 진행도 표시.
+3. [x] 통과 조건과 무관함을 유지 (반응은 어떤 층 목표에도 필수가 아님).
+
+#### G-6. 엔딩 후 자유 연습장 (담당 B)
+
+1. [x] 엔딩 도달 저장(슬롯에 endingLabel 존재)이 있으면 메인 메뉴 "연습장" 해금: 1층 재사용, 층 진행·체크포인트 비활성, 모든 반응·발견 활성 (`StartPracticeMode`, HUD에 연습장 표기).
+2. [x] 연습장 진입/이탈이 저장을 오염시키지 않음 — 체크포인트 가드 + codex 수동 저장 차단. PlayMode 테스트(`PracticeModeUnlocksAfterEndingAndNeverProgressesOrSaves`)로 고정.
+
+#### G-7. 저장 슬롯 기록 표시 보강 (담당 B)
+
+1. [x] 슬롯 요약에 발견 수·엔딩 종류(통과 엔딩/진엔딩) 표시 추가 — `GameProgressSnapshot.discoveries`/`endingLabel` 필드 신설.
+
+### 게이트 G (→ 2차 사용자 테스트)
+
+- Tier 1 (G-1~G-4) 전부 완료, DoD 게이머 체감 기준 4개 체크.
+- 전후 스크린샷·청취 비교를 팀 3인이 승인 ("데모 느낌이 줄었는가"에 전원 yes).
+- 테스트·빌드·smoke 회귀 없음. Tier 2는 2차 테스트 전 미완이어도 게이트를 막지 않는다 (단 freeze 전 완료 권장).
 
 ---
 
@@ -489,7 +589,7 @@ Phase 5와 같은 성격의 검수 패스다. 로컬 구현이 DoD의 모먼트 
 
 ### P7-3. 사용자 테스트 2차 (전원)
 
-1. [ ] 동일 프로토콜로 3~5인 (1차 참가자와 다른 사람). 전 층 + 접근성 옵션 사용 관찰.
+1. [ ] 동일 프로토콜로 3~5인 (1차 참가자와 다른 사람). 전 층 + 접근성 옵션 사용 관찰. **Phase G Tier 1이 반영된 빌드로 진행한다** (게이머 체감 개선의 효과를 같은 설문으로 측정).
 2. [ ] 1차 대비 지표 비교 (첫 시도 성공률, 층 완료 시간, assist 사용률).
 3. [ ] 발견된 P0/P1 결함만 수정하는 버그픽스 패스 (新기능 금지 — content freeze 시작).
 
@@ -554,8 +654,11 @@ Phase 5와 같은 성격의 검수 패스다. 로컬 구현이 DoD의 모먼트 
 | 8 | `playtest-1` 태그·빌드 고정 → 파일럿 외부 1인 (DoD 외부 검증 겸함) | 전원 |
 | 9 | 모집 대기 중: P5-1~P5-5 층별 검수 패스 | A(1~3층)/B(4~5층) |
 | 10 | 모집 대기 중: P6-1~P6-3 NPC·모먼트·HUD 검수 패스 | C+B |
+| 10a | 모집 대기 중: G-1 발광 + G-3 BGM 실음원 (체감 대비 최저 비용) | B / C(대행 B) |
+| 10b | 모집 대기 중: G-4 서사 레이어 (텍스트만) + G-2 플레이어 애니 | C(대행 B) / B |
 | 11 | 본 테스트 5인 실행 → 분석 → D3 확정 (P3-2, P3-3) | 전원 |
 | 12 | 실측 문제 기반 인식 튜닝 + 회귀 fixture (Phase 4) | A |
+| 12a | G-5 숨은 발견 / G-6 연습장 / G-7 슬롯 기록 (2차 테스트 전 권장) | A+B |
 
 ### LATER — 마감 (Phase 7~8)
 
@@ -590,4 +693,6 @@ Phase 5와 같은 성격의 검수 패스다. 로컬 구현이 DoD의 모먼트 
 | 인식 정확도가 테스트에서 크게 나쁨 | 첫 시도 성공률 <40% | Phase 4 범위 확대를 허용하되, 수정마다 회귀 fixture 동반. 2차 테스트 전 재검증 |
 | C 역할 미합류 | 검수·문구·발표 작업 적체 | C 항목을 B가 흡수, OPT 아트 트랙 전면 보류 |
 | 로컬 완료 표시와 실동작 불일치 | P5/P6 검수에서 스펙 어긋남 발견 | 해당 DoD 체크 해제 → 수정 → 재검증. "표시상 완료"를 완료로 치지 않는다 |
+| Phase G의 범위 팽창 | Tier 3(URP·오토타일·prop·PostFX)이 G 명목으로 착수됨 | G는 Tier 1·2로 한정. 그 외는 OPT 트랙 규칙 적용 |
+| 외부 에셋 라이선스 조건 위반 | 비상업 조건 팩을 조건 미기록으로 사용 | 도입 PR에서 라이선스 파일·CREDITS 없으면 reject (운영 규칙 5) |
 | 범위 팽창 | freeze 후 신기능·아트 PR | 게이트 7의 content freeze를 명문 규칙으로 거부 |

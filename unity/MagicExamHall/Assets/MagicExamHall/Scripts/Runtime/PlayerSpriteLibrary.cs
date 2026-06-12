@@ -80,12 +80,12 @@ namespace MagicExamHall
 
             foreach (var facing in DirectionalFacings())
             {
-                loadedAllFrames &= LoadDirectional(frames, PlayerAnimationState.Idle, facing, 2);
-                loadedAllFrames &= LoadDirectional(frames, PlayerAnimationState.Walk, facing, 4);
+                loadedAllFrames &= LoadDirectional(frames, PlayerAnimationState.Idle, facing, 2, fallbackSkin, fallbackRobe);
+                loadedAllFrames &= LoadDirectional(frames, PlayerAnimationState.Walk, facing, 4, fallbackSkin, fallbackRobe);
             }
 
-            loadedAllFrames &= LoadShared(frames, PlayerAnimationState.CastCharge, 3);
-            loadedAllFrames &= LoadShared(frames, PlayerAnimationState.CastRelease, 2);
+            loadedAllFrames &= LoadShared(frames, PlayerAnimationState.CastCharge, 3, fallbackSkin, fallbackRobe);
+            loadedAllFrames &= LoadShared(frames, PlayerAnimationState.CastRelease, 2, fallbackSkin, fallbackRobe);
 
             var fallback = PixelArtFactory.CreateSprite("Player Animation Fallback", fallbackSkin, fallbackRobe, PixelSpriteKind.Player);
             var spriteSet = new PlayerSpriteSet(frames, fallback, loadedAllFrames);
@@ -145,18 +145,41 @@ namespace MagicExamHall
             yield return PlayerFacing.Right;
         }
 
-        private static bool LoadDirectional(Dictionary<string, Sprite[]> frames, PlayerAnimationState state, PlayerFacing facing, int frameCount)
+        private static bool LoadDirectional(Dictionary<string, Sprite[]> frames, PlayerAnimationState state, PlayerFacing facing, int frameCount, Color fallbackSkin, Color fallbackRobe)
         {
             var loaded = LoadFrames($"{Key(state)}_{Key(facing)}", frameCount);
+            var external = loaded.Length == frameCount;
+            if (!external)
+            {
+                loaded = BuildProceduralFrames(state, facing, frameCount, fallbackSkin, fallbackRobe);
+            }
+
             frames[Key(state, facing)] = loaded;
-            return loaded.Length == frameCount;
+            return external;
         }
 
-        private static bool LoadShared(Dictionary<string, Sprite[]> frames, PlayerAnimationState state, int frameCount)
+        private static bool LoadShared(Dictionary<string, Sprite[]> frames, PlayerAnimationState state, int frameCount, Color fallbackSkin, Color fallbackRobe)
         {
             var loaded = LoadFrames(Key(state), frameCount);
+            var external = loaded.Length == frameCount;
+            if (!external)
+            {
+                loaded = BuildProceduralFrames(state, PlayerFacing.Down, frameCount, fallbackSkin, fallbackRobe);
+            }
+
             frames[Key(state)] = loaded;
-            return loaded.Length == frameCount;
+            return external;
+        }
+
+        private static Sprite[] BuildProceduralFrames(PlayerAnimationState state, PlayerFacing facing, int frameCount, Color skin, Color robe)
+        {
+            var generated = new Sprite[frameCount];
+            for (var frame = 0; frame < frameCount; frame++)
+            {
+                generated[frame] = PixelArtFactory.CreateApprenticeFrame(skin, robe, state, facing, frame);
+            }
+
+            return generated;
         }
 
         private static Sprite[] LoadFrames(string prefix, int frameCount)

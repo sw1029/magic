@@ -64,12 +64,12 @@ namespace MagicExamHall
         private const int MaxPlayerHealthHalfUnits = 6;
         private const float PlayerDamageInvulnerabilitySeconds = 1.05f;
         private const float PlayerDamageBlinkSeconds = 0.9f;
-        private const float QuestScrollWidth = 430f;
-        private const float QuestScrollExpandedHeight = 392f;
-        private const float QuestScrollCollapsedHeight = 88f;
+        private const float QuestScrollWidth = 374f;
+        private const float QuestScrollExpandedHeight = 350f;
+        private const float QuestScrollCollapsedHeight = 78f;
         private const float QuestScrollAnimationSeconds = 0.32f;
-        private const float QuestScrollBodyTopOffset = 76f;
-        private const float QuestScrollContentInset = 26f;
+        private const float QuestScrollBodyTopOffset = 70f;
+        private const float QuestScrollContentInset = 20f;
         private const float QuestScrollContentWidth = QuestScrollWidth - QuestScrollContentInset * 2f;
         private const float KeyboardMovementPulseSeconds = 0.18f;
         private const float CameraZoomMin = 0.72f;
@@ -113,16 +113,16 @@ namespace MagicExamHall
         };
         private static readonly IReadOnlyList<CustomShapeReferenceDefinition> FloorFourCustomShapeReferences = new List<CustomShapeReferenceDefinition>
         {
-            new(SpellFamily.Fire, "불꽃 빛줄기 화살표", "arrow", new[] { "arrow" }, "불꽃 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다."),
-            new(SpellFamily.Water, "물결 빛줄기 화살표", "arrow", new[] { "arrow" }, "물결 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다."),
-            new(SpellFamily.Wind, "바람 빛줄기 화살표", "arrow", new[] { "arrow" }, "바람 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다."),
-            new(SpellFamily.Earth, "대지 빛줄기 화살표", "arrow", new[] { "arrow" }, "대지 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다."),
-            new(SpellFamily.Life, "생명 빛줄기 화살표", "arrow", new[] { "arrow" }, "생명 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다.")
+            new(SpellFamily.Fire, "불꽃 빛줄기 화살표", "arrow", new[] { "beamArrow" }, "불꽃 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다."),
+            new(SpellFamily.Water, "물결 빛줄기 화살표", "arrow", new[] { "beamArrow" }, "물결 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다."),
+            new(SpellFamily.Wind, "바람 빛줄기 화살표", "arrow", new[] { "beamArrow" }, "바람 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다."),
+            new(SpellFamily.Earth, "대지 빛줄기 화살표", "arrow", new[] { "beamArrow" }, "대지 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다."),
+            new(SpellFamily.Life, "생명 빛줄기 화살표", "arrow", new[] { "beamArrow" }, "생명 문양에 더하면 화살표 방향으로 빛줄기를 쏩니다.")
         };
         private static readonly IReadOnlyList<CustomShapeReferenceDefinition> FloorFiveBeamShapeReferences = new List<CustomShapeReferenceDefinition>
         {
-            new(SpellFamily.Fire, "최종 불꽃 빛줄기 화살표", "arrow", new[] { "arrow" }, "최종 시험용 불꽃 빛줄기 화살표입니다."),
-            new(SpellFamily.Water, "최종 물결 빛줄기 화살표", "arrow", new[] { "arrow" }, "최종 시험용 물결 빛줄기 화살표입니다.")
+            new(SpellFamily.Fire, "최종 불꽃 빛줄기 화살표", "arrow", new[] { "beamArrow" }, "최종 시험용 불꽃 빛줄기 화살표입니다."),
+            new(SpellFamily.Water, "최종 물결 빛줄기 화살표", "arrow", new[] { "beamArrow" }, "최종 시험용 물결 빛줄기 화살표입니다.")
         };
 
         [Header("Scene References")]
@@ -350,6 +350,7 @@ namespace MagicExamHall
         public int CurrentHealthHalfUnitsForTests => playerHealthHalfUnits;
         public int HealthHeartCountForTests => healthHearts.Count;
         public int LastHealthHeartStateForTests => healthHearts.Count == 0 ? -1 : healthHearts[^1].State;
+        public bool IsHealthBarVisibleForTests => healthPanel != null && healthPanel.gameObject.activeInHierarchy;
         public bool IsPlayerBlinkingForTests => Time.time < playerBlinkUntil;
         public Color PlayerBlinkTintForTests => playerBlinkRenderers.Count == 0 ? Color.clear : playerBlinkRenderers[0].color;
         public int ActiveBuffQueueCountForTests => buffQueues.Count(queue => queue.IsActive);
@@ -605,12 +606,27 @@ namespace MagicExamHall
             return secondFloorCurrent == null ? activeGoals : new[] { secondFloorCurrent };
         }
 
+        /// <summary>
+        /// Bundled Galmuri (SIL OFL 1.1) keeps Korean text crisp and identical on
+        /// every machine; the OS font chain is only a fallback for stripped builds.
+        /// </summary>
+        private static Font LoadGameFont()
+        {
+            var bundled = Resources.Load<Font>("Fonts/Galmuri11");
+            if (bundled != null)
+            {
+                return bundled;
+            }
+
+            return Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 18);
+        }
+
         private void Awake()
         {
             sessionId = $"unity-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
             logger = new ExamLogger(sessionId);
             sessionStartedAt = Time.time;
-            uiFont = Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 18);
+            uiFont = LoadGameFont();
             floorController = new FloorController();
             magicNote = new MagicNote();
             endingReport = new EndingReport();
@@ -1714,6 +1730,10 @@ namespace MagicExamHall
             }
 
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            // HUD must outrank every world-space canvas (goal labels 42, buffs 76)
+            // even when the canvas is temporarily switched to ScreenSpaceCamera
+            // (pause/screenshot capture paths).
+            canvas.sortingOrder = 100;
             var scaler = canvas.GetComponent<CanvasScaler>() ?? canvas.gameObject.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280, 720);
@@ -1782,32 +1802,58 @@ namespace MagicExamHall
         private void BuildUi()
         {
             ClearChildren(canvas.transform);
-            hudPanel = CreatePanel("HUD", canvas.transform, new Vector2(20, -20), new Vector2(560, 132), Anchor.TopLeft, new Color(0.04f, 0.055f, 0.075f, 0.88f));
-            hudTitle = CreateText("HUD Title", hudPanel, "Magic Exam Hall", 24, FontStyle.Bold, new Vector2(16, -12), new Vector2(520, 28), Anchor.TopLeft);
-            hudCopy = CreateText("HUD Copy", hudPanel, "", 15, FontStyle.Normal, new Vector2(16, -46), new Vector2(520, 60), Anchor.TopLeft);
-            floorProgress = CreateText("Floor Progress", hudPanel, "", 15, FontStyle.Bold, new Vector2(16, 12), new Vector2(520, 24), Anchor.BottomLeft);
+            hudPanel = CreatePanel("HUD", canvas.transform, new Vector2(20, -20), new Vector2(480, 110), Anchor.TopLeft, Color.white);
+            MagicExamUiFactory.ApplySprite(hudPanel.GetComponent<Image>(), MagicExamUiSpriteId.DarkPanel, sliced: true);
+            AddPanelBorder(hudPanel, MagicExamUiTheme.BorderGold, 1.8f);
+            MagicExamUiFactory.AddAccentRail(hudPanel, MagicExamUiTheme.RuneBlueDim, 5f);
+            hudTitle = CreateText("HUD Title", hudPanel, "Magic Exam Hall", 20, FontStyle.Bold, new Vector2(18, -10), new Vector2(444, 26), Anchor.TopLeft);
+            MagicExamUiFactory.StyleDarkText(hudTitle, emphasized: true);
+            hudCopy = CreateText("HUD Copy", hudPanel, "", 14, FontStyle.Normal, new Vector2(18, -40), new Vector2(444, 44), Anchor.TopLeft);
+            hudCopy.verticalOverflow = VerticalWrapMode.Truncate;
+            MagicExamUiFactory.StyleDarkText(hudCopy);
+            floorProgress = CreateText("Floor Progress", hudPanel, "", 14, FontStyle.Bold, new Vector2(18, 8), new Vector2(444, 22), Anchor.BottomLeft);
+            MagicExamUiFactory.StyleDarkText(floorProgress);
             hudPanel.gameObject.SetActive(false);
             BuildHealthUi();
 
-            notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(560, 112), Anchor.BottomLeft, new Color(0.04f, 0.055f, 0.075f, 0.84f));
-            noteText = CreateText("Note Text", notePanel, "", 14, FontStyle.Normal, new Vector2(14, -12), new Vector2(530, 88), Anchor.TopLeft);
+            notePanel = CreatePanel("Magic Note", canvas.transform, new Vector2(20, 20), new Vector2(520, 88), Anchor.BottomLeft, Color.white);
+            MagicExamUiFactory.ApplySprite(notePanel.GetComponent<Image>(), MagicExamUiSpriteId.DarkPanel, sliced: true);
+            AddPanelBorder(notePanel, MagicExamUiTheme.RuneBlueDim, 1.6f);
+            MagicExamUiFactory.AddAccentRail(notePanel, MagicExamUiTheme.GoldSoft, 5f);
+            noteText = CreateText("Note Text", notePanel, "", 14, FontStyle.Normal, new Vector2(16, -10), new Vector2(488, 66), Anchor.TopLeft);
+            noteText.verticalOverflow = VerticalWrapMode.Truncate;
+            MagicExamUiFactory.StyleDarkText(noteText);
 
-            resultPanel = CreatePanel("Spell Result", canvas.transform, new Vector2(-20, -20), new Vector2(430, 178), Anchor.TopRight, new Color(0.04f, 0.055f, 0.075f, 0.88f));
-            resultText = CreateText("Result Text", resultPanel, "", 13, FontStyle.Normal, new Vector2(14, -12), new Vector2(402, 152), Anchor.TopLeft);
+            resultPanel = CreatePanel("Spell Result", canvas.transform, new Vector2(-18, -18), new Vector2(374, 164), Anchor.TopRight, Color.white);
+            MagicExamUiFactory.ApplySprite(resultPanel.GetComponent<Image>(), MagicExamUiSpriteId.DarkPanel, sliced: true);
+            AddPanelBorder(resultPanel, MagicExamUiTheme.BorderGold, 1.8f);
+            resultText = CreateText("Result Text", resultPanel, "", 13, FontStyle.Normal, new Vector2(14, -12), new Vector2(346, 140), Anchor.TopLeft);
+            resultText.verticalOverflow = VerticalWrapMode.Truncate;
+            MagicExamUiFactory.StyleDarkText(resultText);
             UpdateResultPanelLayout();
             resultPanel.gameObject.SetActive(false);
             BuildQuestScrollUi();
             UpdateResultPanelLayout();
 
-            reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(760, 520), Anchor.Center, new Color(0.035f, 0.045f, 0.065f, 0.96f));
-            reportText = CreateText("Report Text", reportPanel, "", 17, FontStyle.Normal, new Vector2(28, -28), new Vector2(704, 404), Anchor.TopLeft);
+            reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(940, 620), Anchor.Center, Color.white);
+            MagicExamUiFactory.ApplySprite(reportPanel.GetComponent<Image>(), MagicExamUiSpriteId.BookPanel, sliced: true);
+            AddPanelBorder(reportPanel, MagicExamUiTheme.BorderBrown, 3f);
+            var reportHeading = CreateText("Report Heading", reportPanel, "수료 보고서", 28, FontStyle.Bold, new Vector2(35, -32), new Vector2(870, 42), Anchor.TopLeft);
+            reportHeading.color = MagicExamUiTheme.ParchmentInk;
+            MagicExamUiFactory.StyleParchmentText(reportHeading, emphasized: true);
+            var reportRule = CreateImage("Report Rule", reportPanel, new Vector2(35, -80), new Vector2(870, 2), Anchor.TopLeft, MagicExamUiTheme.BorderBrown);
+            reportRule.raycastTarget = false;
+            reportText = CreateText("Report Text", reportPanel, "", 15, FontStyle.Normal, new Vector2(35, -96), new Vector2(878, 442), Anchor.TopLeft);
+            reportText.color = MagicExamUiTheme.ParchmentInk;
+            reportText.verticalOverflow = VerticalWrapMode.Truncate;
+            MagicExamUiFactory.StyleParchmentText(reportText);
             endingReportExitButton = CreateButton(
                 "Ending Report Exit Button",
                 reportPanel,
                 "종료",
                 16,
                 FontStyle.Bold,
-                new Vector2(-28f, 24f),
+                new Vector2(-35f, 34f),
                 new Vector2(132f, 42f),
                 Anchor.BottomRight,
                 new Color(0.70f, 0.18f, 0.12f, 0.96f),
@@ -1816,12 +1862,15 @@ namespace MagicExamHall
             endingReportExitButton.gameObject.SetActive(false);
             reportPanel.gameObject.SetActive(false);
 
-            toastPanel = CreatePanel("Action Toast", canvas.transform, new Vector2(-20, -20), new Vector2(500, 54), Anchor.TopRight, new Color(0.018f, 0.024f, 0.038f, 0.94f));
+            toastPanel = CreatePanel("Action Toast", canvas.transform, new Vector2(-18, -18), new Vector2(420, 50), Anchor.TopRight, Color.white);
+            MagicExamUiFactory.ApplySprite(toastPanel.GetComponent<Image>(), MagicExamUiSpriteId.DarkPanel, sliced: true);
             toastBackground = toastPanel.GetComponent<Image>();
-            toastAccent = CreateImage("Toast Accent", toastPanel, new Vector2(0f, 0f), new Vector2(6f, 54f), Anchor.TopLeft, new Color(1f, 0.82f, 0.38f, 1f));
+            toastAccent = CreateImage("Toast Accent", toastPanel, new Vector2(0f, 0f), new Vector2(6f, 50f), Anchor.TopLeft, MagicExamUiTheme.Gold);
             toastAccent.raycastTarget = false;
-            toastText = CreateText("Toast Text", toastPanel, "", 16, FontStyle.Bold, new Vector2(18, -13), new Vector2(464, 28), Anchor.TopLeft);
+            toastText = CreateText("Toast Text", toastPanel, "", 15, FontStyle.Bold, new Vector2(18, -11), new Vector2(384, 28), Anchor.TopLeft);
             toastText.alignment = TextAnchor.MiddleLeft;
+            toastText.verticalOverflow = VerticalWrapMode.Truncate;
+            MagicExamUiFactory.StyleDarkText(toastText);
             toastPanel.gameObject.SetActive(false);
             BuildFinalTaskBannerUi();
 
@@ -1925,8 +1974,9 @@ namespace MagicExamHall
 
         private void BuildHealthUi()
         {
-            healthPanel = CreatePanel("Health Bar", canvas.transform, new Vector2(20f, -20f), new Vector2(158f, 48f), Anchor.TopLeft, new Color(0.035f, 0.025f, 0.030f, 0.72f));
-            AddPanelBorder(healthPanel, new Color(0.18f, 0.06f, 0.055f, 0.95f), 1.6f);
+            healthPanel = CreatePanel("Health Bar", canvas.transform, new Vector2(20f, -20f), new Vector2(158f, 48f), Anchor.TopLeft, Color.white);
+            MagicExamUiFactory.ApplySprite(healthPanel.GetComponent<Image>(), MagicExamUiSpriteId.DarkPanel, sliced: true);
+            AddPanelBorder(healthPanel, MagicExamUiTheme.Wax, 1.6f);
             healthHearts.Clear();
             for (var index = 0; index < 3; index++)
             {
@@ -1936,6 +1986,7 @@ namespace MagicExamHall
                 ApplyAnchor(rect, Anchor.TopLeft);
                 rect.anchoredPosition = new Vector2(11f + index * 47f, -5f);
                 rect.sizeDelta = new Vector2(38f, 36f);
+                heartObject.AddComponent<CanvasRenderer>();
                 var heart = heartObject.AddComponent<HeartHealthGraphic>();
                 heart.color = new Color(0.92f, 0.035f, 0.045f, 1f);
                 heart.raycastTarget = false;
@@ -1947,23 +1998,24 @@ namespace MagicExamHall
 
         private void BuildQuestScrollUi()
         {
-            questScrollPanel = CreatePanel("Quest Scroll Panel", canvas.transform, new Vector2(-18f, -18f), new Vector2(QuestScrollWidth, QuestScrollExpandedHeight), Anchor.TopRight, new Color(0.88f, 0.69f, 0.42f, 0.995f));
+            questScrollPanel = CreatePanel("Quest Scroll Panel", canvas.transform, new Vector2(-18f, -18f), new Vector2(QuestScrollWidth, QuestScrollExpandedHeight), Anchor.TopRight, Color.white);
+            MagicExamUiFactory.ApplySprite(questScrollPanel.GetComponent<Image>(), MagicExamUiSpriteId.ScrollPanel, sliced: true);
             questScrollPanel.gameObject.AddComponent<RectMask2D>();
-            AddPanelBorder(questScrollPanel, new Color(0.38f, 0.20f, 0.07f, 0.98f), 3.2f);
-            CreateImage("Quest Scroll Readability Paper", questScrollPanel, new Vector2(16f, -52f), new Vector2(QuestScrollWidth - 32f, QuestScrollExpandedHeight - 82f), Anchor.TopLeft, new Color(0.92f, 0.74f, 0.46f, 0.88f)).raycastTarget = false;
-            CreateImage("Quest Scroll Top Roll", questScrollPanel, new Vector2(24f, -12f), new Vector2(382f, 30f), Anchor.TopLeft, new Color(0.96f, 0.78f, 0.46f, 0.995f)).raycastTarget = false;
-            var bottomRoll = CreateImage("Quest Scroll Bottom Roll", questScrollPanel, new Vector2(24f, 14f), new Vector2(382f, 30f), Anchor.BottomLeft, new Color(0.52f, 0.30f, 0.12f, 0.98f));
+            AddPanelBorder(questScrollPanel, MagicExamUiTheme.BorderBrown, 3f);
+            CreateImage("Quest Scroll Readability Paper", questScrollPanel, new Vector2(12f, -48f), new Vector2(QuestScrollWidth - 24f, QuestScrollExpandedHeight - 76f), Anchor.TopLeft, new Color(0.98f, 0.82f, 0.53f, 0.40f)).raycastTarget = false;
+            CreateImage("Quest Scroll Top Roll", questScrollPanel, new Vector2(22f, -10f), new Vector2(QuestScrollWidth - 44f, 27f), Anchor.TopLeft, MagicExamUiTheme.ParchmentLight).raycastTarget = false;
+            var bottomRoll = CreateImage("Quest Scroll Bottom Roll", questScrollPanel, new Vector2(22f, 12f), new Vector2(QuestScrollWidth - 44f, 27f), Anchor.BottomLeft, new Color(0.52f, 0.30f, 0.12f, 0.98f));
             bottomRoll.raycastTarget = false;
             questScrollBottomRoll = bottomRoll.rectTransform;
-            CreateImage("Quest Scroll Left Cap", questScrollPanel, new Vector2(10f, -12f), new Vector2(28f, 30f), Anchor.TopLeft, new Color(0.60f, 0.34f, 0.13f, 0.99f)).raycastTarget = false;
-            CreateImage("Quest Scroll Right Cap", questScrollPanel, new Vector2(-10f, -12f), new Vector2(28f, 30f), Anchor.TopRight, new Color(0.60f, 0.34f, 0.13f, 0.99f)).raycastTarget = false;
+            CreateImage("Quest Scroll Left Cap", questScrollPanel, new Vector2(9f, -10f), new Vector2(26f, 27f), Anchor.TopLeft, new Color(0.60f, 0.34f, 0.13f, 0.99f)).raycastTarget = false;
+            CreateImage("Quest Scroll Right Cap", questScrollPanel, new Vector2(-9f, -10f), new Vector2(26f, 27f), Anchor.TopRight, new Color(0.60f, 0.34f, 0.13f, 0.99f)).raycastTarget = false;
 
-            questTitleText = CreateText("Quest Scroll Title", questScrollPanel, "퀘스트", 21, FontStyle.Bold, new Vector2(26f, -42f), new Vector2(258f, 34f), Anchor.TopLeft);
+            questTitleText = CreateText("Quest Scroll Title", questScrollPanel, "퀘스트", 19, FontStyle.Bold, new Vector2(22f, -38f), new Vector2(218f, 30f), Anchor.TopLeft);
             ApplyQuestScrollReadableText(questTitleText, new Color(0.15f, 0.070f, 0.025f, 1f), emphasized: true);
             questTitleText.alignment = TextAnchor.MiddleLeft;
             questTitleText.raycastTarget = false;
 
-            questScoreText = CreateText("Quest Scroll Score", questScrollPanel, "", 14, FontStyle.Bold, new Vector2(-100f, -45f), new Vector2(74f, 28f), Anchor.TopRight);
+            questScoreText = CreateText("Quest Scroll Score", questScrollPanel, "", 13, FontStyle.Bold, new Vector2(-88f, -40f), new Vector2(64f, 26f), Anchor.TopRight);
             ApplyQuestScrollReadableText(questScoreText, new Color(0.17f, 0.075f, 0.025f, 1f), emphasized: false);
             questScoreText.alignment = TextAnchor.MiddleRight;
             questScoreText.raycastTarget = false;
@@ -1974,8 +2026,8 @@ namespace MagicExamHall
                 "접기",
                 14,
                 FontStyle.Bold,
-                new Vector2(-24f, -45f),
-                new Vector2(62f, 28f),
+                new Vector2(-20f, -40f),
+                new Vector2(56f, 26f),
                 Anchor.TopRight,
                 new Color(0.52f, 0.26f, 0.095f, 0.96f),
                 ToggleQuestScrollCollapsed);
@@ -1992,13 +2044,13 @@ namespace MagicExamHall
             questScrollBodyGroup = questScrollBodyRoot.gameObject.AddComponent<CanvasGroup>();
 
             CreateImage("Quest Log Divider", questScrollBodyRoot, new Vector2(QuestScrollContentInset, -190f), new Vector2(QuestScrollContentWidth, 2.5f), Anchor.TopLeft, new Color(0.33f, 0.16f, 0.055f, 0.62f)).raycastTarget = false;
-            questStatusText = CreateText("Quest Status Text", questScrollBodyRoot, "", 13, FontStyle.Bold, new Vector2(QuestScrollContentInset, -200f), new Vector2(QuestScrollContentWidth, 54f), Anchor.TopLeft);
+            questStatusText = CreateText("Quest Status Text", questScrollBodyRoot, "", 12, FontStyle.Bold, new Vector2(QuestScrollContentInset, -200f), new Vector2(QuestScrollContentWidth, 48f), Anchor.TopLeft);
             ApplyQuestScrollReadableText(questStatusText, new Color(0.13f, 0.055f, 0.020f, 1f), emphasized: false);
             questStatusText.alignment = TextAnchor.UpperLeft;
             questStatusText.verticalOverflow = VerticalWrapMode.Truncate;
             questStatusText.raycastTarget = false;
 
-            questProgressText = CreateText("Quest Progress Text", questScrollBodyRoot, "", 12, FontStyle.Bold, new Vector2(QuestScrollContentInset, 17f), new Vector2(QuestScrollContentWidth, 24f), Anchor.BottomLeft);
+            questProgressText = CreateText("Quest Progress Text", questScrollBodyRoot, "", 12, FontStyle.Bold, new Vector2(QuestScrollContentInset, -252f), new Vector2(QuestScrollContentWidth, 26f), Anchor.TopLeft);
             ApplyQuestScrollReadableText(questProgressText, new Color(0.16f, 0.070f, 0.025f, 1f), emphasized: false);
             questProgressText.alignment = TextAnchor.MiddleLeft;
             questProgressText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -2018,15 +2070,8 @@ namespace MagicExamHall
                 return;
             }
 
+            MagicExamUiFactory.StyleParchmentText(text, emphasized);
             text.color = color;
-            text.lineSpacing = 1.06f;
-
-            var shadow = text.gameObject.GetComponent<Shadow>() ?? text.gameObject.AddComponent<Shadow>();
-            shadow.effectColor = emphasized
-                ? new Color(0.98f, 0.78f, 0.42f, 0.42f)
-                : new Color(0.98f, 0.78f, 0.42f, 0.30f);
-            shadow.effectDistance = emphasized ? new Vector2(1.2f, -1.2f) : new Vector2(0.8f, -0.8f);
-            shadow.useGraphicAlpha = true;
         }
 
         private void ToggleQuestScrollCollapsed()
@@ -2526,11 +2571,11 @@ namespace MagicExamHall
             }
 
             questTitleText.text = $"층 {currentQuestChecklist.floorNumber} 퀘스트";
-            var y = -10f;
+            var y = -8f;
             for (var index = 0; index < currentQuestChecklist.entries.Count; index++)
             {
                 questChecklistViews.Add(CreateQuestChecklistRow(currentQuestChecklist.entries[index], index, y));
-                y -= 38f;
+                y -= 34f;
             }
         }
 
@@ -2540,7 +2585,7 @@ namespace MagicExamHall
                 $"Quest Checklist Row {index + 1}",
                 questScrollBodyRoot == null ? questScrollPanel : questScrollBodyRoot,
                 new Vector2(QuestScrollContentInset, y),
-                new Vector2(QuestScrollContentWidth, 34f),
+                new Vector2(QuestScrollContentWidth, 31f),
                 Anchor.TopLeft,
                 new Color(0.82f, 0.60f, 0.34f, 0.32f));
             row.GetComponent<Image>().raycastTarget = false;
@@ -2548,8 +2593,8 @@ namespace MagicExamHall
             var box = CreateImage(
                 $"Quest Checkbox {index + 1}",
                 row,
-                new Vector2(5f, -5f),
-                new Vector2(24f, 24f),
+                new Vector2(4f, -4f),
+                new Vector2(22f, 22f),
                 Anchor.TopLeft,
                 new Color(0.96f, 0.82f, 0.54f, 0.72f));
             box.raycastTarget = false;
@@ -2575,8 +2620,8 @@ namespace MagicExamHall
                 entry.definition.label,
                 15,
                 FontStyle.Bold,
-                new Vector2(39f, -2f),
-                new Vector2(QuestScrollContentWidth - 46f, 30f),
+                new Vector2(34f, -1f),
+                new Vector2(QuestScrollContentWidth - 40f, 28f),
                 Anchor.TopLeft);
             ApplyQuestScrollReadableText(label, new Color(0.12f, 0.050f, 0.016f, 1f), emphasized: false);
             label.alignment = TextAnchor.MiddleLeft;
@@ -2813,7 +2858,8 @@ namespace MagicExamHall
                 resultText.text = "";
             }
 
-            floorSkipButton.gameObject.SetActive(true);
+            floorSkipButton.gameObject.SetActive(Debug.isDebugBuild || Application.isEditor);
+            healthPanel.gameObject.SetActive(true);
             questScrollPanel.gameObject.SetActive(true);
             CloseCustomReferenceUi();
             HideGoalProximityBubble();
@@ -3866,7 +3912,7 @@ namespace MagicExamHall
                 {
                     body.transform.localScale *= 1.45f;
                 }
-                goal.label = CreateGoalLabel(goal, floorRoot.transform);
+                goal.label = CreateGoalLabel(goal, floorRoot.transform, goalIndex);
                 RegisterSpriteAccent(body, SpriteAccentAnimationKind.RuneIdle, goalIndex * 0.53f);
                 goalIndex++;
             }
@@ -6140,11 +6186,11 @@ namespace MagicExamHall
 
             resultPanelCompact = Screen.width > 0 && Screen.width < ResultPanelCompactScreenWidth;
             var questHeight = questScrollPanel == null ? 246f : questScrollPanel.sizeDelta.y;
-            resultPanel.anchoredPosition = new Vector2(-20, -(questHeight + 40f));
-            resultPanel.sizeDelta = resultPanelCompact ? new Vector2(360, 188) : new Vector2(430, 206);
+            resultPanel.anchoredPosition = new Vector2(-18, -(questHeight + 34f));
+            resultPanel.sizeDelta = resultPanelCompact ? new Vector2(332, 168) : new Vector2(374, 180);
             resultText.fontSize = resultPanelCompact ? 12 : 13;
             resultText.rectTransform.anchoredPosition = new Vector2(14, -12);
-            resultText.rectTransform.sizeDelta = resultPanelCompact ? new Vector2(332, 162) : new Vector2(402, 180);
+            resultText.rectTransform.sizeDelta = resultPanelCompact ? new Vector2(304, 142) : new Vector2(346, 154);
         }
 
         private int ResultLineLength(int wideLength, int compactLength)
@@ -9007,6 +9053,7 @@ namespace MagicExamHall
             notePanel.gameObject.SetActive(false);
             resultPanel.gameObject.SetActive(false);
             floorSkipButton.gameObject.SetActive(false);
+            healthPanel.gameObject.SetActive(false);
             questScrollPanel.gameObject.SetActive(false);
             if (finalTaskBanner != null)
             {
@@ -9178,6 +9225,7 @@ namespace MagicExamHall
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.Lerp(SealTint(seal), Color.white, 0.35f);
             text.text = seal.Label;
+            AddTextOutline(text);
             var defaultFallbackAt = string.IsNullOrWhiteSpace(seal.customShapeId)
                 ? seal.createdAt + DefaultSealFallbackDelaySeconds
                 : float.PositiveInfinity;
@@ -9555,7 +9603,7 @@ namespace MagicExamHall
             }
         }
 
-        private Text CreateGoalLabel(WorldStateGoal goal, Transform parent)
+        private Text CreateGoalLabel(WorldStateGoal goal, Transform parent, int goalIndex)
         {
             var stageLabel = floorController?.Current.number == 3;
             var beamGoalLabel = floorController?.Current.number == 4 &&
@@ -9570,11 +9618,14 @@ namespace MagicExamHall
                     : new Vector2(220f, 88f);
             var canvasObject = new GameObject($"{goal.title} Goal Label");
             canvasObject.transform.SetParent(parent, false);
-            canvasObject.transform.position = goal.position + (stageLabel
+            // Goals can sit 2.7 world units apart; alternating above/below keeps
+            // neighbouring labels from stacking on the same row.
+            var labelOffset = stageLabel
                 ? new Vector2(0f, 0.78f)
                 : beamGoalLabel
                     ? new Vector2(0f, -0.66f)
-                    : new Vector2(0f, -0.86f));
+                    : goalIndex % 2 == 0 ? new Vector2(0f, -0.86f) : new Vector2(0f, 0.98f);
+            canvasObject.transform.position = goal.position + labelOffset;
             var worldCanvas = canvasObject.AddComponent<Canvas>();
             worldCanvas.renderMode = RenderMode.WorldSpace;
             worldCanvas.overrideSorting = true;
@@ -9601,25 +9652,37 @@ namespace MagicExamHall
                     textPosition,
                     new Vector2(textSize.x - 18f, stageLabel ? 30f : 34f),
                     Anchor.Center,
-                    new Color(0.006f, 0.010f, 0.018f, stageLabel ? 0.54f : 0.58f));
+                    new Color(0.006f, 0.010f, 0.018f, stageLabel ? 0.70f : 0.74f));
                 titleBacking.raycastTarget = false;
             }
 
             var text = CreateText("Goal Label Text", canvasObject.transform, visualRequirement ? goal.title : goal.OpenLabel, beamGoalLabel ? 19 : stageLabel ? 22 : 24, FontStyle.Bold, textPosition, textSize, Anchor.Center);
             text.alignment = TextAnchor.MiddleCenter;
-            text.color = Color.Lerp(goal.color, Color.white, 0.45f);
+            text.color = Color.Lerp(goal.color, Color.white, beamGoalLabel ? 0.45f : 0.62f);
             text.horizontalOverflow = beamGoalLabel ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
             text.lineSpacing = beamGoalLabel ? 0.78f : 0.88f;
             text.resizeTextForBestFit = beamGoalLabel;
             text.resizeTextMinSize = 14;
             text.resizeTextMaxSize = beamGoalLabel ? 19 : stageLabel ? 22 : 24;
             text.raycastTarget = false;
+            AddTextOutline(text);
             if (visualRequirement)
             {
                 CreateGoalRequirementIconRow(goal, canvasObject.transform, stageLabel);
             }
 
             return text;
+        }
+
+        /// <summary>
+        /// World-space labels float over arbitrary scenery; a 1px dark outline keeps
+        /// them readable without forcing an opaque backing panel (GAME_DESIGN section 11).
+        /// </summary>
+        private static void AddTextOutline(Text text)
+        {
+            var outline = text.gameObject.AddComponent<UnityEngine.UI.Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+            outline.effectDistance = new Vector2(1f, -1f);
         }
 
         private void CreateGoalRequirementIconRow(WorldStateGoal goal, Transform parent, bool stageLabel)
@@ -9797,33 +9860,12 @@ namespace MagicExamHall
 
         private Image CreateImage(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
         {
-            var body = new GameObject(name);
-            body.transform.SetParent(parent, false);
-            var rect = body.AddComponent<RectTransform>();
-            ApplyAnchor(rect, anchor);
-            rect.anchoredPosition = anchoredPosition;
-            rect.sizeDelta = size;
-            var image = body.AddComponent<Image>();
-            image.color = color;
-            image.material = PixelMaterialProvider.UiMaterial;
-            return image;
+            return MagicExamUiFactory.CreateImage(name, parent, anchoredPosition, size, ToUiAnchor(anchor), color);
         }
 
         private static void AddPanelBorder(RectTransform target, Color color, float thickness)
         {
-            var body = new GameObject($"{target.name} Border");
-            body.transform.SetParent(target, false);
-            var rect = body.AddComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-            body.AddComponent<CanvasRenderer>();
-            var border = body.AddComponent<CustomShapeRectBorder>();
-            border.color = color;
-            border.thickness = thickness;
-            border.raycastTarget = false;
+            MagicExamUiFactory.AddPixelBorder(target, color, thickness);
         }
 
         private RectTransform CreatePanel(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
@@ -9869,8 +9911,27 @@ namespace MagicExamHall
             var text = CreateText($"{name} Text", image.transform, label, fontSize, style, Vector2.zero, size, Anchor.Center);
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
             text.raycastTarget = false;
+            var buttonStyle = color.r > 0.65f && color.g < 0.20f
+                ? MagicExamButtonStyle.Danger
+                : parent.name.Contains("Quest", StringComparison.Ordinal) || parent.name.Contains("Letter", StringComparison.Ordinal)
+                    ? MagicExamButtonStyle.Parchment
+                    : MagicExamButtonStyle.Secondary;
+            MagicExamUiFactory.StyleButton(button, buttonStyle);
             return button;
+        }
+
+        private static MagicExamUiAnchor ToUiAnchor(Anchor anchor)
+        {
+            return anchor switch
+            {
+                Anchor.TopLeft => MagicExamUiAnchor.TopLeft,
+                Anchor.TopRight => MagicExamUiAnchor.TopRight,
+                Anchor.BottomLeft => MagicExamUiAnchor.BottomLeft,
+                Anchor.BottomRight => MagicExamUiAnchor.BottomRight,
+                _ => MagicExamUiAnchor.Center
+            };
         }
 
         private static void ClearChildren(Transform parent)
@@ -11701,9 +11762,14 @@ namespace MagicExamHall
             var averageQuality = qualityScores.Count == 0 ? 0f : qualityScores.Average() * 100f;
             var endingName = trueEnding ? $"수료 엔딩 ({completedFinalGoals}/{totalFinalGoals})" : $"통과 엔딩 ({completedFinalGoals}/{totalFinalGoals})";
             var header = trueEnding ? "최종 시험 통과 - 수료증 발급 보고서" : "입학 시험 통과 보고서";
+            var rawLogPath = outputDirectory ?? "";
+            var logMarker = rawLogPath.IndexOf("MagicExamHallLogs", StringComparison.Ordinal);
+            var displayLogPath = logMarker >= 0
+                ? rawLogPath[logMarker..]
+                : rawLogPath.Length <= 72 ? rawLogPath : rawLogPath[..71] + "…";
             var excerptLine = noteExcerpts == null || noteExcerpts.Count == 0
                 ? "대표 관찰문: 기록 없음"
-                : "대표 관찰문:\n- " + string.Join("\n- ", noteExcerpts);
+                : "대표 관찰문: " + string.Join(" / ", noteExcerpts.Take(2));
             return
                 $"{header}\n" +
                 $"도달 상태: {endingName}\n\n" +
@@ -11719,15 +11785,16 @@ namespace MagicExamHall
                 $"{questChecklistSummary}\n" +
                 $"{BuildProfileSummary()}\n" +
                 $"{excerptLine}\n" +
-                "보정 정책: profile은 성공/실패 판정을 뒤집지 않고 품질 설명과 다음 연습 방향에만 사용됩니다.\n\n" +
+                $"관찰 기록: {questChecklistSummary}\n\n" +
+                "보정 정책: 성공/실패 판정은 유지하고, 억지 설명과 다음 연습 방향에만 사용합니다.\n" +
                 BuildReflectionLine(favoriteBase, favoriteOverlay, discoveries.Count) + "\n" +
                 (trueEnding ? "최종 시험관이 수료증 발급을 확인했습니다." : "탑은 당신의 문양을 기억 속에 새겼습니다.") + "\n\n" +
                 "자기 평가\n" +
                 "1. 어떤 문양이 가장 내 손에 잘 맞았나요?\n" +
                 "2. 실패했을 때 다음에 고칠 점이 보였나요?\n" +
                 "3. 기본 문양과 장식 조합을 스스로 예측할 수 있었나요?\n" +
-                "4. 직접 마법을 시전한다는 느낌이 있었나요?\n\n" +
-                $"로그 저장 위치:\n{outputDirectory}";
+                "4. 직접 마법을 시전했다는 느낌이 있었나요?\n\n" +
+                $"로그 저장 위치  {displayLogPath}";
         }
 
         private static string BuildReflectionLine(string favoriteBase, string favoriteOverlay, int discoveryCount)

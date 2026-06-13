@@ -89,12 +89,18 @@ namespace MagicExamHall.Tests
 
             foreach (var kind in System.Enum.GetValues(typeof(PixelSpriteKind)).Cast<PixelSpriteKind>().Where(kind => kind.ToString().StartsWith("Mentor")))
             {
-                var sprite = PixelArtFactory.CreateSprite($"procedural-sentinel-{kind}", Color.magenta, Color.green, kind);
-
-                Assert.That(sprite, Is.Not.Null, kind.ToString());
-                Assert.That(sprite.texture.width, Is.EqualTo(32), kind.ToString());
-                Assert.That(sprite.texture.height, Is.EqualTo(32), kind.ToString());
-                Assert.That(sprite.texture.name, Does.StartWith($"procedural-sentinel-{kind}"), kind.ToString());
+                var texture = PixelArtFactory.CreateProceduralTexture($"procedural-sentinel-{kind}", Color.magenta, Color.green, kind);
+                try
+                {
+                    Assert.That(texture, Is.Not.Null, kind.ToString());
+                    Assert.That(texture.width, Is.EqualTo(32), kind.ToString());
+                    Assert.That(texture.height, Is.EqualTo(32), kind.ToString());
+                    Assert.That(texture.name, Does.StartWith($"procedural-sentinel-{kind}"), kind.ToString());
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(texture);
+                }
             }
         }
 
@@ -1093,7 +1099,7 @@ namespace MagicExamHall.Tests
         }
 
         [TestCase(SpellFamily.Fire, "삼각형")]
-        [TestCase(SpellFamily.Water, "원")]
+        [TestCase(SpellFamily.Water, "물방울")]
         [TestCase(SpellFamily.Wind, "3획")]
         [TestCase(SpellFamily.Earth, "사다리꼴")]
         [TestCase(SpellFamily.Life, "가지")]

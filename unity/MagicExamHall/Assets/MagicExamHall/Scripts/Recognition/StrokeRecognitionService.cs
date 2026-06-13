@@ -81,7 +81,7 @@ namespace MagicExamHall
                 var customOnlyBase = RecognizeBaseCandidate(
                     strokes,
                     context.baseIntent,
-                    targetSeal.baseFamily,
+                    null,
                     preferredCustomShapeTokens,
                     context.allowCustomShapes,
                     recordColdStartAttempt: false,
@@ -109,7 +109,7 @@ namespace MagicExamHall
                 var baseResult = RecognizeBaseCandidate(
                     strokes,
                     context.baseIntent,
-                    targetSeal.baseFamily,
+                    null,
                     preferredCustomShapeTokens,
                     context.allowCustomShapes,
                     recordColdStartAttempt: false,

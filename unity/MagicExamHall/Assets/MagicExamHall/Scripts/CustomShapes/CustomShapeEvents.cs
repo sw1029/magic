@@ -274,6 +274,7 @@ namespace MagicExamHall
         {
             new("line", "line_slash_damage", "절단 피해", CustomShapeEventRole.Effect, CustomShapeEventKind.SlashDamage, "반응: 절단 피해", usesDirection: true),
             new("arrow", "arrow_operator", "방향 사출", CustomShapeEventRole.Operator, CustomShapeEventKind.DirectionalProjectile, "연산자: 끝점 방향 사출", usesDirection: true, emitsFromEndPoint: true, operatorOnlyKind: CustomShapeEventKind.AttributeLaser, operatorTargetKind: CustomShapeEventKind.DirectionalProjectile),
+            new("beamArrow", "beam_arrow_laser", "속성 레이저", CustomShapeEventRole.Effect, CustomShapeEventKind.AttributeLaser, "반응: 화살표 방향 속성 빛줄기", usesDirection: true, emitsFromEndPoint: true),
             new("rect", "rect_wall_entity", "벽 생성", CustomShapeEventRole.Effect, CustomShapeEventKind.WallEntity, "반응: 벽 구조물", visualPersistence: CustomShapeEventPersistence.Permanent),
             new("roundRect", "round_rect_guard_buff", "방어 버프", CustomShapeEventRole.Effect, CustomShapeEventKind.GuardBuff, "반응: 방어 버프"),
             new("ellipse", "ellipse_barrier", "배리어", CustomShapeEventRole.Effect, CustomShapeEventKind.Barrier, "반응: 배리어"),
@@ -358,7 +359,9 @@ namespace MagicExamHall
             var targetDefinition = normalized.FirstOrDefault(definition => !definition.IsOperator);
             if (operatorDefinition == null || targetDefinition == null)
             {
-                return BuildPayload(normalized[0].token, strokes, operatorOnly: true);
+                var single = normalized[0];
+                var operatorOnly = !string.Equals(single.token, "arrow", StringComparison.OrdinalIgnoreCase);
+                return BuildPayload(single.token, strokes, operatorOnly);
             }
 
             return ComposeWithOperator(

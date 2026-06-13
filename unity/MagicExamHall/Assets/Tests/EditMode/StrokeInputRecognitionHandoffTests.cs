@@ -113,6 +113,8 @@ namespace MagicExamHall.Tests
                 {
                     activeSeals = new List<CompiledSeal> { seal },
                     customShapesOnlyWhenSealActive = true,
+                    hasCastCenter = true,
+                    castCenter = seal.worldCenter,
                     now = 0.2f
                 });
 
@@ -149,6 +151,8 @@ namespace MagicExamHall.Tests
                     activeSeals = new List<CompiledSeal> { seal },
                     allowCustomShapes = false,
                     customShapesOnlyWhenSealActive = true,
+                    hasCastCenter = true,
+                    castCenter = seal.worldCenter,
                     now = 0.2f
                 });
 

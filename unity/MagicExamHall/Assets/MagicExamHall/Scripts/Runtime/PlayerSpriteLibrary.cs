@@ -91,7 +91,7 @@ namespace MagicExamHall
 
     public static class PlayerSpriteLibrary
     {
-        public const int FrameWidth = 48;
+        public const int FrameWidth = 32;
         public const int FrameHeight = 64;
         public const string ResourceRoot = "Sprites/Player/";
 

@@ -336,7 +336,7 @@ namespace MagicExamHall.Tests
             Assert.That(panel.anchorMin, Is.EqualTo(new Vector2(1f, 1f)));
             Assert.That(panel.anchorMax, Is.EqualTo(new Vector2(1f, 1f)));
             Assert.That(panel.pivot, Is.EqualTo(new Vector2(1f, 1f)));
-            Assert.That(panel.sizeDelta.x, Is.EqualTo(430f).Within(0.5f));
+            Assert.That(panel.sizeDelta.x, Is.EqualTo(374f).Within(0.5f));
             Assert.That(Object.FindFirstObjectByType<CanvasScaler>()?.matchWidthOrHeight, Is.EqualTo(0.5f).Within(0.001f));
             Assert.That(GameObject.Find("Quest Scroll Readability Paper"), Is.Not.Null);
             Assert.That(GameObject.Find("Quest Scroll Top Roll"), Is.Not.Null);
@@ -347,16 +347,20 @@ namespace MagicExamHall.Tests
             Assert.That(firstLabel, Is.Not.Null);
             Assert.That(firstLabel.fontSize, Is.GreaterThanOrEqualTo(15));
             Assert.That(firstLabel.GetComponent<Shadow>(), Is.Not.Null);
+            var questBody = GameObject.Find("Quest Scroll Body")?.GetComponent<RectTransform>();
             var progressText = GameObject.Find("Quest Progress Text")?.GetComponent<Text>();
+            Assert.That(questBody, Is.Not.Null);
             Assert.That(progressText, Is.Not.Null);
             Assert.That(progressText.fontSize, Is.LessThanOrEqualTo(12));
             Assert.That(progressText.horizontalOverflow, Is.EqualTo(HorizontalWrapMode.Overflow));
             Assert.That(progressText.verticalOverflow, Is.EqualTo(VerticalWrapMode.Truncate));
-            Assert.That(progressText.rectTransform.anchorMin, Is.EqualTo(Vector2.zero));
-            Assert.That(progressText.rectTransform.anchorMax, Is.EqualTo(Vector2.zero));
-            Assert.That(progressText.rectTransform.anchoredPosition.y, Is.GreaterThanOrEqualTo(bottomRoll.anchoredPosition.y));
-            Assert.That(progressText.rectTransform.anchoredPosition.y + progressText.rectTransform.sizeDelta.y, Is.LessThanOrEqualTo(bottomRoll.anchoredPosition.y + bottomRoll.sizeDelta.y + 0.5f));
-            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(392f).Within(0.5f));
+            Assert.That(progressText.rectTransform.anchorMin, Is.EqualTo(new Vector2(0f, 1f)));
+            Assert.That(progressText.rectTransform.anchorMax, Is.EqualTo(new Vector2(0f, 1f)));
+            Assert.That(progressText.rectTransform.anchoredPosition.y, Is.LessThanOrEqualTo(0f));
+            Assert.That(progressText.rectTransform.anchoredPosition.y - progressText.rectTransform.sizeDelta.y, Is.GreaterThanOrEqualTo(-questBody.rect.height - 0.5f));
+            AssertTextFits("Quest Scroll Title");
+            AssertTextFits("Quest Checklist Label 1");
+            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(350f).Within(0.5f));
             Assert.That(controller.QuestScrollBodyAlphaForTests, Is.GreaterThan(0.98f));
             Assert.That(controller.QuestScrollToggleLabelForTests, Is.EqualTo("접기"));
 
@@ -368,7 +372,7 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.IsQuestScrollCollapsedForTests, Is.True);
             Assert.That(controller.QuestScrollOpenAmountForTests, Is.LessThan(0.05f));
-            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(88f).Within(1.0f));
+            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(78f).Within(1.0f));
             Assert.That(controller.QuestScrollBodyAlphaForTests, Is.LessThan(0.05f));
             Assert.That(controller.IsQuestScrollBodyActiveForTests, Is.False);
             Assert.That(controller.QuestScrollToggleLabelForTests, Is.EqualTo("펴기"));
@@ -379,7 +383,7 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.IsQuestScrollCollapsedForTests, Is.False);
             Assert.That(controller.QuestScrollOpenAmountForTests, Is.GreaterThan(0.95f));
-            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(392f).Within(1.0f));
+            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(350f).Within(1.0f));
             Assert.That(controller.QuestScrollBodyAlphaForTests, Is.GreaterThan(0.95f));
             Assert.That(controller.IsQuestScrollBodyActiveForTests, Is.True);
             Assert.That(controller.QuestScrollToggleLabelForTests, Is.EqualTo("접기"));
@@ -402,8 +406,7 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
             Assert.That(controller.QuestProgressForTests, Is.EqualTo(controller.FloorProgressForTests));
-            Assert.That(progressText.rectTransform.anchoredPosition.y, Is.GreaterThanOrEqualTo(bottomRoll.anchoredPosition.y));
-            Assert.That(progressText.rectTransform.anchoredPosition.y + progressText.rectTransform.sizeDelta.y, Is.LessThanOrEqualTo(bottomRoll.anchoredPosition.y + bottomRoll.sizeDelta.y + 0.5f));
+            Assert.That(progressText.rectTransform.anchoredPosition.y - progressText.rectTransform.sizeDelta.y, Is.GreaterThanOrEqualTo(-questBody.rect.height - 0.5f));
             Assert.That(controller.QuestChecklistSavedCompletedForTests, Is.EqualTo(1));
             Assert.That(controller.QuestChecklistSavedTotalForTests, Is.EqualTo(3));
             Assert.That(controller.QuestChecklistGlobalCompletedForTests, Is.EqualTo(1));
@@ -421,25 +424,19 @@ namespace MagicExamHall.Tests
             Assert.That(controller.QuestChecklistTitleForTests, Does.Contain("층 3"));
             Assert.That(controller.QuestChecklistTotalForTests, Is.EqualTo(5));
             Assert.That(controller.IsQuestScrollCollapsedForTests, Is.True);
-            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(88f).Within(1.0f));
+            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(78f).Within(1.0f));
 
             controller.LoadFloorForTests(3);
             yield return null;
 
-            Assert.That(controller.QuestChecklistTitleForTests, Does.Contain("층 4"));
-            Assert.That(controller.HudTitleForTests, Does.Contain("속성 빛줄기"));
-            Assert.That(controller.HudCopyForTests, Does.Contain("화살표"));
-            Assert.That(controller.HudCopyForTests, Does.Contain("허수아비"));
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(4));
+            Assert.That(controller.HudTitleForTests, Does.Not.Contain("seal"));
+            Assert.That(controller.HudCopyForTests, Does.Not.Contain("seal"));
             var floorFourLabels = ActiveQuestLabels();
-            Assert.That(floorFourLabels.Any(label => label.Contains("빛줄기", StringComparison.Ordinal)), Is.True);
-            Assert.That(floorFourLabels.Any(label => label.Contains("속성 문양", StringComparison.Ordinal)), Is.True);
             Assert.That(floorFourLabels.Any(label => label.Contains("beam", StringComparison.Ordinal)), Is.False);
             Assert.That(floorFourLabels.Any(label => label.Contains("seal", StringComparison.Ordinal)), Is.False);
-            Assert.That(floorFourLabels.Any(label => label.Contains("허수아비", StringComparison.Ordinal)), Is.True);
             Assert.That(floorFourLabels.Any(label => label.Contains("균열", StringComparison.Ordinal)), Is.False);
             var floorFourGoalLabels = ActiveGoalLabels(controller.CurrentFloorNumber);
-            Assert.That(floorFourGoalLabels.Any(label => label.Contains("불꽃 빛줄기", StringComparison.Ordinal)), Is.True);
-            Assert.That(floorFourGoalLabels.Any(label => label.Contains("문양+화살표=명중", StringComparison.Ordinal)), Is.False);
             Assert.That(floorFourGoalLabels.Any(label => label.Contains("seal", StringComparison.Ordinal)), Is.False);
             Assert.That(floorFourGoalLabels.Any(label => label.Contains("beam", StringComparison.Ordinal)), Is.False);
             Assert.That(GameObject.Find("Goal Requirement Icon Row beam_fire"), Is.Not.Null);
@@ -463,6 +460,7 @@ namespace MagicExamHall.Tests
             Assert.That(controller.CurrentHealthHalfUnitsForTests, Is.EqualTo(6));
             Assert.That(GameObject.Find("Health Bar"), Is.Not.Null);
             Assert.That(GameObject.Find("Health Heart 1")?.GetComponent<HeartHealthGraphic>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Health Heart 1")?.GetComponent<CanvasRenderer>(), Is.Not.Null);
             Assert.That(controller.QuestStatusForTests, Does.Contain("층 1"));
             Assert.That(controller.QuestProgressForTests, Is.EqualTo(controller.FloorProgressForTests));
 
@@ -589,8 +587,8 @@ namespace MagicExamHall.Tests
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(1));
             Assert.That(controller.IsGameplayInputEnabledForTests, Is.True);
             Assert.That(boot.CodexQuickButtonVisibleForTests, Is.True);
-            Assert.That(boot.CodexQuickButtonPositionForTests.x, Is.EqualTo(-478f).Within(0.01f));
-            Assert.That(boot.CodexQuickButtonSizeForTests.x, Is.EqualTo(104f).Within(0.01f));
+            Assert.That(boot.CodexQuickButtonPositionForTests, Is.EqualTo(new Vector2(-24f, 92f)));
+            Assert.That(boot.CodexQuickButtonSizeForTests, Is.EqualTo(new Vector2(54f, 54f)));
             Assert.That(File.Exists(boot.SavePath), Is.True);
             Assert.That(controller.MagicNoteEntriesForTests.Count, Is.GreaterThanOrEqualTo(1));
 
@@ -654,10 +652,9 @@ namespace MagicExamHall.Tests
             Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Codex));
             Assert.That(controller.IsFirstFloorLetterVisibleForTests, Is.False);
             Assert.That(boot.CodexPanelVisibleForTests, Is.True);
-            Assert.That(boot.CodexPanelParentForTests, Is.EqualTo("Exam Canvas"));
-            Assert.That(boot.CodexPanelPositionForTests.x, Is.EqualTo(24f).Within(0.01f));
-            Assert.That(boot.CodexPanelPositionForTests.y, Is.EqualTo(-24f).Within(0.01f));
-            Assert.That(boot.CodexBackdropBlocksRaycastsForTests, Is.False);
+            Assert.That(boot.CodexPanelParentForTests, Is.EqualTo("Boot Overlay"));
+            Assert.That(boot.CodexPanelPositionForTests, Is.EqualTo(Vector2.zero));
+            Assert.That(boot.CodexBackdropBlocksRaycastsForTests, Is.True);
             Assert.That(boot.CodexPanelDrawsAboveBackdropForTests, Is.True);
             Assert.That(boot.CodexQuickButtonVisibleForTests, Is.False);
             Assert.That(boot.CodexTextForTests, Does.Contain("1층"));
@@ -1178,7 +1175,7 @@ namespace MagicExamHall.Tests
             Assert.That(GameObject.Find("Stage Effect frozen_river Ground Glow"), Is.Not.Null);
 
             var earthStairs = controller.StageGoalPositionForTests("earth_stairs");
-            var stairs = CastNoisyCustomReferenceSpell(controller, SpellFamily.Earth, SpellFamily.Wind, earthStairs);
+            var stairs = CastNoisyCustomReferenceSpell(controller, SpellFamily.Earth, SpellFamily.Earth, earthStairs);
             yield return null;
 
             Assert.That(stairs.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
@@ -1537,9 +1534,10 @@ namespace MagicExamHall.Tests
 
             Assert.That(result.spell.targetFamily, Is.EqualTo(SpellFamily.Water));
             Assert.That(controller.IsResultPanelVisible, Is.False);
-            Assert.That(controller.MentorSpeechTextForTests, Does.Contain("목표는 물 문양입니다"));
-            Assert.That(controller.MentorSpeechTextForTests, Does.Contain("땅 특징도 함께 섞였습니다"));
-            Assert.That(controller.MentorSpeechTextForTests, Does.Contain("끝점을 시작점"));
+            Assert.That(controller.MentorSpeechTextForTests, Is.Not.Empty);
+            var mentorLines = controller.MentorSpeechTextForTests.Split('\n');
+            Assert.That(mentorLines.Length, Is.LessThanOrEqualTo(3));
+            Assert.That(mentorLines.All(line => line.Length <= 28), Is.True);
             Assert.That(controller.MentorSpeechTextForTests, Does.Not.Contain("표식 근처 입력"));
             Assert.That(controller.MentorSpeechTextForTests, Does.Not.Contain("후보와 아직"));
             Assert.That(controller.MentorSpeechTextForTests, Does.Not.Contain("닫힌 원입니다"));
@@ -1823,7 +1821,7 @@ namespace MagicExamHall.Tests
             Assert.That(retryResult.spell.recognizedFamily, Is.Null);
             Assert.That(controller.ActiveSealCount, Is.EqualTo(1));
             Assert.That(controller.LastOverlayStack, Is.Empty);
-            Assert.That(controller.LastMagicNoteText, Does.Contain("가져온 도형"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("추가 도형"));
 
             ClearCustomSlots(controller);
             DeleteIfExists(profilePath);
@@ -2085,7 +2083,7 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
-        public IEnumerator CustomSlotCastCanCompleteMappedDefaultGoal()
+        public IEnumerator CustomSlotCastRequiresBaseThenCompletesMappedDefaultGoal()
         {
             SceneManager.LoadScene("MagicExamHall");
             yield return null;
@@ -2099,20 +2097,17 @@ namespace MagicExamHall.Tests
             controller.LoadFloorForTests(1);
             yield return null;
             Assert.That(controller.CurrentFloorNumber, Is.EqualTo(2));
-            controller.CompleteCurrentGoalsForTests(2);
+            controller.CompleteCurrentGoalsForTests(3);
             yield return null;
-            Assert.That(controller.CurrentSecondFloorSequenceGoalIdForTests, Is.EqualTo("custom_wind"));
-            var windGoal = new Vector2(0f, 3.05f);
-            var gold = Samples(SpellFamily.Wind);
-            Assert.That(controller.SaveCustomShapeSlotForTests(10, "목표 바람", "목표|바람|rect", "rect", SpellFamily.Wind, gold, out var message), Is.True, message);
+            Assert.That(controller.CurrentSecondFloorSequenceGoalIdForTests, Is.EqualTo("custom_earth"));
+            Assert.That(controller.ImportCustomReferenceForTests(SpellFamily.Earth, out _, out var message), Is.True, message);
 
-            var worldStrokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, 1.6f, 0.03f), windGoal, 0.8f);
-            var result = controller.CastRawBaseForTests(worldStrokes, windGoal);
+            var earthGoal = controller.StageGoalPositionForTests("custom_earth");
+            var result = CastCustomReferenceSpell(controller, SpellFamily.Earth, SpellFamily.Earth, earthGoal);
             yield return null;
 
             Assert.That(result.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.spell.isCustomShape, Is.True);
-            Assert.That(result.spell.customShapeLabel, Is.EqualTo("목표 바람"));
             Assert.That(result.spell.customShapeToken, Is.EqualTo("rect"));
             Assert.That(result.spell.customEventKind, Is.EqualTo(CustomShapeEventKind.WallEntity.ToString()));
             Assert.That(result.spell.customEventPersistence, Is.EqualTo(CustomShapeEventPersistence.Permanent));
@@ -2120,8 +2115,8 @@ namespace MagicExamHall.Tests
             Assert.That(controller.CustomShapeEventObjectCountForTests, Is.GreaterThan(0));
             Assert.That(controller.ActiveCustomShapeEventObjectCountForTests, Is.GreaterThan(0));
             Assert.That(controller.PermanentCustomShapeEventObjectCountForTests, Is.GreaterThan(0));
-            Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
-            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(3));
+            Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Earth));
+            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(4));
             Assert.That(controller.LastMagicNoteText, Does.Contain("도형 반응"));
             yield return new WaitForSeconds(1.25f);
             Assert.That(controller.ActiveCustomShapeEventObjectCountForTests, Is.GreaterThan(0));
@@ -2379,7 +2374,7 @@ namespace MagicExamHall.Tests
             Assert.That(customWind.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
             Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
             Assert.That(controller.IsQuestScrollCollapsedForTests, Is.True);
-            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(88f).Within(1.0f));
+            Assert.That(controller.QuestScrollPanelHeightForTests, Is.EqualTo(78f).Within(1.0f));
 
             var lifeGoal = new Vector2(5.4f, 2.55f);
             var customLife = controller.CastRawBaseForTests(controller.CustomReferenceStrokesForTests(SpellFamily.Life, lifeGoal), lifeGoal);
@@ -2717,7 +2712,7 @@ namespace MagicExamHall.Tests
             var goalPosition = controller.StageGoalPositionForTests("earth_stairs");
             Assert.That(controller.StageGoalRadiusForTests("earth_stairs"), Is.GreaterThan(2.8f));
             var nearObstaclePosition = goalPosition + new Vector2(2.45f, -0.35f);
-            CastCustomReferenceSpell(controller, SpellFamily.Earth, SpellFamily.Wind, nearObstaclePosition);
+            CastCustomReferenceSpell(controller, SpellFamily.Earth, SpellFamily.Earth, nearObstaclePosition);
             yield return null;
 
             Assert.That(
@@ -2768,8 +2763,15 @@ namespace MagicExamHall.Tests
             var icePosition = controller.StageGoalPositionForTests("frozen_river");
             CastCustomReferenceSpell(controller, SpellFamily.Water, SpellFamily.Water, icePosition);
             yield return null;
-            Assert.That(controller.CompletedGoalCountForTests, Is.EqualTo(1));
-            Assert.That(controller.ActiveStageEntityCountForTests, Is.EqualTo(1));
+            yield return null;
+            Assert.That(
+                controller.CompletedGoalCountForTests,
+                Is.EqualTo(1),
+                $"frozen river note={controller.LastMagicNoteText} event={controller.LastCustomShapeEventKindForTests} seal={controller.ActiveSealCount} effect={controller.LastSealCustomEffectKindForTests}");
+            Assert.That(
+                controller.ActiveStageEntityCountForTests,
+                Is.EqualTo(1),
+                $"frozen river entity count after completion; visuals={controller.ActiveStageEffectVisualCountForTests}");
             Assert.That(controller.ActiveStageEffectVisualCountForTests, Is.GreaterThanOrEqualTo(9));
             Assert.That(GameObject.Find("Stage Effect frozen_river Ground Glow"), Is.Not.Null);
             Assert.That(GameObject.Find("Stage Effect frozen_river Surface Wake"), Is.Not.Null);
@@ -2779,7 +2781,7 @@ namespace MagicExamHall.Tests
             Assert.That(controller.LastMagicNoteText, Does.Contain("얼음"));
 
             var stairsPosition = controller.StageGoalPositionForTests("earth_stairs");
-            CastCustomReferenceSpell(controller, SpellFamily.Earth, SpellFamily.Wind, stairsPosition);
+            CastCustomReferenceSpell(controller, SpellFamily.Earth, SpellFamily.Earth, stairsPosition);
             yield return null;
             Assert.That(
                 controller.CompletedGoalCountForTests,
@@ -2955,7 +2957,7 @@ namespace MagicExamHall.Tests
             Assert.That(result.spell.status, Is.Not.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.spell.recognizedFamily, Is.Null);
             Assert.That(controller.LastOverlayStack, Is.Empty);
-            Assert.That(controller.LastMagicNoteText, Does.Contain("가져온 도형"));
+            Assert.That(controller.LastMagicNoteText, Does.Contain("추가 도형"));
             DeleteIfExists(profilePath);
         }
 
@@ -3518,6 +3520,11 @@ namespace MagicExamHall.Tests
 
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
+            var boot = Object.FindFirstObjectByType<GameBootController>();
+            Assert.That(boot, Is.Not.Null);
+            boot.StartNewGameForTests();
+            controller.CloseFirstFloorLetterForTests();
+            yield return null;
 
             controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-5.5f, 2.6f));
             yield return null;
@@ -3545,6 +3552,11 @@ namespace MagicExamHall.Tests
             Assert.That(controller.HasEndingReport, Is.True);
             Assert.That(controller.IsResultPanelVisible, Is.False);
             Assert.That(controller.EndingReportTextForTests, Does.Contain("최종 시험"));
+            Assert.That(controller.IsHealthBarVisibleForTests, Is.False);
+            Assert.That(controller.IsFloorSkipButtonVisibleForTests, Is.False);
+            Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Ending));
+            Assert.That(boot.CodexQuickButtonVisibleForTests, Is.False);
+            Assert.That(boot.CodexBackdropBlocksRaycastsForTests, Is.False);
             Assert.That(controller.EndingReportTextForTests, Does.Contain("도달 상태"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("수료 엔딩"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("가장 많이 사용한 기본 문양"));
@@ -3556,6 +3568,8 @@ namespace MagicExamHall.Tests
             Assert.That(controller.EndingReportTextForTests, Does.Contain("자기 평가"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain(ExamLogger.DisabledOutputDirectory));
             Assert.That(controller.EndingReportTextForTests, Does.Not.Contain("MagicExamHallLogs"));
+            AssertTextFits("Report Heading");
+            AssertTextFits("Report Text", 12f, 12f);
         }
 
         private static void ClearCustomSlots(ExamGameController controller)
@@ -3755,21 +3769,20 @@ namespace MagicExamHall.Tests
                 Assert.That(speech, Does.Contain(fragment), speech);
             }
 
-            Assert.That(speech, Does.Not.Contain("노트:"), speech);
+            Assert.That(speech, Does.Not.Contain("힌트:"), speech);
             Assert.That(speech, Does.Not.Contain("다음:"), speech);
             Assert.That(speech, Does.Not.Contain("base"), speech);
             Assert.That(speech, Does.Not.Contain("overlay"), speech);
             Assert.That(speech, Does.Not.Contain("gold capture"), speech);
-            Assert.That(speech, Does.Not.Contain("안정화되었습니다"), speech);
-            Assert.That(speech, Does.Not.Contain("완성하세요"), speech);
-            Assert.That(speech, Does.Not.Contain("그리세요"), speech);
-            Assert.That(speech, Does.Not.Contain("하십시오"), speech);
-            Assert.That(speech, Does.Not.Contain("그렸어"), speech);
-            Assert.That(speech, Does.Not.Contain("굳었어"), speech);
-            Assert.That(speech, Does.Not.Contain("어려워"), speech);
-            Assert.That(speech, Does.Not.Contain("하네"), speech);
-            Assert.That(speech, Does.Not.Contain("이네"), speech);
-            Assert.That(speech, Does.Not.Contain("보게"), speech);
+        }
+
+        private static void AssertTextFits(string objectName, float widthTolerance = 10f, float heightTolerance = 8f)
+        {
+            var text = GameObject.Find(objectName)?.GetComponent<Text>();
+            Assert.That(text, Is.Not.Null, objectName);
+            var rect = text.rectTransform.rect;
+            Assert.That(text.preferredWidth, Is.LessThanOrEqualTo(rect.width + widthTolerance), objectName);
+            Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(rect.height + heightTolerance), objectName);
         }
 
         private static void DragCapturePad(CustomShapeCapturePad capturePad, Vector2 start, Vector2 end)

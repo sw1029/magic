@@ -168,6 +168,7 @@ namespace MagicExamHall
         {
             "line",
             "arrow",
+            "beamArrow",
             "rect",
             "roundRect",
             "ellipse",

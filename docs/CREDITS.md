@@ -8,7 +8,8 @@
 
 | 자산 | 작가 | 출처 | 라이선스 | 사용 위치 |
 | --- | --- | --- | --- | --- |
-| 기본 32×32 도트 sprite pack | 프로젝트 내부 제작 | `Assets/MagicExamHall/Resources/Sprites` | 프로젝트 라이선스 | 시험장 배경, 플레이어, 설치물, 룬, 원소 문양 |
+| 기본 32×32 도트 sprite pack | 프로젝트 내부 제작 | `Assets/MagicExamHall/Resources/Sprites` | 프로젝트 라이선스 | 시험장 배경, 설치물, 룬, 원소 문양 |
+| Zelda-like tilesets and sprites (캐릭터 시트) | ArMM1998 | <https://opengameart.org/content/zelda-like-tilesets-and-sprites> | CC0 | 플레이어 4방향 idle/walk/cast 프레임, 멘토 NPC 15종 (`scripts/import-character-pack.py`로 슬라이스·리컬러) |
 | Procedural fallback sprite | 프로젝트 내부 제작 | `PixelArtFactory.cs` | 프로젝트 라이선스 | PNG 누락 시 fallback |
 
 ## 사운드
@@ -22,7 +23,8 @@
 
 | 자산 | 작가 | 출처 | 라이선스 | 사용 위치 |
 | --- | --- | --- | --- | --- |
-| Unity 기본 Arial | — | Unity 번들 | — | HUD, 룬 라벨, 노트 |
+| Galmuri11 / Galmuri14 (한글 비트맵 폰트) | Lee Minseo (quiple) | <https://github.com/quiple/galmuri> | SIL Open Font License 1.1 | HUD, 룬 라벨, 노트, 멘토 대사 등 모든 UI 텍스트 (`Resources/Fonts/`) |
+| Unity 기본 Arial | — | Unity 번들 | — | Galmuri 로드 실패 시 fallback |
 
 ## 자산 추가 시 작성 규칙
 

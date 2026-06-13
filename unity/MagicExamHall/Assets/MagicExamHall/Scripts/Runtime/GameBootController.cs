@@ -1076,7 +1076,10 @@ namespace MagicExamHall
 
         private Button CreateQuickCodexButton(Transform parent)
         {
-            var body = CreatePanel("Codex Quick Button", parent, new Vector2(-74f, -30f), new Vector2(118, 42), Anchor.TopRight, new Color(0.045f, 0.058f, 0.085f, 0.96f));
+            // Bottom-right, stacked just above the skip button. The previous
+            // top-right spot sat on top of the parchment quest panel and read as a
+            // stray black box.
+            var body = CreatePanel("Codex Quick Button", parent, new Vector2(-18f, 92f), new Vector2(118, 42), Anchor.BottomRight, new Color(0.045f, 0.058f, 0.085f, 0.96f));
             codexQuickImage = body.GetComponent<Image>();
             var button = body.gameObject.AddComponent<Button>();
             button.targetGraphic = codexQuickImage;
@@ -1183,6 +1186,10 @@ namespace MagicExamHall
                     rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
                     rect.pivot = new Vector2(1f, 1f);
                     break;
+                case Anchor.BottomRight:
+                    rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
+                    rect.pivot = new Vector2(1f, 0f);
+                    break;
                 case Anchor.Center:
                     rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
                     rect.pivot = new Vector2(0.5f, 0.5f);
@@ -1195,6 +1202,7 @@ namespace MagicExamHall
             Stretch,
             TopLeft,
             TopRight,
+            BottomRight,
             Center
         }
     }

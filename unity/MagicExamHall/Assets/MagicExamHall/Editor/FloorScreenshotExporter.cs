@@ -58,7 +58,18 @@ namespace MagicExamHall.Editor
             var originalPlane = canvas.planeDistance;
 
             camera.transform.position = new Vector3(0f, 0f, -10f);
-            PixelRenderSetup.ConfigureCamera(camera, ExamGameController.GameplayCameraOrthographicSize, camera.backgroundColor);
+            var pixelPerfect = PixelRenderSetup.ConfigureCamera(camera, ExamGameController.GameplayCameraOrthographicSize, camera.backgroundColor);
+            // The ScreenSpaceCamera HUD canvas is rendered THROUGH this camera, so
+            // the pixel-perfect 632x356 windowbox would downscale every HUD glyph and
+            // smear small text. Disable it during capture to render the world and HUD
+            // at the full 1280x720 target; the in-game HUD (ScreenSpaceOverlay) is
+            // already crisp, so this makes the screenshot faithful to what players see.
+            var pixelPerfectWasEnabled = pixelPerfect != null && pixelPerfect.enabled;
+            if (pixelPerfect != null)
+            {
+                pixelPerfect.enabled = false;
+            }
+            camera.orthographicSize = ExamGameController.GameplayCameraOrthographicSize;
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
             canvas.worldCamera = camera;
             canvas.planeDistance = 1f;
@@ -68,6 +79,7 @@ namespace MagicExamHall.Editor
                 for (var floor = 0; floor < controller.FloorCount; floor++)
                 {
                     controller.LoadFloorForTests(floor);
+                    DestroyStaleFloorRoots(floor + 1);
                     InvokePrivate(controller, "UpdateHud");
                     Canvas.ForceUpdateCanvases();
                     Capture(camera, output, $"unity_floor_{floor + 1:00}.png");
@@ -75,6 +87,10 @@ namespace MagicExamHall.Editor
             }
             finally
             {
+                if (pixelPerfect != null)
+                {
+                    pixelPerfect.enabled = pixelPerfectWasEnabled;
+                }
                 camera.transform.position = originalCameraPosition;
                 camera.orthographic = originalOrthographic;
                 camera.orthographicSize = originalOrthographicSize;
@@ -86,11 +102,37 @@ namespace MagicExamHall.Editor
             Debug.Log($"Floor screenshots exported to {output}");
         }
 
+        /// <summary>
+        /// Object.Destroy is deferred outside play mode, so floor roots from
+        /// previously loaded floors linger and stack into the captures. Remove
+        /// every floor root except the one just loaded.
+        /// </summary>
+        private static void DestroyStaleFloorRoots(int currentFloorNumber)
+        {
+            var expectedPrefix = $"Floor {currentFloorNumber} ";
+            foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
+            {
+                if (root.name.StartsWith("Floor ", StringComparison.Ordinal) &&
+                    !root.name.StartsWith(expectedPrefix, StringComparison.Ordinal))
+                {
+                    UnityEngine.Object.DestroyImmediate(root);
+                }
+            }
+        }
+
         private static void PrepareController(ExamGameController controller)
         {
             if (controller.ActiveGoalCount == 0)
             {
                 InvokePrivate(controller, "Awake");
+            }
+
+            // Leave the title screen before capturing so floor shots are not
+            // overlaid with the boot menu UI.
+            var boot = UnityEngine.Object.FindFirstObjectByType<GameBootController>();
+            if (boot != null && boot.StateForTests == GameBootState.Title)
+            {
+                boot.StartNewGameForTests();
             }
         }
 

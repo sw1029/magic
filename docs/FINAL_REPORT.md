@@ -130,13 +130,13 @@ stroke session(다획 입력 버퍼 0.8초) → 특징 추출 → family 판정 
 | assist level 도달률 | 힌트 단계 1/2/3 사용 횟수 | RQ2 | attempts.csv |
 | 피드백 이해도 (자기보고) | 실패 후 다음 행동을 말로 설명 가능한지 | RQ2 | 인터뷰 |
 | 피드백 이해도 (행동) | 발화한 교정 방향과 다음 시도의 실제 변화 일치율 | RQ2 | 인터뷰 + attempts.csv 대조 |
-| 학습 곡선 | 세션 내 성공률 이동 평균 (전반부 vs 후반부 변화) | RQ1 | attempts.csv |
-| 힌트 효과 | 힌트 노출 전후 성공률 변화 (창 5회, 관찰 경향) | RQ2 | attempts.csv |
 | 막힘 지점 | 2분 이상 정체 또는 동일 목표 3회 이상 실패 | RQ1 | 관찰 |
+| 세션 내 학습 곡선 | 시도 순서 rolling 성공률의 기울기 (양수 = 플레이만으로 향상) | RQ1 | attempts.csv 분석 |
+| 힌트 전후 성공률 | 목표 단위 첫 힌트 노출 이전 vs 이후 성공률 비교 (escalator 효과의 준-인과 증거) | RQ2 | attempts.csv 분석 |
 | 설문 5점 척도 | 명확성·공정성·피드백 도움·조작감·몰입감 | 전체 | 설문 |
-| SUS | 표준 사용성 점수 (기준선 68) | 전체 | SUS 설문 |
+| SUS | System Usability Scale 10문항, 표준 채점 0~100 (기준선 68) | 전체 | 설문 |
 
-로그 기반 지표는 `scripts/analyze-playtest-attempts.py`로 자동 산출된다 (학습 곡선·힌트 전후·혼동 행렬·실패 유형·막힘 지점·SUS 채점).
+광범위한 실패 유형·혼동 행렬·막힘 지점·SUS 채점은 `scripts/analyze-playtest-attempts.py`로 산출한다. RQ1 학습 곡선, RQ2 힌트 전후, RQ3 family 공정성의 재현 가능한 집중 분석은 합성 데이터 self-test를 포함한 `scripts/playtest-attempts-analysis.py`로 교차 확인한다. 단일 조건 관찰 연구의 한계는 §6.2에 명시한다.
 
 ### 5.3 사전 수집: stroke 데이터
 
@@ -165,6 +165,8 @@ stroke session(다획 입력 버퍼 0.8초) → 특징 추출 → family 판정 
 
 - 인식 휴리스틱의 개인차: 특징 기반 판정은 여전히 일부 필체에 편향될 수 있다 (user profile 보정의 Unity 이식은 향후 과제).
 - 표본 크기 N=5~10, 단일 세션 측정 — 장기 학습 곡선은 다루지 않는다.
+- **비교 조건(힌트 유/무) 없는 단일 조건 관찰 연구** — escalator의 효과는 힌트 노출 전후의 세션 내 비교로만 추정하며, 인과 주장은 하지 않는다. 형성적(formative) 평가로 프레이밍한다.
+- quality 분리 설계는 운동 제약이 있는 사용자에게 체계적 약화 페널티가 될 수 있다 — 접근성 관점의 quality floor 옵션은 향후 과제.
 - 참가자 모집 풀의 동질성(대학 환경) 가능성.
 
 ### 6.3 Future Work

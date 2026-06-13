@@ -67,6 +67,8 @@
 
 응답은 `outputs/playtest-*/sus.csv`(`participantId,q1..q10`)로 저장하고 `python scripts/analyze-playtest-attempts.py --sus <파일>`로 채점한다 (홀수 문항 응답-1, 짝수 문항 5-응답, 합계 ×2.5).
 
+사후 설문은 위 SUS 10문항과 명확성·공정성·피드백 도움·조작감·몰입감의 커스텀 5문항, 자유 의견으로 구성한다. SUS 68점을 통상적 평균 기준선으로 사용한다.
+
 ## 입력 버퍼 A/B
 
 참가자를 0.6초, 0.8초, 1.0초 그룹에 균등 배정한다. 각 그룹은 동일 빌드를 사용하되 `WorldDrawingController.bufferSeconds`만 다르게 설정한 테스트 빌드를 사용한다. 결정 기준은 첫 시전까지 시간, family 첫 시도 성공률, overlay detached 비율, 주관 조작감 점수다.
@@ -81,11 +83,17 @@
 
 1. `attempts.csv`를 session 단위로 모은다.
 2. 직접 식별 정보가 없는지 확인한다.
-3. `python scripts/analyze-playtest-attempts.py <세션폴더...> -o outputs/playtest-1/analysis`를 실행한다 — 학습 곡선(RQ1), 힌트 전후 비교(RQ2), family 공정성·혼동 행렬(RQ3), 실패 유형·assist 도달·막힘 지점이 자동 산출된다.
-4. SUS를 채점한다: `python scripts/analyze-playtest-attempts.py --sus outputs/playtest-1/sus.csv`.
-5. 피드백 이해도(행동) 코딩을 수행하고 일치율을 기록한다.
-6. 상위 오인식/막힘 3개를 Phase 4/5 백로그로 옮긴다.
-7. 입력 버퍼 D3 결정을 `docs/FINAL_COMPLETION_PLAN.md` 결정 로그에 기록한다.
+3. `python scripts/analyze-playtest-attempts.py <세션폴더...> -o outputs/playtest-1/analysis`를 실행해 실패 유형, 혼동 행렬, assist 도달, 막힘 지점을 산출한다.
+4. `python scripts/playtest-attempts-analysis.py <세션폴더...> --out outputs/playtest-1/rq-analysis`를 실행한다. 산출:
+   - RQ1: 세션 내 학습 곡선(rolling 성공률 기울기), 층별 첫 성공까지 시도 수
+   - RQ2: 목표 단위 힌트 노출 전후 성공률 비교, assist level별 직후 성공률
+   - RQ3: family별 첫 시도 성공률 분포와 편차
+5. `python scripts/playtest-attempts-analysis.py --self-test`로 집중 분석 로직을 합성 데이터에서 검증한다.
+6. SUS를 `python scripts/analyze-playtest-attempts.py --sus outputs/playtest-1/sus.csv`로 채점한다.
+7. 피드백 이해도(행동) 코딩을 수행하고 일치율을 기록한다.
+8. floor, phase, recognizedFamily, worldEffect, success, assistLevel을 pivot한다.
+9. 상위 오인식/막힘 3개를 Phase 4/5 백로그로 옮긴다.
+10. 입력 버퍼 D3 결정을 `docs/FINAL_COMPLETION_PLAN.md` 결정 로그에 기록한다.
 
 ## 보고 산출물
 

@@ -10,6 +10,8 @@
 | --- | --- | --- | --- | --- |
 | 기본 32×32 도트 sprite pack | 프로젝트 내부 제작 | `Assets/MagicExamHall/Resources/Sprites` | 프로젝트 라이선스 | 시험장 배경, 플레이어, 설치물, 룬, 원소 문양 |
 | Procedural fallback sprite | 프로젝트 내부 제작 | `PixelArtFactory.cs` | 프로젝트 라이선스 | PNG 누락 시 fallback |
+| 고문서 UI fallback pack | 프로젝트 내부 제작 | `MagicExamUiTheme.cs` | 프로젝트 라이선스 | 타이틀 로고, 책/두루마리 패널, 버튼, 노트, 체크박스, 슬라이더 |
+| `TitleLogo.png` | 프로젝트 내부 제작 (OpenAI image generation) | `Resources/Sprites/UI/TitleLogo.png` | 프로젝트 라이선스 | 타이틀 화면 마법탑 룬 문장 |
 
 ## 사운드
 

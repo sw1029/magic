@@ -408,67 +408,108 @@ namespace MagicExamHall
 
         private void BuildUi()
         {
-            overlayRoot = CreatePanel("Boot Overlay", canvas.transform, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0.012f, 0.015f, 0.023f, 0.94f));
+            overlayRoot = CreatePanel("Boot Overlay", canvas.transform, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, MagicExamUiTheme.DimOverlay);
             overlayRoot.gameObject.SetActive(true);
 
-            titlePanel = CreatePanel("Title Screen", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
-            CreateText("Title", titlePanel, "Magic Exam Hall", 54, FontStyle.Bold, new Vector2(0f, 92f), new Vector2(920, 72), Anchor.Center, TextAnchor.MiddleCenter, new Color(1f, 0.86f, 0.48f));
-            CreateText("Subtitle", titlePanel, "Magic Recognizer Playable", 21, FontStyle.Bold, new Vector2(0f, 32f), new Vector2(640, 36), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.72f, 0.88f, 1f));
+            titlePanel = CreatePanel("Title Screen", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, MagicExamUiTheme.DeepTowerSolid);
             CreateTowerSilhouette(titlePanel);
-            CreateText("Title Flavor", titlePanel, "떠 있는 탑은 오늘도 입학생을 기다린다.", 15, FontStyle.Italic, new Vector2(0f, -168f), new Vector2(640, 30), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.74f, 0.81f, 0.93f, 0.92f));
-            CreateText("Any Key", titlePanel, "아무 키나 눌러 시작", 18, FontStyle.Bold, new Vector2(0f, -210f), new Vector2(420, 34), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.92f, 0.95f, 1f));
+            var titleLogoArt = CreateImage("Title Logo Art", titlePanel, new Vector2(-180f, 166f), new Vector2(300f, 112f), Anchor.Center, Color.white);
+            MagicExamUiFactory.ApplySprite(titleLogoArt, MagicExamUiSpriteId.TitleLogo, sliced: false);
+            titleLogoArt.raycastTarget = false;
+            var titleText = CreateText("Title", titlePanel, "MAGIC EXAM HALL", 48, FontStyle.Bold, new Vector2(-180f, 88f), new Vector2(650, 72), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.Gold);
+            MagicExamUiFactory.StyleDarkText(titleText, emphasized: true);
+            var subtitle = CreateText("Subtitle", titlePanel, "마법탑 입학 복구 시험", 20, FontStyle.Bold, new Vector2(-180f, 28f), new Vector2(520, 36), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.RuneBlue);
+            MagicExamUiFactory.StyleDarkText(subtitle);
+            var flavor = CreateText("Title Flavor", titlePanel, "떠 있는 탑은 오늘도 입학생의 문양을 기다린다.", 15, FontStyle.Italic, new Vector2(-180f, -122f), new Vector2(620, 30), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.TextOnDarkMuted);
+            MagicExamUiFactory.StyleDarkText(flavor);
+            var titlePrompt = MagicExamUiFactory.CreateFramedPanel(
+                "Title Prompt Scroll",
+                titlePanel,
+                new Vector2(-180f, -194f),
+                new Vector2(390f, 52f),
+                MagicExamUiAnchor.Center,
+                MagicExamUiSpriteId.ScrollPanel,
+                Color.white,
+                MagicExamUiTheme.BorderBrown,
+                2f);
+            var promptText = CreateText("Any Key", titlePrompt, "아무 키나 눌러 입장", 17, FontStyle.Bold, Vector2.zero, new Vector2(350, 34), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.ParchmentInk);
+            MagicExamUiFactory.StyleParchmentText(promptText, emphasized: true);
 
-            menuPanel = CreatePanel("Main Menu", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
-            CreateText("Menu Title", menuPanel, "Magic Exam Hall", 42, FontStyle.Bold, new Vector2(-288f, 190f), new Vector2(520, 56), Anchor.Center, TextAnchor.MiddleLeft, new Color(1f, 0.86f, 0.48f));
-            newGameButton = CreateButton("New Game", menuPanel, "새 게임", new Vector2(-310f, 92f), StartNewGame);
-            continueButton = CreateButton("Continue", menuPanel, "이어하기", new Vector2(-310f, 34f), ContinueGame);
-            CreateButton("Options", menuPanel, "옵션", new Vector2(-310f, -24f), () => ShowOptions(GameBootState.MainMenu));
-            practiceButton = CreateButton("Practice", menuPanel, "연습장", new Vector2(-310f, -82f), StartPracticeMode);
-            CreateButton("Quit", menuPanel, "종료", new Vector2(-310f, -140f), Application.Quit);
-            CreateText("Save Slot Label", menuPanel, "저장 슬롯", 16, FontStyle.Bold, new Vector2(128f, 92f), new Vector2(520, 28), Anchor.Center, TextAnchor.MiddleLeft, new Color(1f, 0.86f, 0.48f));
+            menuPanel = CreatePanel("Main Menu", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, MagicExamUiTheme.DeepTowerSolid);
+            CreateTowerSilhouette(menuPanel);
+            var menuFrame = MagicExamUiFactory.CreateFramedPanel("Menu Commands", menuPanel, new Vector2(-388f, 0f), new Vector2(340f, 540f), MagicExamUiAnchor.Center, MagicExamUiSpriteId.DarkPanel, Color.white, MagicExamUiTheme.BorderGold, 2.4f);
+            MagicExamUiFactory.AddAccentRail(menuFrame, MagicExamUiTheme.Gold, 6f);
+            var slotFrame = MagicExamUiFactory.CreateFramedPanel("Save Ledger", menuPanel, new Vector2(180f, 0f), new Vector2(650f, 500f), MagicExamUiAnchor.Center, MagicExamUiSpriteId.BookPanel, Color.white, MagicExamUiTheme.BorderBrown, 3f);
+            var menuTitle = CreateText("Menu Title", menuFrame, "MAGIC EXAM HALL", 28, FontStyle.Bold, new Vector2(0f, 218f), new Vector2(280, 44), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.Gold);
+            MagicExamUiFactory.StyleDarkText(menuTitle, emphasized: true);
+            var menuSubtitle = CreateText("Menu Subtitle", menuFrame, "입학 복구 기록", 14, FontStyle.Bold, new Vector2(0f, 184f), new Vector2(250, 28), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.RuneBlue);
+            MagicExamUiFactory.StyleDarkText(menuSubtitle);
+            newGameButton = CreateButton("New Game", menuFrame, "새 게임", new Vector2(0f, 112f), StartNewGame, MagicExamButtonStyle.Primary);
+            continueButton = CreateButton("Continue", menuFrame, "이어하기", new Vector2(0f, 52f), ContinueGame);
+            CreateButton("Options", menuFrame, "옵션", new Vector2(0f, -8f), () => ShowOptions(GameBootState.MainMenu));
+            practiceButton = CreateButton("Practice", menuFrame, "연습장", new Vector2(0f, -68f), StartPracticeMode);
+            CreateButton("Quit", menuFrame, "종료", new Vector2(0f, -128f), Application.Quit, MagicExamButtonStyle.Danger);
+            var saveLabel = CreateText("Save Slot Label", slotFrame, "입학 기록 보관함", 23, FontStyle.Bold, new Vector2(0f, 205f), new Vector2(550, 34), Anchor.Center, TextAnchor.MiddleLeft, MagicExamUiTheme.ParchmentInk);
+            MagicExamUiFactory.StyleParchmentText(saveLabel, emphasized: true);
+            var saveRule = CreateImage("Save Ledger Rule", slotFrame, new Vector2(0f, 172f), new Vector2(560f, 2f), Anchor.Center, MagicExamUiTheme.BorderBrown);
+            saveRule.raycastTarget = false;
             slotButtons = new Button[SaveSlotCount];
             for (var index = 0; index < SaveSlotCount; index++)
             {
                 var capturedIndex = index;
-                slotButtons[index] = CreateButton($"Save Slot {index + 1}", menuPanel, $"슬롯 {index + 1}", new Vector2(128f + index * 168f, 42f), () => SelectSaveSlot(capturedIndex));
+                slotButtons[index] = CreateButton($"Save Slot {index + 1}", slotFrame, $"슬롯 {index + 1}", new Vector2(-190f + index * 190f, 118f), () => SelectSaveSlot(capturedIndex), MagicExamButtonStyle.Parchment);
             }
-            saveSummaryText = CreateText("Save Summary", menuPanel, "", 15, FontStyle.Normal, new Vector2(128f, -110f), new Vector2(520, 120), Anchor.Center, TextAnchor.UpperLeft, new Color(0.86f, 0.92f, 1f));
+            saveSummaryText = CreateText("Save Summary", slotFrame, "", 16, FontStyle.Normal, new Vector2(0f, -58f), new Vector2(550, 230), Anchor.Center, TextAnchor.UpperLeft, MagicExamUiTheme.ParchmentInk);
+            saveSummaryText.verticalOverflow = VerticalWrapMode.Truncate;
+            MagicExamUiFactory.StyleParchmentText(saveSummaryText);
 
             optionsPanel = CreatePanel("Options Panel", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
-            CreateText("Options Title", optionsPanel, "옵션", 34, FontStyle.Bold, new Vector2(-285f, 150f), new Vector2(360, 46), Anchor.Center, TextAnchor.MiddleLeft, new Color(1f, 0.86f, 0.48f));
-            bgmSlider = CreateSlider("BGM Slider", optionsPanel, "BGM", new Vector2(-120f, 82f), MagicExamSettings.BgmVolume, value => MagicExamSettings.BgmVolume = value);
-            sfxSlider = CreateSlider("SFX Slider", optionsPanel, "SFX", new Vector2(-120f, 24f), MagicExamSettings.SfxVolume, value => MagicExamSettings.SfxVolume = value);
-            mouseSensitivitySlider = CreateSlider("Mouse Sensitivity Slider", optionsPanel, "감도", new Vector2(-120f, -34f), NormalizeSensitivity(MagicExamSettings.MouseSensitivity), value =>
+            var optionsBook = MagicExamUiFactory.CreateFramedPanel("Options Book", optionsPanel, Vector2.zero, new Vector2(940f, 580f), MagicExamUiAnchor.Center, MagicExamUiSpriteId.BookPanel, Color.white, MagicExamUiTheme.BorderBrown, 3f);
+            var optionsTitle = CreateText("Options Title", optionsBook, "시험 환경 설정", 30, FontStyle.Bold, new Vector2(0f, 242f), new Vector2(800, 46), Anchor.Center, TextAnchor.MiddleLeft, MagicExamUiTheme.ParchmentInk);
+            MagicExamUiFactory.StyleParchmentText(optionsTitle, emphasized: true);
+            bgmSlider = CreateSlider("BGM Slider", optionsBook, "BGM", new Vector2(-10f, 150f), MagicExamSettings.BgmVolume, value => MagicExamSettings.BgmVolume = value);
+            sfxSlider = CreateSlider("SFX Slider", optionsBook, "SFX", new Vector2(-10f, 88f), MagicExamSettings.SfxVolume, value => MagicExamSettings.SfxVolume = value);
+            mouseSensitivitySlider = CreateSlider("Mouse Sensitivity Slider", optionsBook, "감도", new Vector2(-10f, 26f), NormalizeSensitivity(MagicExamSettings.MouseSensitivity), value =>
             {
                 MagicExamSettings.MouseSensitivity = Mathf.Lerp(0.55f, 1.75f, value);
                 UpdateOptionSummaries();
             });
-            volumeSummaryText = CreateText("Volume Summary", optionsPanel, "", 15, FontStyle.Normal, new Vector2(-120f, -82f), new Vector2(520, 30), Anchor.Center, TextAnchor.UpperLeft, new Color(0.86f, 0.92f, 1f));
-            CreateButton("Swap Mouse", optionsPanel, "좌/우클릭", new Vector2(-310f, -126f), ToggleSwapMouse);
-            CreateButton("Movement Preset", optionsPanel, "이동 키", new Vector2(-62f, -126f), CycleMovementPreset);
-            CreateButton("Text Scale", optionsPanel, "텍스트", new Vector2(186f, -126f), CycleTextScale);
-            CreateButton("Color Assist", optionsPanel, "색 보조", new Vector2(-310f, -184f), ToggleColorAssist);
-            CreateButton("Observer Mode", optionsPanel, "관찰 모드", new Vector2(-62f, -184f), ToggleObserverMode);
-            accessibilitySummaryText = CreateText("Accessibility Summary", optionsPanel, "", 14, FontStyle.Normal, new Vector2(186f, -190f), new Vector2(300, 74), Anchor.Center, TextAnchor.UpperLeft, new Color(0.86f, 0.92f, 1f));
-            optionsBackButton = CreateButton("Options Back", optionsPanel, "돌아가기", new Vector2(-310f, -260f), ReturnFromOptions);
+            volumeSummaryText = CreateText("Volume Summary", optionsBook, "", 15, FontStyle.Normal, new Vector2(-10f, -22f), new Vector2(650, 30), Anchor.Center, TextAnchor.UpperLeft, MagicExamUiTheme.ParchmentInk);
+            MagicExamUiFactory.StyleParchmentText(volumeSummaryText);
+            CreateButton("Swap Mouse", optionsBook, "좌/우클릭", new Vector2(-265f, -88f), ToggleSwapMouse, MagicExamButtonStyle.Parchment);
+            CreateButton("Movement Preset", optionsBook, "이동 키", new Vector2(0f, -88f), CycleMovementPreset, MagicExamButtonStyle.Parchment);
+            CreateButton("Text Scale", optionsBook, "텍스트", new Vector2(265f, -88f), CycleTextScale, MagicExamButtonStyle.Parchment);
+            CreateButton("Color Assist", optionsBook, "색 보조", new Vector2(-265f, -150f), ToggleColorAssist, MagicExamButtonStyle.Parchment);
+            CreateButton("Observer Mode", optionsBook, "관찰 모드", new Vector2(0f, -150f), ToggleObserverMode, MagicExamButtonStyle.Parchment);
+            accessibilitySummaryText = CreateText("Accessibility Summary", optionsBook, "", 14, FontStyle.Normal, new Vector2(265f, -166f), new Vector2(230, 72), Anchor.Center, TextAnchor.UpperLeft, MagicExamUiTheme.ParchmentInk);
+            accessibilitySummaryText.verticalOverflow = VerticalWrapMode.Truncate;
+            MagicExamUiFactory.StyleParchmentText(accessibilitySummaryText);
+            optionsBackButton = CreateButton("Options Back", optionsBook, "돌아가기", new Vector2(-330f, -235f), ReturnFromOptions, MagicExamButtonStyle.Primary);
 
             pausePanel = CreatePanel("Pause Panel", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
-            CreateText("Pause Title", pausePanel, "일시정지", 34, FontStyle.Bold, new Vector2(-286f, 120f), new Vector2(380, 46), Anchor.Center, TextAnchor.MiddleLeft, new Color(1f, 0.86f, 0.48f));
-            resumeButton = CreateButton("Resume", pausePanel, "계속", new Vector2(-310f, 38f), ResumeGameplay);
-            CreateButton("Pause Options", pausePanel, "옵션", new Vector2(-310f, -20f), () => ShowOptions(GameBootState.Paused));
-            CreateButton("Back To Title", pausePanel, "타이틀로", new Vector2(-310f, -78f), ShowTitleWithFade);
+            var pauseScroll = MagicExamUiFactory.CreateFramedPanel("Pause Scroll", pausePanel, Vector2.zero, new Vector2(430f, 390f), MagicExamUiAnchor.Center, MagicExamUiSpriteId.ScrollPanel, Color.white, MagicExamUiTheme.BorderBrown, 3f);
+            var pauseTitle = CreateText("Pause Title", pauseScroll, "시험 일시정지", 28, FontStyle.Bold, new Vector2(0f, 135f), new Vector2(360, 46), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.ParchmentInk);
+            MagicExamUiFactory.StyleParchmentText(pauseTitle, emphasized: true);
+            resumeButton = CreateButton("Resume", pauseScroll, "계속", new Vector2(0f, 55f), ResumeGameplay, MagicExamButtonStyle.Primary);
+            CreateButton("Pause Options", pauseScroll, "옵션", new Vector2(0f, -10f), () => ShowOptions(GameBootState.Paused), MagicExamButtonStyle.Parchment);
+            CreateButton("Back To Title", pauseScroll, "타이틀로", new Vector2(0f, -75f), ShowTitleWithFade, MagicExamButtonStyle.Danger);
 
             codexPanel = CreatePanel("Codex Panel", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
-            CreateText("Codex Title", codexPanel, "마법 노트", 32, FontStyle.Bold, new Vector2(-300f, 220f), new Vector2(420, 44), Anchor.Center, TextAnchor.MiddleLeft, new Color(1f, 0.86f, 0.48f));
-            CreateButton("Codex Dialogue Tab", codexPanel, "대사", new Vector2(-300f, 164f), () => SetCodexTab(MagicNoteCategory.Dialogue));
-            CreateButton("Codex Floor Tab", codexPanel, "층노트", new Vector2(-52f, 164f), () => SetCodexTab(MagicNoteCategory.FloorNote));
-            CreateButton("Codex Discovery Tab", codexPanel, "발견", new Vector2(196f, 164f), () => SetCodexTab(MagicNoteCategory.Discovery));
-            codexText = CreateText("Codex Text", codexPanel, "", 15, FontStyle.Normal, new Vector2(0f, 12f), new Vector2(820, 380), Anchor.Center, TextAnchor.UpperLeft, new Color(0.93f, 0.96f, 1f));
-            CreateButton("Codex Manual Save", codexPanel, "수동 저장", new Vector2(82f, -230f), ManualSaveFromCodex);
-            codexCloseButton = CreateButton("Codex Close", codexPanel, "닫기", new Vector2(330f, -230f), ResumeGameplay);
+            var codexBook = MagicExamUiFactory.CreateFramedPanel("Codex Book", codexPanel, Vector2.zero, new Vector2(1060f, 620f), MagicExamUiAnchor.Center, MagicExamUiSpriteId.BookPanel, Color.white, MagicExamUiTheme.BorderBrown, 3f);
+            var codexTitle = CreateText("Codex Title", codexBook, "마법 노트", 30, FontStyle.Bold, new Vector2(-250f, 255f), new Vector2(430, 44), Anchor.Center, TextAnchor.MiddleLeft, MagicExamUiTheme.ParchmentInk);
+            MagicExamUiFactory.StyleParchmentText(codexTitle, emphasized: true);
+            CreateButton("Codex Dialogue Tab", codexBook, "대사", new Vector2(-310f, 210f), () => SetCodexTab(MagicNoteCategory.Dialogue), MagicExamButtonStyle.Tab);
+            CreateButton("Codex Floor Tab", codexBook, "층노트", new Vector2(-55f, 210f), () => SetCodexTab(MagicNoteCategory.FloorNote), MagicExamButtonStyle.Tab);
+            CreateButton("Codex Discovery Tab", codexBook, "발견", new Vector2(200f, 210f), () => SetCodexTab(MagicNoteCategory.Discovery), MagicExamButtonStyle.Tab);
+            codexText = CreateText("Codex Text", codexBook, "", 15, FontStyle.Normal, new Vector2(0f, -10f), new Vector2(920, 380), Anchor.Center, TextAnchor.UpperLeft, MagicExamUiTheme.ParchmentInk);
+            codexText.verticalOverflow = VerticalWrapMode.Truncate;
+            MagicExamUiFactory.StyleParchmentText(codexText);
+            CreateButton("Codex Manual Save", codexBook, "수동 저장", new Vector2(150f, -260f), ManualSaveFromCodex, MagicExamButtonStyle.Parchment);
+            codexCloseButton = CreateButton("Codex Close", codexBook, "닫기", new Vector2(400f, -260f), ResumeGameplay, MagicExamButtonStyle.Primary);
 
-            endingPromptPanel = CreatePanel("Ending Prompt", overlayRoot, new Vector2(0f, -292f), new Vector2(640, 64), Anchor.Center, new Color(0.025f, 0.032f, 0.047f, 0.94f));
-            CreateText("Ending Prompt Text", endingPromptPanel, "Enter 또는 클릭으로 타이틀 복귀", 17, FontStyle.Bold, Vector2.zero, new Vector2(600, 38), Anchor.Center, TextAnchor.MiddleCenter, new Color(1f, 0.86f, 0.48f));
+            endingPromptPanel = MagicExamUiFactory.CreateFramedPanel("Ending Prompt", overlayRoot, new Vector2(0f, -292f), new Vector2(600, 58), MagicExamUiAnchor.Center, MagicExamUiSpriteId.ScrollPanel, Color.white, MagicExamUiTheme.BorderBrown, 2f);
+            var endingPromptText = CreateText("Ending Prompt Text", endingPromptPanel, "Enter 또는 클릭으로 타이틀 복귀", 17, FontStyle.Bold, Vector2.zero, new Vector2(560, 38), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.ParchmentInk);
+            MagicExamUiFactory.StyleParchmentText(endingPromptText, emphasized: true);
             codexQuickButton = CreateQuickCodexButton(canvas.transform);
             codexQuickButton.gameObject.SetActive(false);
             fadeCurtain = CreateImage("Boot Fade Curtain", canvas.transform, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
@@ -870,11 +911,11 @@ namespace MagicExamHall
 
                 var colors = button.colors;
                 colors.normalColor = index == activeSaveSlotIndex
-                    ? new Color(0.095f, 0.130f, 0.180f, 0.98f)
-                    : new Color(0.045f, 0.058f, 0.085f, 0.96f);
+                    ? new Color(0.96f, 0.76f, 0.42f, 1f)
+                    : new Color(0.84f, 0.63f, 0.36f, 0.98f);
                 colors.highlightedColor = index == activeSaveSlotIndex
-                    ? new Color(0.120f, 0.170f, 0.230f, 1f)
-                    : new Color(0.078f, 0.105f, 0.150f, 0.98f);
+                    ? new Color(1f, 0.84f, 0.52f, 1f)
+                    : new Color(0.94f, 0.72f, 0.42f, 1f);
                 button.colors = colors;
             }
         }
@@ -937,8 +978,8 @@ namespace MagicExamHall
             if (codexQuickImage != null && codexQuickButton.gameObject.activeSelf)
             {
                 codexQuickImage.color = Time.unscaledTime < codexPulseUntil
-                    ? new Color(0.18f, 0.28f, 0.38f, 0.98f)
-                    : new Color(0.045f, 0.058f, 0.085f, 0.96f);
+                    ? new Color(1f, 0.88f, 0.58f, 1f)
+                    : Color.white;
             }
         }
 
@@ -1033,31 +1074,35 @@ namespace MagicExamHall
             UpdateOptionSummaries();
         }
 
-        private Button CreateButton(string name, Transform parent, string label, Vector2 anchoredPosition, UnityEngine.Events.UnityAction action)
+        private Button CreateButton(
+            string name,
+            Transform parent,
+            string label,
+            Vector2 anchoredPosition,
+            UnityEngine.Events.UnityAction action,
+            MagicExamButtonStyle style = MagicExamButtonStyle.Secondary)
         {
-            var body = CreatePanel(name, parent, anchoredPosition, new Vector2(236, 44), Anchor.Center, new Color(0.045f, 0.058f, 0.085f, 0.96f));
+            var body = CreatePanel(name, parent, anchoredPosition, new Vector2(236, 46), Anchor.Center, Color.white);
             var image = body.GetComponent<Image>();
             var button = body.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
             button.onClick.AddListener(action);
-            var colors = button.colors;
-            colors.normalColor = new Color(0.045f, 0.058f, 0.085f, 0.96f);
-            colors.highlightedColor = new Color(0.078f, 0.105f, 0.150f, 0.98f);
-            colors.pressedColor = new Color(0.020f, 0.030f, 0.045f, 1f);
-            colors.disabledColor = new Color(0.025f, 0.028f, 0.034f, 0.72f);
-            button.colors = colors;
-            CreateImage($"{name} Accent", body, Vector2.zero, new Vector2(5, 44), Anchor.TopLeft, new Color(1f, 0.82f, 0.38f, 0.84f));
-            CreateText($"{name} Text", body, label, 18, FontStyle.Bold, Vector2.zero, new Vector2(210, 32), Anchor.Center, TextAnchor.MiddleCenter, Color.white);
+            var text = CreateText($"{name} Text", body, label, 18, FontStyle.Bold, Vector2.zero, new Vector2(210, 34), Anchor.Center, TextAnchor.MiddleCenter, Color.white);
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            MagicExamUiFactory.StyleButton(button, style);
             return button;
         }
 
         private Slider CreateSlider(string name, Transform parent, string label, Vector2 anchoredPosition, float value, UnityEngine.Events.UnityAction<float> action)
         {
-            CreateText($"{name} Label", parent, label, 16, FontStyle.Bold, anchoredPosition + new Vector2(-190f, 0f), new Vector2(80, 28), Anchor.Center, TextAnchor.MiddleLeft, Color.white);
-            var root = CreatePanel(name, parent, anchoredPosition, new Vector2(360, 26), Anchor.Center, new Color(0.020f, 0.026f, 0.040f, 0.92f));
-            var fillArea = CreatePanel($"{name} Fill Area", root, Vector2.zero, new Vector2(340, 12), Anchor.Center, new Color(0f, 0f, 0f, 0f));
-            var fill = CreateImage($"{name} Fill", fillArea, Vector2.zero, new Vector2(340, 12), Anchor.TopLeft, new Color(0.48f, 0.84f, 1f, 0.92f));
-            var handle = CreateImage($"{name} Handle", root, Vector2.zero, new Vector2(18, 28), Anchor.Center, new Color(1f, 0.86f, 0.48f, 0.98f));
+            var sliderLabel = CreateText($"{name} Label", parent, label, 16, FontStyle.Bold, anchoredPosition + new Vector2(-220f, 0f), new Vector2(90, 28), Anchor.Center, TextAnchor.MiddleLeft, MagicExamUiTheme.ParchmentInk);
+            MagicExamUiFactory.StyleParchmentText(sliderLabel, emphasized: true);
+            var root = CreatePanel(name, parent, anchoredPosition, new Vector2(390, 28), Anchor.Center, Color.white);
+            MagicExamUiFactory.ApplySprite(root.GetComponent<Image>(), MagicExamUiSpriteId.SliderTrack, sliced: true);
+            var fillArea = CreatePanel($"{name} Fill Area", root, Vector2.zero, new Vector2(366, 12), Anchor.Center, new Color(0f, 0f, 0f, 0f));
+            var fill = CreateImage($"{name} Fill", fillArea, Vector2.zero, new Vector2(366, 12), Anchor.TopLeft, new Color(0.28f, 0.66f, 0.82f, 0.86f));
+            var handle = CreateImage($"{name} Handle", root, Vector2.zero, new Vector2(20, 32), Anchor.Center, MagicExamUiTheme.Gold);
+            MagicExamUiFactory.ApplySprite(handle, MagicExamUiSpriteId.RuneCursor, sliced: false);
             var slider = root.gameObject.AddComponent<Slider>();
             slider.minValue = 0f;
             slider.maxValue = 1f;
@@ -1076,30 +1121,57 @@ namespace MagicExamHall
 
         private Button CreateQuickCodexButton(Transform parent)
         {
-            var body = CreatePanel("Codex Quick Button", parent, new Vector2(-74f, -30f), new Vector2(118, 42), Anchor.TopRight, new Color(0.045f, 0.058f, 0.085f, 0.96f));
+            var body = CreatePanel("Codex Quick Button", parent, new Vector2(-30f, -30f), new Vector2(54, 54), Anchor.TopRight, Color.white);
             codexQuickImage = body.GetComponent<Image>();
             var button = body.gameObject.AddComponent<Button>();
             button.targetGraphic = codexQuickImage;
             button.onClick.AddListener(ShowCodex);
-            var colors = button.colors;
-            colors.normalColor = new Color(0.045f, 0.058f, 0.085f, 0.96f);
-            colors.highlightedColor = new Color(0.078f, 0.105f, 0.150f, 0.98f);
-            colors.pressedColor = new Color(0.020f, 0.030f, 0.045f, 1f);
-            button.colors = colors;
-            CreateImage("Codex Quick Accent", body, Vector2.zero, new Vector2(5, 42), Anchor.TopLeft, new Color(1f, 0.82f, 0.38f, 0.84f));
-            CreateText("Codex Quick Text", body, "노트", 17, FontStyle.Bold, Vector2.zero, new Vector2(96, 30), Anchor.Center, TextAnchor.MiddleCenter, Color.white);
+            MagicExamUiFactory.StyleButton(button, MagicExamButtonStyle.Parchment);
+            MagicExamUiFactory.ApplySprite(codexQuickImage, MagicExamUiSpriteId.NoteIcon, sliced: false);
             return button;
         }
 
         private void CreateTowerSilhouette(Transform parent)
         {
-            CreateImage("Tower Body", parent, new Vector2(250f, -10f), new Vector2(150, 320), Anchor.Center, new Color(0.08f, 0.12f, 0.18f, 0.74f));
-            CreateImage("Tower Roof", parent, new Vector2(250f, 178f), new Vector2(210, 42), Anchor.Center, new Color(0.15f, 0.10f, 0.17f, 0.82f));
-            CreateImage("Tower Door", parent, new Vector2(250f, -162f), new Vector2(46, 72), Anchor.Center, new Color(0.90f, 0.68f, 0.24f, 0.58f));
-            for (var index = 0; index < 5; index++)
+            CreateImage("Tower Sky Band", parent, Vector2.zero, Vector2.zero, Anchor.Stretch, new Color(0.012f, 0.022f, 0.038f, 0.94f)).raycastTarget = false;
+            for (var index = 0; index < 18; index++)
             {
-                CreateImage($"Tower Window {index}", parent, new Vector2(250f, 98f - index * 52f), new Vector2(42, 12), Anchor.Center, new Color(0.48f, 0.84f, 1f, 0.42f));
+                var x = -570f + index * 67f;
+                var y = 290f - (index % 5) * 54f;
+                CreateImage($"Tower Star {index}", parent, new Vector2(x, y), new Vector2(index % 3 == 0 ? 4f : 2f, index % 3 == 0 ? 4f : 2f), Anchor.Center, new Color(0.55f, 0.84f, 1f, 0.28f + (index % 4) * 0.10f)).raycastTarget = false;
             }
+
+            // Hand-drawn floating mage tower (scripts/gen-title-art.py). Placed on the
+            // right, clear of the left-aligned title block. Replaces the old stack of
+            // flat rectangles that read as a slot panel rather than a tower.
+            var tower = CreateImage("Tower Art", parent, new Vector2(348f, -8f), new Vector2(264f, 528f), Anchor.Center, Color.white);
+            var towerSprite = LoadTitleSprite("Sprites/UI/TitleTower");
+            if (towerSprite != null)
+            {
+                tower.sprite = towerSprite;
+                tower.type = Image.Type.Simple;
+                tower.preserveAspect = true;
+            }
+            tower.raycastTarget = false;
+        }
+
+        private static Sprite LoadTitleSprite(string resourcePath)
+        {
+            var sprite = Resources.Load<Sprite>(resourcePath);
+            if (sprite != null)
+            {
+                return sprite;
+            }
+
+            var texture = Resources.Load<Texture2D>(resourcePath);
+            if (texture == null)
+            {
+                return null;
+            }
+
+            texture.filterMode = FilterMode.Point;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
         }
 
         private RectTransform CreatePanel(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
@@ -1109,19 +1181,18 @@ namespace MagicExamHall
 
         private Image CreateImage(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
         {
-            var body = new GameObject(name);
-            body.transform.SetParent(parent, false);
-            var rect = body.AddComponent<RectTransform>();
-            ApplyAnchor(rect, anchor);
-            if (anchor != Anchor.Stretch)
+            return MagicExamUiFactory.CreateImage(name, parent, anchoredPosition, size, ToUiAnchor(anchor), color);
+        }
+
+        private static MagicExamUiAnchor ToUiAnchor(Anchor anchor)
+        {
+            return anchor switch
             {
-                rect.anchoredPosition = anchoredPosition;
-                rect.sizeDelta = size;
-            }
-            var image = body.AddComponent<Image>();
-            image.color = color;
-            image.material = PixelMaterialProvider.UiMaterial;
-            return image;
+                Anchor.Stretch => MagicExamUiAnchor.Stretch,
+                Anchor.TopLeft => MagicExamUiAnchor.TopLeft,
+                Anchor.TopRight => MagicExamUiAnchor.TopRight,
+                _ => MagicExamUiAnchor.Center
+            };
         }
 
         private Text CreateText(string name, Transform parent, string content, int size, FontStyle style, Vector2 anchoredPosition, Vector2 rectSize, Anchor anchor, TextAnchor alignment, Color color)

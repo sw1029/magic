@@ -394,11 +394,26 @@ namespace MagicExamHall
             return current == null ? Enumerable.Empty<WorldStateGoal>() : new[] { current };
         }
 
+        /// <summary>
+        /// Bundled Galmuri (SIL OFL 1.1) keeps Korean text crisp and identical on
+        /// every machine; the OS font chain is only a fallback for stripped builds.
+        /// </summary>
+        private static Font LoadGameFont()
+        {
+            var bundled = Resources.Load<Font>("Fonts/Galmuri11");
+            if (bundled != null)
+            {
+                return bundled;
+            }
+
+            return Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 18);
+        }
+
         private void Awake()
         {
             sessionId = $"unity-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
             logger = new ExamLogger(sessionId);
-            uiFont = Font.CreateDynamicFontFromOSFont(new[] { "Malgun Gothic", "Arial" }, 18);
+            uiFont = LoadGameFont();
             floorController = new FloorController();
             magicNote = new MagicNote();
             endingReport = new EndingReport();
@@ -1032,6 +1047,10 @@ namespace MagicExamHall
             }
 
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            // HUD must outrank every world-space canvas (goal labels 42, buffs 76)
+            // even when the canvas is temporarily switched to ScreenSpaceCamera
+            // (pause/screenshot capture paths).
+            canvas.sortingOrder = 100;
             var scaler = canvas.GetComponent<CanvasScaler>() ?? canvas.gameObject.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280, 720);
@@ -2426,7 +2445,7 @@ namespace MagicExamHall
                 {
                     body.transform.localScale *= 1.45f;
                 }
-                goal.label = CreateGoalLabel(goal, floorRoot.transform);
+                goal.label = CreateGoalLabel(goal, floorRoot.transform, goalIndex);
                 RegisterSpriteAccent(body, SpriteAccentAnimationKind.RuneIdle, goalIndex * 0.53f);
                 goalIndex++;
             }
@@ -5858,10 +5877,11 @@ namespace MagicExamHall
             textRect.offsetMax = Vector2.zero;
             var text = textObject.AddComponent<Text>();
             text.font = uiFont;
-            text.fontSize = 26;
+            text.fontSize = 22;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
             text.text = seal.Label;
+            AddTextOutline(text);
             var defaultFallbackAt = string.IsNullOrWhiteSpace(seal.customShapeId)
                 ? seal.createdAt + DefaultSealFallbackDelaySeconds
                 : float.PositiveInfinity;
@@ -6189,14 +6209,19 @@ namespace MagicExamHall
             }
         }
 
-        private Text CreateGoalLabel(WorldStateGoal goal, Transform parent)
+        private Text CreateGoalLabel(WorldStateGoal goal, Transform parent, int goalIndex)
         {
             var stageLabel = floorController?.Current.number == 3;
             var visualRequirement = floorController != null && floorController.Current.number <= 3;
             var labelSize = stageLabel ? new Vector2(210f, 66f) : new Vector2(220f, 88f);
             var canvasObject = new GameObject($"{goal.title} Goal Label");
             canvasObject.transform.SetParent(parent, false);
-            canvasObject.transform.position = goal.position + (stageLabel ? new Vector2(0f, 0.78f) : new Vector2(0f, -0.86f));
+            // Goals can sit 2.7 world units apart; alternating above/below keeps
+            // neighbouring labels from stacking on the same row.
+            var labelOffset = stageLabel
+                ? new Vector2(0f, 0.78f)
+                : goalIndex % 2 == 0 ? new Vector2(0f, -0.86f) : new Vector2(0f, 0.98f);
+            canvasObject.transform.position = goal.position + labelOffset;
             var worldCanvas = canvasObject.AddComponent<Canvas>();
             worldCanvas.renderMode = RenderMode.WorldSpace;
             worldCanvas.overrideSorting = true;
@@ -6204,7 +6229,7 @@ namespace MagicExamHall
             canvasObject.AddComponent<CanvasGroup>();
             var rect = canvasObject.GetComponent<RectTransform>() ?? canvasObject.AddComponent<RectTransform>();
             rect.sizeDelta = labelSize;
-            canvasObject.transform.localScale = Vector3.one * (stageLabel ? 0.014f : 0.016f);
+            canvasObject.transform.localScale = Vector3.one * (stageLabel ? 0.011f : 0.012f);
 
             var backgroundAlpha = visualRequirement ? 0.16f : 0.86f;
             var background = CreateImage("Goal Label Background", canvasObject.transform, Vector2.zero, labelSize, Anchor.Center, new Color(0.02f, 0.025f, 0.04f, backgroundAlpha));
@@ -6223,22 +6248,34 @@ namespace MagicExamHall
                     textPosition,
                     new Vector2(textSize.x - 18f, stageLabel ? 30f : 34f),
                     Anchor.Center,
-                    new Color(0.006f, 0.010f, 0.018f, stageLabel ? 0.54f : 0.58f));
+                    new Color(0.006f, 0.010f, 0.018f, stageLabel ? 0.70f : 0.74f));
                 titleBacking.raycastTarget = false;
             }
 
-            var text = CreateText("Goal Label Text", canvasObject.transform, visualRequirement ? goal.title : goal.OpenLabel, stageLabel ? 22 : 24, FontStyle.Bold, textPosition, textSize, Anchor.Center);
+            var text = CreateText("Goal Label Text", canvasObject.transform, visualRequirement ? goal.title : goal.OpenLabel, 22, FontStyle.Bold, textPosition, textSize, Anchor.Center);
             text.alignment = TextAnchor.MiddleCenter;
-            text.color = Color.Lerp(goal.color, Color.white, 0.45f);
+            text.color = Color.Lerp(goal.color, Color.white, 0.62f);
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
             text.lineSpacing = 0.88f;
             text.raycastTarget = false;
+            AddTextOutline(text);
             if (visualRequirement)
             {
                 CreateGoalRequirementIconRow(goal, canvasObject.transform, stageLabel);
             }
 
             return text;
+        }
+
+        /// <summary>
+        /// World-space labels float over arbitrary scenery; a 1px dark outline keeps
+        /// them readable without forcing an opaque backing panel (GAME_DESIGN section 11).
+        /// </summary>
+        private static void AddTextOutline(Text text)
+        {
+            var outline = text.gameObject.AddComponent<UnityEngine.UI.Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+            outline.effectDistance = new Vector2(1f, -1f);
         }
 
         private void CreateGoalRequirementIconRow(WorldStateGoal goal, Transform parent, bool stageLabel)

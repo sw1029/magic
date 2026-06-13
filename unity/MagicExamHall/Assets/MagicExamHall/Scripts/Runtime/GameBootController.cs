@@ -409,6 +409,10 @@ namespace MagicExamHall
         private void BuildUi()
         {
             overlayRoot = CreatePanel("Boot Overlay", canvas.transform, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, MagicExamUiTheme.DimOverlay);
+            var overlayCanvas = overlayRoot.gameObject.AddComponent<Canvas>();
+            overlayCanvas.overrideSorting = true;
+            overlayCanvas.sortingOrder = 200;
+            overlayRoot.gameObject.AddComponent<GraphicRaycaster>();
             overlayRoot.gameObject.SetActive(true);
 
             titlePanel = CreatePanel("Title Screen", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, MagicExamUiTheme.DeepTowerSolid);
@@ -1121,7 +1125,7 @@ namespace MagicExamHall
 
         private Button CreateQuickCodexButton(Transform parent)
         {
-            var body = CreatePanel("Codex Quick Button", parent, new Vector2(-30f, -30f), new Vector2(54, 54), Anchor.TopRight, Color.white);
+            var body = CreatePanel("Codex Quick Button", parent, new Vector2(-24f, 92f), new Vector2(54, 54), Anchor.BottomRight, Color.white);
             codexQuickImage = body.GetComponent<Image>();
             var button = body.gameObject.AddComponent<Button>();
             button.targetGraphic = codexQuickImage;
@@ -1191,6 +1195,7 @@ namespace MagicExamHall
                 Anchor.Stretch => MagicExamUiAnchor.Stretch,
                 Anchor.TopLeft => MagicExamUiAnchor.TopLeft,
                 Anchor.TopRight => MagicExamUiAnchor.TopRight,
+                Anchor.BottomRight => MagicExamUiAnchor.BottomRight,
                 _ => MagicExamUiAnchor.Center
             };
         }
@@ -1254,6 +1259,10 @@ namespace MagicExamHall
                     rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
                     rect.pivot = new Vector2(1f, 1f);
                     break;
+                case Anchor.BottomRight:
+                    rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
+                    rect.pivot = new Vector2(1f, 0f);
+                    break;
                 case Anchor.Center:
                     rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
                     rect.pivot = new Vector2(0.5f, 0.5f);
@@ -1266,6 +1275,7 @@ namespace MagicExamHall
             Stretch,
             TopLeft,
             TopRight,
+            BottomRight,
             Center
         }
     }

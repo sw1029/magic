@@ -215,11 +215,14 @@ namespace MagicExamHall
             result.personalization = summary;
             result.confidence = summary.adjustedConfidence;
 
+            var repeatedMismatch = summary.acceleratedByRepeatedCase &&
+                (result.status == RecognitionStatus.Invalid ||
+                    result.status == RecognitionStatus.Incomplete ||
+                    result.status == RecognitionStatus.Ambiguous ||
+                    result.status == RecognitionStatus.Recognized && result.recognizedFamily != family);
             var canPromote = result.status == RecognitionStatus.Ambiguous ||
                 summary.extremeColdStartCorrection ||
-                summary.acceleratedByRepeatedCase &&
-                result.status == RecognitionStatus.Recognized &&
-                result.recognizedFamily != family;
+                repeatedMismatch;
             if (canPromote && summary.decision == TutorialDynamicDecision.Accept)
             {
                 result.status = RecognitionStatus.Recognized;

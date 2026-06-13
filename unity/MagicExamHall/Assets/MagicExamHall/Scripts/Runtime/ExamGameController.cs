@@ -40,8 +40,12 @@ namespace MagicExamHall
         private const string FinalBeamWaterTaskId = "final_beam_water";
         private const float AttributeBeamMaxDistance = 12.5f;
         private const float AttributeBeamHitPadding = 0.28f;
+        private const float AttributeBeamAutoAimRadius = 7.25f;
+        private const float AttributeBeamAutoAimMinimumDot = -0.85f;
         private const float CustomReferenceShelfRadius = 1.85f;
         private const float CustomReferenceGoalSuppressRadius = 1.65f;
+        private const int RepeatedGoalRecognitionAcceptThreshold = 3;
+        private const float RepeatedGoalRecognitionMinimumIntentStrength = 0.42f;
         private static readonly Vector2 CustomReferenceBubbleShelfOffset = new(0.92f, -1.12f);
         private static readonly Vector2 CustomReferencePanelPosition = new(18f, 20f);
         private static readonly Vector2 CustomReferencePanelSize = new(560f, 372f);
@@ -229,6 +233,8 @@ namespace MagicExamHall
         private WorldStateGoal goalProximityBubbleGoal = null!;
         private string sessionId = "";
         private int trialCounter;
+        private string repeatedGoalRecognitionKey = "";
+        private int repeatedGoalRecognitionCount;
         private int playerHealthHalfUnits = MaxPlayerHealthHalfUnits;
         private float floorStartedAt;
         private float pendingAdvanceAt = -1f;
@@ -405,6 +411,7 @@ namespace MagicExamHall
         public Color LastSealVisualColorForTests => seals.Count == 0 ? Color.clear : seals[^1].VisualColorForTests;
         public Color LastSealAttachGuideColorForTests => seals.Count == 0 ? Color.clear : seals[^1].AttachGuideColorForTests;
         public bool LastSealDefaultFallbackPendingForTests => seals.Count > 0 && seals[^1].IsDefaultFallbackPending(Time.time);
+        public SpellFamily? LastSealFamilyForTests => seals.Count == 0 ? null : seals[^1].seal.baseFamily;
         public string CurrentInputPhaseLabelForTests => BuildInputPhaseLabel();
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
         public int PersonalizationCaptureCountForTests => recognitionService?.PersonalizationStore.CaptureCount ?? 0;
@@ -1655,6 +1662,7 @@ namespace MagicExamHall
             finalTaskBannerSuppressedForTitle = false;
             encounteredFinalTaskIds.Clear();
             baseFailureCounts.Clear();
+            ResetRepeatedGoalRecognition();
             discoveredFamilies.Clear();
             discoveredOverlays.Clear();
             discoveredReactions.Clear();
@@ -1890,10 +1898,12 @@ namespace MagicExamHall
                 new Color(0.82f, 0.06f, 0.04f, 0.94f),
                 SkipCurrentFloorForDebug);
             BuildCameraZoomUi();
+            floorSkipButton.transform.SetAsLastSibling();
 
             BuildCustomReferenceUi();
             BuildGoalProximityBubbleUi();
             BuildFirstFloorLetterUi();
+            floorSkipButton.transform.SetAsLastSibling();
         }
 
         private void BuildCameraZoomUi()
@@ -2858,7 +2868,8 @@ namespace MagicExamHall
                 resultText.text = "";
             }
 
-            floorSkipButton.gameObject.SetActive(Debug.isDebugBuild || Application.isEditor);
+            floorSkipButton.gameObject.SetActive(true);
+            floorSkipButton.transform.SetAsLastSibling();
             healthPanel.gameObject.SetActive(true);
             questScrollPanel.gameObject.SetActive(true);
             CloseCustomReferenceUi();
@@ -5130,7 +5141,10 @@ namespace MagicExamHall
 
             var outcome = spellCasting.ProcessRecognitionResult(recognition, now);
             var processed = ApplySpellOutcome(outcome);
-            if (outcome.kind == SpellCastOutcomeKind.BaseSucceeded || outcome.kind == SpellCastOutcomeKind.OverlaySucceeded)
+            if (outcome.kind == SpellCastOutcomeKind.BaseSucceeded ||
+                outcome.kind == SpellCastOutcomeKind.OverlaySucceeded ||
+                processed?.baseResult?.spell?.success == true ||
+                processed?.overlayResult?.success == true)
             {
                 recognitionService.RecordAcceptedResult(recognition, now);
             }
@@ -5473,8 +5487,7 @@ namespace MagicExamHall
                 return false;
             }
 
-            var hitGoal = candidates.FirstOrDefault(goal => BeamHitsGoalTarget(goal, origin, direction, out _));
-            if (hitGoal == null)
+            if (!TryResolveAttributeBeamHit(candidates, origin, direction, out var hitGoal, out var resolvedDirection))
             {
                 LastBeamHitForTests = false;
                 LastDamagedTargetNameForTests = "";
@@ -5490,6 +5503,7 @@ namespace MagicExamHall
                 return true;
             }
 
+            direction = resolvedDirection;
             var goalEffect = ActivateAttributeBeamGoal(hitGoal, result, seal, origin, direction);
             var eventNote = ApplyCustomShapeEvent(result, seal, origin);
             var elementalNote = ApplyElementalInteractions(seal.baseFamily, spell, origin, direction, "속성 빛줄기");
@@ -5513,6 +5527,97 @@ namespace MagicExamHall
             EvaluateFloorCompletion();
             ConsumeSeal(sealView);
             processed = new ProcessedSpell { baseResult = result };
+            return true;
+        }
+
+        private bool TryResolveAttributeBeamHit(
+            IReadOnlyList<WorldStateGoal> candidates,
+            Vector2 origin,
+            Vector2 requestedDirection,
+            out WorldStateGoal hitGoal,
+            out Vector2 resolvedDirection)
+        {
+            resolvedDirection = requestedDirection.sqrMagnitude > 0.0001f
+                ? requestedDirection.normalized
+                : Vector2.right;
+            var initialDirection = resolvedDirection;
+            hitGoal = null;
+            foreach (var goal in candidates)
+            {
+                if (!BeamHitsGoalTarget(goal, origin, initialDirection, out _))
+                {
+                    continue;
+                }
+
+                hitGoal = goal;
+                break;
+            }
+
+            if (hitGoal != null)
+            {
+                return true;
+            }
+
+            foreach (var goal in candidates)
+            {
+                if (!TryResolveAttributeBeamAutoAimDirection(goal, origin, resolvedDirection, out var autoDirection))
+                {
+                    continue;
+                }
+
+                if (!BeamHitsGoalTarget(goal, origin, autoDirection, out _))
+                {
+                    continue;
+                }
+
+                resolvedDirection = autoDirection;
+                hitGoal = goal;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryResolveAttributeBeamAutoAimDirection(
+            WorldStateGoal goal,
+            Vector2 origin,
+            Vector2 requestedDirection,
+            out Vector2 autoDirection)
+        {
+            autoDirection = requestedDirection.sqrMagnitude > 0.0001f
+                ? requestedDirection.normalized
+                : Vector2.right;
+            if (goal == null || !goal.RequiresBeamHit)
+            {
+                return false;
+            }
+
+            var target = CombatTargetTransform(goal);
+            var targetCenter = target != null ? (Vector2)target.position : goal.position;
+            var toTarget = targetCenter - origin;
+            var distance = toTarget.magnitude;
+            if (distance < 0.12f ||
+                distance > AttributeBeamAutoAimRadius ||
+                distance > AttributeBeamMaxDistance)
+            {
+                return false;
+            }
+
+            var targetDirection = toTarget / distance;
+            if (Mathf.Abs(toTarget.x) > 0.65f &&
+                Mathf.Abs(toTarget.y) < 2.2f &&
+                Mathf.Abs(autoDirection.x) > 0.35f &&
+                Mathf.Sign(autoDirection.x) != Mathf.Sign(toTarget.x))
+            {
+                return false;
+            }
+
+            if (Vector2.Dot(autoDirection, targetDirection) < AttributeBeamAutoAimMinimumDot)
+            {
+                return false;
+            }
+
+            autoDirection = targetDirection;
             return true;
         }
 
@@ -5764,9 +5869,92 @@ namespace MagicExamHall
             };
         }
 
+        private bool TryPromoteRepeatedGoalRecognition(BaseRecognitionResult result)
+        {
+            var spell = result?.spell;
+            var intent = result?.intent;
+            if (spell == null ||
+                intent?.IsActive != true ||
+                floorController.Current.number < 2 ||
+                intent.strength < RepeatedGoalRecognitionMinimumIntentStrength)
+            {
+                return false;
+            }
+
+            var goal = FindActiveGoal(intent.goalId);
+            if (goal == null ||
+                goal.completed ||
+                goal.requiredBase != intent.family)
+            {
+                return false;
+            }
+
+            if (spell.status == RecognitionStatus.Recognized && spell.recognizedFamily == intent.family)
+            {
+                ResetRepeatedGoalRecognition();
+                return false;
+            }
+
+            var observed = spell.recognizedFamily?.ToString() ??
+                spell.preIntentFamily?.ToString() ??
+                spell.targetFamily.ToString();
+            var key = $"{floorController.Current.number}|{goal.id}|{intent.family}|{observed}|{spell.status}";
+            if (string.Equals(key, repeatedGoalRecognitionKey, StringComparison.Ordinal))
+            {
+                repeatedGoalRecognitionCount++;
+            }
+            else
+            {
+                repeatedGoalRecognitionKey = key;
+                repeatedGoalRecognitionCount = 1;
+            }
+
+            if (repeatedGoalRecognitionCount < RepeatedGoalRecognitionAcceptThreshold)
+            {
+                return false;
+            }
+
+            PromoteBaseResultToIntent(result, intent.family);
+            ResetRepeatedGoalRecognition();
+            return true;
+        }
+
+        private static void PromoteBaseResultToIntent(BaseRecognitionResult result, SpellFamily family)
+        {
+            var spell = result.spell;
+            spell.status = RecognitionStatus.Recognized;
+            spell.recognizedFamily = family;
+            spell.targetFamily = family;
+            spell.mappedFamily = family;
+            spell.success = true;
+            spell.confidence = Mathf.Max(spell.confidence, 0.68f);
+            spell.feedbackReason = string.IsNullOrWhiteSpace(spell.feedbackReason)
+                ? "Repeated near-goal input accepted for the current target."
+                : spell.feedbackReason + " Repeated near-goal input accepted for the current target.";
+        }
+
+        private void ResetRepeatedGoalRecognition()
+        {
+            repeatedGoalRecognitionKey = "";
+            repeatedGoalRecognitionCount = 0;
+        }
+
         private ProcessedSpell ApplyBaseFailure(SpellCastOutcome outcome)
         {
             var baseResult = outcome.baseResult;
+            if (TryPromoteRepeatedGoalRecognition(baseResult))
+            {
+                var promotedSeal = SpellRuntime.CreateSeal(baseResult, Time.time);
+                return ApplyBaseSuccess(new SpellCastOutcome
+                {
+                    kind = SpellCastOutcomeKind.BaseSucceeded,
+                    baseResult = baseResult,
+                    createdSeal = promotedSeal,
+                    center = outcome.center,
+                    strokeCount = outcome.strokeCount
+                });
+            }
+
             var feedbackFamily = baseResult.spell.recognizedFamily ?? baseResult.spell.targetFamily;
             var priorFailures = Mathf.Max(GetBaseFailureCount(feedbackFamily), MagicExamSettings.ObserverMode ? 1 : 0);
             var hintState = HintAssistance.ForAttempt(feedbackFamily, priorFailures, false, baseResult.spell);
@@ -5788,6 +5976,17 @@ namespace MagicExamHall
         {
             var baseResult = outcome.baseResult;
             var seal = outcome.createdSeal;
+            if (TryPromoteRepeatedGoalRecognition(baseResult))
+            {
+                seal.baseFamily = baseResult.spell.recognizedFamily ?? baseResult.spell.targetFamily;
+            }
+            else if (baseResult.intent?.IsActive == true &&
+                baseResult.intent.family == seal.baseFamily &&
+                baseResult.spell.success)
+            {
+                ResetRepeatedGoalRecognition();
+            }
+
             var priorFailures = GetBaseFailureCount(seal.baseFamily);
             var successHintState = HintAssistance.ForAttempt(seal.baseFamily, priorFailures, true, baseResult.spell);
             baseFailureCounts[seal.baseFamily] = 0;
@@ -9483,6 +9682,7 @@ namespace MagicExamHall
             LastCustomShapeEventDirectionForTests = Vector2.right;
             LastBeamHitForTests = false;
             LastDamagedTargetNameForTests = "";
+            ResetRepeatedGoalRecognition();
             foreach (var ghostTrace in ghostTraces)
             {
                 if (ghostTrace.body != null)

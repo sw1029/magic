@@ -2507,6 +2507,43 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator RepeatedNearGoalBaseMisreadsPromoteToCurrentTarget()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+
+            controller.LoadFloorForTests(1);
+            yield return null;
+
+            var earthGoal = controller.StageGoalPositionForTests("custom_earth");
+            controller.MovePlayerForTests(earthGoal);
+
+            var first = controller.SubmitBaseRecognitionResult(
+                RepeatedMisreadBaseResult(SpellFamily.Water, SpellFamily.Earth, "custom_earth", earthGoal),
+                earthGoal,
+                1);
+            var second = controller.SubmitBaseRecognitionResult(
+                RepeatedMisreadBaseResult(SpellFamily.Water, SpellFamily.Earth, "custom_earth", earthGoal),
+                earthGoal,
+                1);
+            var third = controller.SubmitBaseRecognitionResult(
+                RepeatedMisreadBaseResult(SpellFamily.Water, SpellFamily.Earth, "custom_earth", earthGoal),
+                earthGoal,
+                1);
+
+            Assert.That(first.spell.recognizedFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(second.spell.recognizedFamily, Is.EqualTo(SpellFamily.Water));
+            Assert.That(third.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(third.spell.recognizedFamily, Is.EqualTo(SpellFamily.Earth));
+            Assert.That(third.spell.success, Is.True);
+            Assert.That(controller.LastSealFamilyForTests, Is.EqualTo(SpellFamily.Earth));
+        }
+
+        [UnityTest]
         public IEnumerator FloorThreeObstacleArtUsesDepthCues()
         {
             SceneManager.LoadScene("MagicExamHall");
@@ -3158,6 +3195,39 @@ namespace MagicExamHall.Tests
         }
 
         [UnityTest]
+        public IEnumerator FloorFourAttributeBeamAutoAimsNearScarecrow()
+        {
+            SceneManager.LoadScene("MagicExamHall");
+            yield return null;
+            yield return null;
+
+            var controller = Object.FindFirstObjectByType<ExamGameController>();
+            Assert.That(controller, Is.Not.Null);
+            var profilePath = TempCustomShapeProfilePath();
+            controller.UseCustomShapeStoreForTests(profilePath);
+            ClearCustomSlots(controller);
+
+            controller.LoadFloorForTests(3);
+            yield return null;
+
+            Assert.That(controller.CurrentFloorNumber, Is.EqualTo(4));
+            Assert.That(controller.ImportCustomReferenceForTests(SpellFamily.Fire, out _, out var fireMessage), Is.True, fireMessage);
+
+            CastBeamSpell(controller, SpellFamily.Fire, new Vector2(0f, -2.25f));
+            yield return null;
+
+            Assert.That(
+                controller.CompletedGoalCountForTests,
+                Is.EqualTo(1),
+                $"beam note={controller.LastMagicNoteText} hit={controller.LastBeamHitForTests} damaged={controller.LastDamagedTargetNameForTests}");
+            Assert.That(controller.LastBeamHitForTests, Is.True);
+            Assert.That(controller.LastDamagedTargetNameForTests, Does.Contain("Scarecrow"));
+
+            ClearCustomSlots(controller);
+            DeleteIfExists(profilePath);
+        }
+
+        [UnityTest]
         public IEnumerator FinalFloorCompletionShowsFinalSealCelebrationBeforeReport()
         {
             SceneManager.LoadScene("MagicExamHall");
@@ -3598,6 +3668,38 @@ namespace MagicExamHall.Tests
             return GestureRecognizer.CreateCanonicalSamples(family, 1.6f, 0.03f)
                 .Select(stroke => (IReadOnlyList<StrokeSample>)stroke)
                 .ToList();
+        }
+
+        private static BaseRecognitionResult RepeatedMisreadBaseResult(
+            SpellFamily recognizedFamily,
+            SpellFamily intendedFamily,
+            string goalId,
+            Vector2 worldCenter)
+        {
+            var spell = GestureRecognizer.Recognize(Samples(recognizedFamily), recognizedFamily);
+            spell.recognizedFamily = recognizedFamily;
+            spell.targetFamily = recognizedFamily;
+            spell.success = true;
+            spell.intentFamily = intendedFamily;
+            spell.intentGoalId = goalId;
+            spell.intentSource = "near_goal_symbol";
+            spell.intentStrength = 1f;
+            return new BaseRecognitionResult
+            {
+                spell = spell,
+                center = worldCenter,
+                worldScale = 1f,
+                bufferStrokeCount = 1,
+                intent = new BaseRecognitionIntent
+                {
+                    family = intendedFamily,
+                    goalId = goalId,
+                    source = "near_goal_symbol",
+                    distance = 0f,
+                    radius = 1.8f,
+                    strength = 1f
+                }
+            };
         }
 
         private static BaseRecognitionResult CastCustomReferenceSpell(

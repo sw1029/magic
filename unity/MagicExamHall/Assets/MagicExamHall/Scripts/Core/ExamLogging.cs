@@ -290,6 +290,7 @@ namespace MagicExamHall
         public const string DisabledOutputDirectory = "log collection disabled";
 
         public string OutputDirectory { get; }
+        public string CertificateOutputDirectory { get; }
         public bool IsCollectionEnabled { get; }
         public string SessionResultJsonPath => sessionResultJsonPath;
         public string SessionResultCsvPath => sessionResultCsvPath;
@@ -323,13 +324,14 @@ namespace MagicExamHall
         {
         }
 
-        public ExamLogger(string sessionId, string outputRoot, bool? enableCollection = null)
+        public ExamLogger(string sessionId, string outputRoot, bool? enableCollection = null, string certificateOutputRoot = "")
         {
             sessionId = string.IsNullOrWhiteSpace(sessionId) ? "session" : sessionId;
             IsCollectionEnabled = enableCollection ?? !ShouldSuppressCollection(sessionId);
             if (!IsCollectionEnabled)
             {
                 OutputDirectory = DisabledOutputDirectory;
+                CertificateOutputDirectory = DisabledOutputDirectory;
                 attemptsJsonPath = "";
                 attemptsCsvPath = "";
                 surveyJsonPath = "";
@@ -347,11 +349,16 @@ namespace MagicExamHall
                 return;
             }
 
-            var root = string.IsNullOrWhiteSpace(outputRoot)
+            var usesDefaultOutputRoot = string.IsNullOrWhiteSpace(outputRoot);
+            var root = usesDefaultOutputRoot
                 ? Path.Combine(Application.persistentDataPath, "MagicExamHallLogs")
                 : outputRoot;
             OutputDirectory = Path.Combine(root, sessionId);
             Directory.CreateDirectory(OutputDirectory);
+            CertificateOutputDirectory = string.IsNullOrWhiteSpace(certificateOutputRoot)
+                ? usesDefaultOutputRoot ? ResolveExecutableDirectory() : OutputDirectory
+                : certificateOutputRoot;
+            Directory.CreateDirectory(CertificateOutputDirectory);
             attemptsJsonPath = Path.Combine(OutputDirectory, "attempts.jsonl");
             attemptsCsvPath = Path.Combine(OutputDirectory, "attempts.csv");
             surveyJsonPath = Path.Combine(OutputDirectory, "survey.jsonl");
@@ -363,13 +370,36 @@ namespace MagicExamHall
             sessionResultJsonPath = Path.Combine(OutputDirectory, "session-result.json");
             sessionResultCsvPath = Path.Combine(OutputDirectory, "session-result.csv");
             floorResultsCsvPath = Path.Combine(OutputDirectory, "floor-results.csv");
-            certificateCsvPath = Path.Combine(OutputDirectory, "\uC218\uB8CC\uC99D.csv");
-            enrollmentCsvPath = Path.Combine(OutputDirectory, "\uC7AC\uD559\uC99D\uC11C.csv");
+            certificateCsvPath = Path.Combine(CertificateOutputDirectory, "\uC218\uB8CC\uC99D.csv");
+            enrollmentCsvPath = Path.Combine(CertificateOutputDirectory, "\uC7AC\uD559\uC99D\uC11C.csv");
             globalSessionResultsCsvPath = Path.Combine(root, "session-results.csv");
             EnsureAttemptHeader();
             EnsureSurveyHeader();
             EnsureQuestChecklistHeader();
             EnsureActionEventHeader();
+        }
+
+        private static string ResolveExecutableDirectory()
+        {
+            var dataPath = Application.dataPath;
+            if (!string.IsNullOrWhiteSpace(dataPath))
+            {
+                var dataDirectory = new DirectoryInfo(dataPath);
+                if (dataDirectory.Exists && dataDirectory.Name.EndsWith("_Data", StringComparison.OrdinalIgnoreCase))
+                {
+                    return dataDirectory.Parent?.FullName ?? dataDirectory.FullName;
+                }
+
+                if (Application.isEditor)
+                {
+                    return dataDirectory.Parent?.FullName ?? dataDirectory.FullName;
+                }
+            }
+
+            var baseDirectory = AppContext.BaseDirectory;
+            return string.IsNullOrWhiteSpace(baseDirectory)
+                ? Directory.GetCurrentDirectory()
+                : Path.GetFullPath(baseDirectory);
         }
 
         public void LogAttempt(AttemptLog log)
@@ -557,9 +587,10 @@ namespace MagicExamHall
                 certificate.issuedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
             }
 
-            if (string.IsNullOrWhiteSpace(certificate.outputDirectory))
+            if (string.IsNullOrWhiteSpace(certificate.outputDirectory) ||
+                string.Equals(certificate.outputDirectory, OutputDirectory, StringComparison.Ordinal))
             {
-                certificate.outputDirectory = OutputDirectory;
+                certificate.outputDirectory = CertificateOutputDirectory;
             }
 
             File.WriteAllText(
@@ -582,9 +613,10 @@ namespace MagicExamHall
                 enrollment.issuedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
             }
 
-            if (string.IsNullOrWhiteSpace(enrollment.outputDirectory))
+            if (string.IsNullOrWhiteSpace(enrollment.outputDirectory) ||
+                string.Equals(enrollment.outputDirectory, OutputDirectory, StringComparison.Ordinal))
             {
-                enrollment.outputDirectory = OutputDirectory;
+                enrollment.outputDirectory = CertificateOutputDirectory;
             }
 
             File.WriteAllText(

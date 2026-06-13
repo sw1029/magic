@@ -831,6 +831,8 @@ namespace MagicExamHall.Tests
             Assert.That(System.IO.File.Exists(logger.ActionEventsJsonPath), Is.True);
             Assert.That(System.IO.Path.GetFileName(certificatePath), Is.EqualTo("수료증.csv"));
             Assert.That(System.IO.Path.GetFileName(enrollmentPath), Is.EqualTo("재학증서.csv"));
+            Assert.That(System.IO.Path.GetDirectoryName(certificatePath), Is.EqualTo(logger.CertificateOutputDirectory));
+            Assert.That(System.IO.Path.GetDirectoryName(enrollmentPath), Is.EqualTo(logger.CertificateOutputDirectory));
             Assert.That(System.IO.File.Exists(certificatePath), Is.True);
             Assert.That(System.IO.File.Exists(enrollmentPath), Is.True);
             var eventsCsv = System.IO.File.ReadAllText(logger.ActionEventsCsvPath);
@@ -843,6 +845,46 @@ namespace MagicExamHall.Tests
             Assert.That(enrollmentCsv, Does.Contain("status,currentFloor,currentFloorTitle"));
             Assert.That(enrollmentCsv, Does.Contain("재학 중"));
             Assert.That(enrollmentCsv, Does.Contain("goal_completed"));
+        }
+
+        [Test]
+        public void LoggerWritesCertificateAndEnrollmentCsvToCertificateOutputDirectory()
+        {
+            var sessionId = "logger-certificate-root-" + System.Guid.NewGuid().ToString("N");
+            var outputRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "MagicExamHallLoggerTests",
+                System.Guid.NewGuid().ToString("N"),
+                "logs");
+            var certificateRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "MagicExamHallLoggerTests",
+                System.Guid.NewGuid().ToString("N"),
+                "exe");
+            var logger = new ExamLogger(sessionId, outputRoot, enableCollection: true, certificateOutputRoot: certificateRoot);
+
+            var certificatePath = logger.WriteCertificateCsv(new CertificateLog
+            {
+                sessionId = sessionId,
+                outputDirectory = logger.OutputDirectory
+            });
+            var enrollmentPath = logger.WriteEnrollmentCsv(new EnrollmentLog
+            {
+                sessionId = sessionId,
+                outputDirectory = logger.OutputDirectory,
+                lastEventType = "session_started"
+            });
+
+            Assert.That(logger.OutputDirectory, Is.Not.EqualTo(logger.CertificateOutputDirectory));
+            Assert.That(logger.CertificateOutputDirectory, Is.EqualTo(certificateRoot));
+            Assert.That(certificatePath, Is.EqualTo(System.IO.Path.Combine(certificateRoot, "\uC218\uB8CC\uC99D.csv")));
+            Assert.That(enrollmentPath, Is.EqualTo(System.IO.Path.Combine(certificateRoot, "\uC7AC\uD559\uC99D\uC11C.csv")));
+            Assert.That(System.IO.File.Exists(certificatePath), Is.True);
+            Assert.That(System.IO.File.Exists(enrollmentPath), Is.True);
+            Assert.That(System.IO.File.Exists(System.IO.Path.Combine(logger.OutputDirectory, "\uC218\uB8CC\uC99D.csv")), Is.False);
+            Assert.That(System.IO.File.Exists(System.IO.Path.Combine(logger.OutputDirectory, "\uC7AC\uD559\uC99D\uC11C.csv")), Is.False);
+            Assert.That(System.IO.File.ReadAllText(certificatePath), Does.Contain(certificateRoot));
+            Assert.That(System.IO.File.ReadAllText(enrollmentPath), Does.Contain(certificateRoot));
         }
 
         [Test]

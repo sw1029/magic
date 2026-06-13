@@ -1154,7 +1154,7 @@ namespace MagicExamHall
             MagicExamUiFactory.StyleParchmentText(reportHeading, emphasized: true);
             var reportRule = CreateImage("Report Rule", reportPanel, new Vector2(35, -80), new Vector2(870, 2), Anchor.TopLeft, MagicExamUiTheme.BorderBrown);
             reportRule.raycastTarget = false;
-            reportText = CreateText("Report Text", reportPanel, "", 15, FontStyle.Normal, new Vector2(35, -96), new Vector2(870, 476), Anchor.TopLeft);
+            reportText = CreateText("Report Text", reportPanel, "", 15, FontStyle.Normal, new Vector2(35, -96), new Vector2(878, 476), Anchor.TopLeft);
             reportText.color = MagicExamUiTheme.ParchmentInk;
             reportText.verticalOverflow = VerticalWrapMode.Truncate;
             MagicExamUiFactory.StyleParchmentText(reportText);

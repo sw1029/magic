@@ -175,7 +175,7 @@ namespace MagicExamHall
                 return $"{SpellLabels.Korean(recognizedOperator.Value)} 양식으로 인식되었습니다.";
             }
 
-            return "양식 후보를 seal에 안정적으로 붙이지 못했습니다.";
+            return "장식 후보를 문양에 안정적으로 붙이지 못했습니다.";
         }
     }
 }

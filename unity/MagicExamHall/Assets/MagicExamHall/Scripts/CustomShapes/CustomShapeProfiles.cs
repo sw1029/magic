@@ -315,7 +315,7 @@ namespace MagicExamHall
             var gold = CustomShapeCaptureRecord.FromStrokes(goldStrokes);
             if (gold.ToStrokeSamples().Count == 0)
             {
-                message = "gold capture가 필요합니다.";
+                message = "기준 그림이 필요합니다.";
                 return false;
             }
 

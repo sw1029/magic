@@ -286,6 +286,7 @@ namespace MagicExamHall
         public Vector2 CodexPanelPositionForTests => codexPanel == null ? Vector2.zero : codexPanel.anchoredPosition;
         public bool CodexBackdropBlocksRaycastsForTests => overlayRootImage != null && overlayRootImage.raycastTarget;
         public bool CodexPanelDrawsAboveBackdropForTests => codexPanel != null && overlayRoot != null && codexPanel.GetSiblingIndex() > overlayRoot.GetSiblingIndex();
+        public bool IsEndingPromptVisibleForTests => endingPromptPanel != null && endingPromptPanel.gameObject.activeInHierarchy;
 
         public void Initialize(ExamGameController gameController, Canvas targetCanvas, Font font)
         {
@@ -331,7 +332,11 @@ namespace MagicExamHall
 
             if (StateForTests == GameBootState.Gameplay && controller.HasEndingReport)
             {
-                ShowEndingPrompt();
+                if (controller.CanShowTitleReturnPrompt)
+                {
+                    ShowEndingPrompt();
+                }
+
                 return;
             }
 
@@ -526,7 +531,7 @@ namespace MagicExamHall
         private void ShowMainMenu()
         {
             Time.timeScale = 1f;
-            controller.SetGameplayInputEnabled(false);
+            controller.PrepareForTitleScreen();
             StateForTests = GameBootState.MainMenu;
             overlayRoot.gameObject.SetActive(true);
             SetOverlayBackdrop(true);
@@ -779,7 +784,7 @@ namespace MagicExamHall
                 return category == MagicNoteCategory.Dialogue ? "아직 기록된 대사가 없습니다." : "아직 기록된 층 노트가 없습니다.";
             }
 
-            var recent = filtered.AsEnumerable().Reverse().Take(14).Reverse().Select(entry => entry.DisplayLine);
+            var recent = filtered.AsEnumerable().Reverse().Take(14).Select(entry => entry.DisplayLine);
             return string.Join("\n", recent);
         }
 
@@ -793,11 +798,11 @@ namespace MagicExamHall
                 .Select(op => controller.DiscoveredOverlaysForTests.Contains(op) ? SpellLabels.Korean(op) : "???");
             var notes = filtered.Count == 0
                 ? "아직 발견 기록이 없습니다."
-                : string.Join("\n", filtered.Reverse().Take(8).Reverse().Select(entry => entry.DisplayLine));
+                : string.Join("\n", filtered.Reverse().Take(8).Select(entry => entry.DisplayLine));
             return
-                "Base family\n" +
+                "기본 속성\n" +
                 string.Join(" / ", familyRows) + "\n\n" +
-                "Overlay operator\n" +
+                "장식 도형\n" +
                 string.Join(" / ", overlayRows) + "\n\n" +
                 $"속성 반응 발견 {controller.DiscoveredReactionCountForTests}/10\n\n" +
                 notes;

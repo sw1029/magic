@@ -129,13 +129,17 @@ namespace MagicExamHall
         private const float WeakIntentMaximumScoreLift = 0.045f;
         private const float StrongIntentMinimumStrength = 0.25f;
         private const float StrongIntentMinimumSimilarity = 0.50f;
+        private const float NearGoalStrongIntentMinimumSimilarity = 0.46f;
         private const float StrongIntentMaximumScoreLift = 0.16f;
+        private const float NearGoalStrongIntentMaximumScoreLift = 0.22f;
         private const float StrongIntentAcceptThreshold = 0.66f;
+        private const float NearGoalStrongIntentAcceptThreshold = 0.64f;
         private const float StrongIntentHoldThreshold = 0.54f;
-        private const float WaterColdStartMinimumSimilarity = 0.58f;
-        private const float WaterColdStartAcceptThreshold = 0.70f;
+        private const float NearGoalStrongIntentHoldThreshold = 0.50f;
+        private const float WaterColdStartMinimumSimilarity = 0.54f;
+        private const float WaterColdStartAcceptThreshold = 0.66f;
         private const float WaterColdStartHoldThreshold = 0.56f;
-        private const float WaterColdStartClosureAcceptThreshold = 0.55f;
+        private const float WaterColdStartClosureAcceptThreshold = 0.48f;
         private const float WaterColdStartMarginThreshold = 0.035f;
         private const float DefaultClosureAcceptThreshold = 0.62f;
         private const float WaterClosureAcceptThreshold = 0.50f;
@@ -144,8 +148,13 @@ namespace MagicExamHall
         private const float DefaultClosureHintThreshold = 0.72f;
         private const float WaterClosureHintThreshold = 0.58f;
         private const float WaterClosureScoringFloor = 0.70f;
-        private const float WaterSingleStrokeLoopBonus = 0.035f;
-        private const float EarthSmoothLoopPenalty = 0.72f;
+        private const float WaterSingleStrokeLoopBonus = 0.055f;
+        private const float WaterAngularLoopPenalty = 0.66f;
+        private const float WaterBoxyLoopPenalty = 0.78f;
+        private const float WaterEarthLikeLoopPenalty = 0.30f;
+        private const float EarthAngularLoopBonus = 0.085f;
+        private const float EarthSmoothLoopPenalty = 0.46f;
+        private const float EarthRoundLoopPenalty = 0.58f;
         private static readonly IReadOnlyList<SpellTemplate> Templates = BuildTemplates();
 
         public static SpellResult Recognize(IReadOnlyList<IReadOnlyList<StrokeSample>> rawStrokes, SpellFamily targetFamily)
@@ -290,17 +299,19 @@ namespace MagicExamHall
                 return false;
             }
 
-            if (normalStatus == RecognitionStatus.Recognized)
+            if (normalStatus == RecognitionStatus.Recognized &&
+                top.template.family == targetFamily)
             {
                 return false;
             }
 
-            if (target.score < StrongIntentMinimumSimilarity)
+            var minimumSimilarity = StrongIntentMinimumSimilarityFor(targetFamily, intent);
+            if (target.score < minimumSimilarity)
             {
                 return false;
             }
 
-            var lift = Mathf.Clamp01(intent.strength) * StrongIntentMaximumScoreLift;
+            var lift = Mathf.Clamp01(intent.strength) * StrongIntentMaximumScoreLiftFor(targetFamily, intent);
             var adjustedScore = Mathf.Clamp01(target.score + weakLift + lift);
             if (adjustedScore < top.score - 0.10f && target.score < 0.58f)
             {
@@ -308,7 +319,7 @@ namespace MagicExamHall
             }
 
             (SpellTemplate template, float score, float distance) intentTop = (target.template, adjustedScore, target.distance);
-            var status = ResolveIntentStatus(targetFamily, adjustedScore, target.score, quality, strokeCount, parallelism, windSpacing);
+            var status = ResolveIntentStatus(targetFamily, intent, adjustedScore, target.score, quality, strokeCount, parallelism, windSpacing);
             SpellFamily? recognized = status == RecognitionStatus.Recognized ? targetFamily : null;
             result = new SpellResult
             {
@@ -336,6 +347,7 @@ namespace MagicExamHall
 
         private static RecognitionStatus ResolveIntentStatus(
             SpellFamily targetFamily,
+            BaseRecognitionIntent intent,
             float adjustedScore,
             float rawSimilarity,
             QualityVector quality,
@@ -359,9 +371,14 @@ namespace MagicExamHall
                 return RecognitionStatus.Incomplete;
             }
 
-            var acceptThreshold = targetFamily == SpellFamily.Water ? WaterColdStartAcceptThreshold : StrongIntentAcceptThreshold;
-            var holdThreshold = targetFamily == SpellFamily.Water ? WaterColdStartHoldThreshold : StrongIntentHoldThreshold;
-            var minimumSimilarity = targetFamily == SpellFamily.Water ? WaterColdStartMinimumSimilarity : StrongIntentMinimumSimilarity;
+            var nearGoalColdStart = IsGoalLocalColdStartIntent(intent);
+            var acceptThreshold = targetFamily == SpellFamily.Water
+                ? WaterColdStartAcceptThreshold
+                : nearGoalColdStart ? NearGoalStrongIntentAcceptThreshold : StrongIntentAcceptThreshold;
+            var holdThreshold = targetFamily == SpellFamily.Water
+                ? WaterColdStartHoldThreshold
+                : nearGoalColdStart ? NearGoalStrongIntentHoldThreshold : StrongIntentHoldThreshold;
+            var minimumSimilarity = StrongIntentMinimumSimilarityFor(targetFamily, intent);
             if (targetFamily == SpellFamily.Water && quality.closure < WaterColdStartClosureAcceptThreshold)
             {
                 return RecognitionStatus.Incomplete;
@@ -378,6 +395,33 @@ namespace MagicExamHall
             }
 
             return RecognitionStatus.Invalid;
+        }
+
+        private static float StrongIntentMinimumSimilarityFor(SpellFamily targetFamily, BaseRecognitionIntent intent)
+        {
+            if (targetFamily == SpellFamily.Water)
+            {
+                return WaterColdStartMinimumSimilarity;
+            }
+
+            return IsGoalLocalColdStartIntent(intent) ? NearGoalStrongIntentMinimumSimilarity : StrongIntentMinimumSimilarity;
+        }
+
+        private static float StrongIntentMaximumScoreLiftFor(SpellFamily targetFamily, BaseRecognitionIntent intent)
+        {
+            if (targetFamily == SpellFamily.Water)
+            {
+                return StrongIntentMaximumScoreLift;
+            }
+
+            return IsGoalLocalColdStartIntent(intent) ? NearGoalStrongIntentMaximumScoreLift : StrongIntentMaximumScoreLift;
+        }
+
+        private static bool IsGoalLocalColdStartIntent(BaseRecognitionIntent intent)
+        {
+            return intent?.IsActive == true &&
+                   string.Equals(intent.source, "near_goal_symbol", StringComparison.Ordinal) &&
+                   !string.IsNullOrWhiteSpace(intent.goalId);
         }
 
         private static RecognitionStatus ApplyColdStartWaterGuard(
@@ -494,11 +538,35 @@ namespace MagicExamHall
             var corners = ExpectedCornerScore(cornerCount, ExpectedCorners(template.family));
             var circularity = EstimateCircularity(normalized.cloud);
             var parallel = EstimateParallelism(strokes);
+            var windSpacing = EstimateWindSpacingBalance(strokes);
             var fill = EstimateFillRatio(strokes);
+            var parallelThreeStroke = strokes.Count == 3 && parallel >= 0.62f && windSpacing >= 0.45f;
             var smoothSingleLoop = strokes.Count == 1 &&
                                    quality.closure >= WaterIntentClosureAcceptThreshold &&
                                    circularity >= 0.64f &&
                                    cornerCount <= 1;
+            var roundSingleLoop = strokes.Count == 1 &&
+                                  quality.closure >= WaterIntentClosureAcceptThreshold &&
+                                  circularity >= 0.56f &&
+                                  cornerCount <= 2;
+            var angularSingleLoop = strokes.Count == 1 &&
+                                    quality.closure >= WaterIntentClosureAcceptThreshold &&
+                                    cornerCount >= 3 &&
+                                    circularity <= 0.58f;
+            var boxySingleLoop = strokes.Count == 1 &&
+                                 quality.closure >= WaterIntentClosureAcceptThreshold &&
+                                 cornerCount >= 3 &&
+                                 fill >= 0.52f;
+            var earthLikeSingleLoop = LooksLikeEarthQuadrilateralLoop(strokes, quality, cornerCount, circularity, fill);
+            var softWaterLoop = strokes.Count == 1 &&
+                                quality.closure >= WaterColdStartClosureAcceptThreshold &&
+                                circularity >= 0.50f &&
+                                cornerCount <= 2 &&
+                                fill >= 0.30f &&
+                                fill <= 0.92f &&
+                                !earthLikeSingleLoop &&
+                                !boxySingleLoop &&
+                                !angularSingleLoop;
             var score = templateScore;
 
             switch (template.family)
@@ -516,15 +584,51 @@ namespace MagicExamHall
                     {
                         score *= EarthSmoothLoopPenalty;
                     }
+                    else if (roundSingleLoop)
+                    {
+                        score *= EarthRoundLoopPenalty;
+                    }
+
+                    if (angularSingleLoop || boxySingleLoop || earthLikeSingleLoop)
+                    {
+                        var earthLoopFit = Mathf.Max(Closeness(fill, 0.68f, 0.30f), Closeness(fill, 0.50f, 0.28f));
+                        score += EarthAngularLoopBonus * Mathf.Min(corners, earthLoopFit);
+                    }
                     break;
                 case SpellFamily.Fire:
                     score = templateScore * 0.42f + quality.closure * 0.24f + corners * 0.21f + Closeness(fill, 0.5f, 0.18f) * 0.07f + strokeScore * 0.06f;
+                    if (parallelThreeStroke)
+                    {
+                        score *= 0.38f;
+                    }
+
+                    if (smoothSingleLoop || roundSingleLoop)
+                    {
+                        score *= 0.72f;
+                    }
                     break;
                 case SpellFamily.Water:
                     score = templateScore * 0.44f + ClosureScoreFor(template.family, quality.closure) * 0.18f + circularity * 0.27f + quality.smoothness * 0.11f;
                     if (smoothSingleLoop)
                     {
                         score += WaterSingleStrokeLoopBonus * Mathf.Min(circularity, quality.smoothness);
+                    }
+                    else if (softWaterLoop)
+                    {
+                        score += WaterSingleStrokeLoopBonus * 0.72f * Mathf.Min(circularity, quality.smoothness);
+                    }
+
+                    if (earthLikeSingleLoop)
+                    {
+                        score *= WaterEarthLikeLoopPenalty;
+                    }
+                    else if (angularSingleLoop)
+                    {
+                        score *= WaterAngularLoopPenalty * 0.78f;
+                    }
+                    else if (boxySingleLoop)
+                    {
+                        score *= WaterBoxyLoopPenalty * 0.82f;
                     }
                     break;
                 case SpellFamily.Life:
@@ -650,7 +754,7 @@ namespace MagicExamHall
             return family switch
             {
                 SpellFamily.Fire => "불꽃 삼각형의 마지막 점이 시작점으로 돌아오지 않아 틈이 남았습니다.",
-                SpellFamily.Water => "물 원의 끝점이 시작점 옆에 닿지 않아 열린 곡선으로 읽혔습니다.",
+                SpellFamily.Water => "물방울의 끝점이 시작점 옆에 닿지 않아 열린 곡선으로 읽혔습니다.",
                 SpellFamily.Earth => "땅 사다리꼴의 마지막 변이 닫히지 않아 바닥이 고정되지 않았습니다.",
                 _ => "끝점이 시작점 가까이 닿지 않아 닫힌 문양으로 읽히지 않았습니다."
             };
@@ -661,7 +765,7 @@ namespace MagicExamHall
             return family switch
             {
                 SpellFamily.Fire => "세 꼭짓점을 찍은 뒤 마지막 선을 처음 아래 꼭짓점으로 되돌려 삼각형을 닫으세요.",
-                SpellFamily.Water => "한 획으로 원을 돌리고 끝점을 시작점 바로 옆에 놓아 고리를 닫으세요.",
+                SpellFamily.Water => "한 획으로 둥근 물방울이나 타원을 돌리고 끝점을 시작점 바로 옆에 놓아 고리를 닫으세요.",
                 SpellFamily.Earth => "윗변은 좁게, 아랫변은 넓게 만든 뒤 마지막 선으로 네 모서리를 닫으세요.",
                 _ => "마지막 점을 시작점 근처로 가져와 닫힌 모양을 만들어 보세요."
             };
@@ -736,6 +840,26 @@ namespace MagicExamHall
                     strokes = new List<List<Vector2>>
                     {
                         Poly(new Vector2(-0.25f, -0.38f), new Vector2(0.25f, -0.38f), new Vector2(0.46f, 0.34f), new Vector2(-0.46f, 0.34f), new Vector2(-0.25f, -0.38f))
+                    }
+                },
+                new()
+                {
+                    family = SpellFamily.Earth,
+                    minStrokes = 1,
+                    maxStrokes = 2,
+                    strokes = new List<List<Vector2>>
+                    {
+                        Poly(new Vector2(-0.46f, -0.34f), new Vector2(0.46f, -0.34f), new Vector2(0.25f, 0.38f), new Vector2(-0.25f, 0.38f), new Vector2(-0.46f, -0.34f))
+                    }
+                },
+                new()
+                {
+                    family = SpellFamily.Earth,
+                    minStrokes = 1,
+                    maxStrokes = 2,
+                    strokes = new List<List<Vector2>>
+                    {
+                        Poly(new Vector2(-0.42f, -0.34f), new Vector2(0.42f, -0.34f), new Vector2(0.42f, 0.34f), new Vector2(-0.42f, 0.34f), new Vector2(-0.42f, -0.34f))
                     }
                 },
                 new()
@@ -956,11 +1080,17 @@ namespace MagicExamHall
                 return 0;
             }
 
-            var corners = 0;
-            for (var index = 1; index < dominant.Count - 1; index++)
+            var points = SimplifyStrokePoints(dominant);
+            if (points.Count < 3)
             {
-                var a = (dominant[index].position - dominant[index - 1].position).normalized;
-                var b = (dominant[index + 1].position - dominant[index].position).normalized;
+                return 0;
+            }
+
+            var corners = 0;
+            for (var index = 1; index < points.Count - 1; index++)
+            {
+                var a = (points[index] - points[index - 1]).normalized;
+                var b = (points[index + 1] - points[index]).normalized;
                 if (Vector2.Angle(a, b) > 38f)
                 {
                     corners++;
@@ -968,6 +1098,36 @@ namespace MagicExamHall
             }
 
             return Mathf.Clamp(corners, 0, 6);
+        }
+
+        private static List<Vector2> SimplifyStrokePoints(IReadOnlyList<StrokeSample> stroke)
+        {
+            var points = stroke.Select(sample => sample.position).ToList();
+            if (points.Count < 2)
+            {
+                return points;
+            }
+
+            var min = new Vector2(points.Min(point => point.x), points.Min(point => point.y));
+            var max = new Vector2(points.Max(point => point.x), points.Max(point => point.y));
+            var duplicateThreshold = Mathf.Max(Vector2.Distance(min, max) * 0.012f, 0.0005f);
+            var simplified = new List<Vector2> { points[0] };
+            for (var index = 1; index < points.Count; index++)
+            {
+                if (Vector2.Distance(points[index], simplified[^1]) >= duplicateThreshold)
+                {
+                    simplified.Add(points[index]);
+                }
+            }
+
+            if (simplified.Count > 2 &&
+                Vector2.Distance(simplified[0], simplified[^1]) < duplicateThreshold &&
+                Vector2.Distance(points[0], points[^1]) >= duplicateThreshold)
+            {
+                simplified[^1] = points[^1];
+            }
+
+            return simplified;
         }
 
         private static float ExpectedCornerScore(int actual, int expected)
@@ -998,7 +1158,7 @@ namespace MagicExamHall
             var maxX = points.Max(point => point.x);
             var minY = points.Min(point => point.y);
             var maxY = points.Max(point => point.y);
-            var boxArea = Mathf.Max((maxX - minX) * (maxY - minY), 1f);
+            var boxArea = Mathf.Max((maxX - minX) * (maxY - minY), 0.0001f);
             var dominant = strokes.OrderByDescending(stroke => StrokePathLength(stroke)).First();
             var area = Mathf.Abs(PolygonArea(dominant.Select(sample => sample.position).ToList()));
             return Mathf.Clamp01(area / boxArea);
@@ -1015,6 +1175,34 @@ namespace MagicExamHall
             var mean = radii.Average();
             var variance = radii.Average(radius => Mathf.Pow(radius - mean, 2f));
             return Mathf.Clamp01(1f - Mathf.Sqrt(variance) / Mathf.Max(mean * 0.45f, 0.0001f));
+        }
+
+        private static bool LooksLikeEarthQuadrilateralLoop(
+            List<List<StrokeSample>> strokes,
+            QualityVector quality,
+            int cornerCount,
+            float circularity,
+            float fill)
+        {
+            if (strokes.Count != 1 ||
+                quality.closure < WaterIntentClosureAcceptThreshold ||
+                cornerCount < 3 ||
+                cornerCount > 6 ||
+                fill < 0.32f ||
+                circularity > 0.86f)
+            {
+                return false;
+            }
+
+            var dominant = strokes[0];
+            var minX = dominant.Min(sample => sample.position.x);
+            var maxX = dominant.Max(sample => sample.position.x);
+            var minY = dominant.Min(sample => sample.position.y);
+            var maxY = dominant.Max(sample => sample.position.y);
+            var width = Mathf.Max(maxX - minX, 0.001f);
+            var height = Mathf.Max(maxY - minY, 0.001f);
+            var aspect = width / height;
+            return aspect >= 0.48f && aspect <= 2.35f;
         }
 
         private static float RangeScore(int value, int min, int max)
@@ -1150,7 +1338,7 @@ namespace MagicExamHall
 
             var min = new Vector2(all.Min(sample => sample.position.x), all.Min(sample => sample.position.y));
             var max = new Vector2(all.Max(sample => sample.position.x), all.Max(sample => sample.position.y));
-            var diagonal = Mathf.Max(Vector2.Distance(min, max), 1f);
+            var diagonal = Mathf.Max(Vector2.Distance(min, max), 0.15f);
             var longest = strokes.OrderByDescending(PathLength).First();
             var gap = Vector2.Distance(longest[0].position, longest[^1].position);
             var duration = Mathf.Max(all.Max(sample => sample.time) - all.Min(sample => sample.time), 0.001f);

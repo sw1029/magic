@@ -7,6 +7,8 @@ namespace MagicExamHall
 {
     public sealed class WorldPointerInputSource : MonoBehaviour
     {
+        private const float ForcedPointDuplicateDistance = 0.0025f;
+
         public Camera mainCamera = null!;
         public int mouseButton = 1;
         public float minPointDistance = WorldDrawingController.DefaultMinPointDistance;
@@ -22,6 +24,25 @@ namespace MagicExamHall
         public event Action StrokeCanceled = delegate { };
 
         public bool IsDrawing => drawing;
+        public bool HasActiveWorldCenter => activePoints.Count > 0;
+        public Vector2 ActiveWorldCenter
+        {
+            get
+            {
+                if (activePoints.Count == 0)
+                {
+                    return Vector2.zero;
+                }
+
+                var sum = Vector2.zero;
+                foreach (var point in activePoints)
+                {
+                    sum += point.Position;
+                }
+
+                return sum / activePoints.Count;
+            }
+        }
 
         private void Awake()
         {
@@ -76,7 +97,7 @@ namespace MagicExamHall
 
         private void CompleteStroke(Vector2 screenPoint)
         {
-            AddPoint(screenPoint);
+            AddPoint(screenPoint, force: true);
             drawing = false;
 
             if (activePoints.Count >= 2)
@@ -96,9 +117,14 @@ namespace MagicExamHall
         {
             var world = mainCamera.ScreenToWorldPoint(new Vector3(screenPoint.x, screenPoint.y, -mainCamera.transform.position.z));
             var point = new StrokeInputPoint(new Vector2(world.x, world.y), Time.time, 1f, 0, InputCoordinateSpace.World);
-            if (!force && activePoints.Count > 0 && Vector2.Distance(activePoints[^1].Position, point.Position) < minPointDistance)
+            if (activePoints.Count > 0)
             {
-                return;
+                var distanceFromPrevious = Vector2.Distance(activePoints[^1].Position, point.Position);
+                if (distanceFromPrevious < ForcedPointDuplicateDistance ||
+                    (!force && distanceFromPrevious < minPointDistance))
+                {
+                    return;
+                }
             }
 
             activePoints.Add(point);

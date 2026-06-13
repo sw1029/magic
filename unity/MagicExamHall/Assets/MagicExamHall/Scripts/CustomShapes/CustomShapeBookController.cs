@@ -320,7 +320,7 @@ namespace MagicExamHall
             modalRoot.SetAsLastSibling();
             pagePanel = CreatePanel("Custom Shape Page", modalRoot, Vector2.zero, new Vector2(960f, 540f), UiAnchor.Center, new Color(0.032f, 0.04f, 0.058f, 0.995f));
             AddSimpleBorder(pagePanel, new Color(0.25f, 0.34f, 0.48f, 0.82f), 2f);
-            CreateText("Custom Shape Title", pagePanel, "커스텀 도형", 24, FontStyle.Bold, new Vector2(24f, -18f), new Vector2(360f, 36f), UiAnchor.TopLeft);
+            CreateText("Custom Shape Title", pagePanel, "도형 책", 24, FontStyle.Bold, new Vector2(24f, -18f), new Vector2(360f, 36f), UiAnchor.TopLeft);
             CreateButton("Close Custom Shape Page", pagePanel, "닫기", 15, new Vector2(-22f, -18f), new Vector2(72f, 34f), UiAnchor.TopRight, ClosePage);
 
             wheelRoot = CreatePanel("Custom Shape Wheel Root", pagePanel, new Vector2(-136f, -4f), new Vector2(600f, 438f), UiAnchor.Center, new Color(0f, 0f, 0f, 0f));

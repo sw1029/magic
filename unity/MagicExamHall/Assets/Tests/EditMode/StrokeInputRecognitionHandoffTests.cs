@@ -202,6 +202,64 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void ActiveSealDoesNotForceDistantInputIntoPostSealCustomPhase()
+        {
+            var service = new HeuristicStrokeRecognitionService();
+            var waterSeal = SpellRuntime.CreateSeal(
+                SpellRuntime.RecognizeBase(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Water, timeStep: 0.03f)),
+                0f);
+            var distantFire = Offset(
+                GestureRecognizer.CreateCanonicalSamples(SpellFamily.Fire, timeStep: 0.03f),
+                waterSeal.worldCenter + new Vector2(1200f, 0f));
+            var session = StrokeInputSessionExtensions.FromStrokeSamples(distantFire, "distant-fire", 0.2f);
+
+            var result = service.Recognize(session, new RecognitionContext
+            {
+                activeSeals = new[] { waterSeal },
+                customShapesOnlyWhenSealActive = true,
+                now = 0.2f
+            });
+
+            Assert.That(result.kind, Is.EqualTo(StrokeRecognitionKind.Base));
+            Assert.That(result.baseResult.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+            Assert.That(result.baseResult.spell.recognizedFamily, Is.EqualTo(SpellFamily.Fire));
+            Assert.That(result.baseResult.spell.isCustomShape, Is.False);
+        }
+
+        [Test]
+        public void CustomShapeRequiresAttachableSealWhenCustomOnlyModeIsEnabled()
+        {
+            var profilePath = Path.Combine(Path.GetTempPath(), $"custom-shape-{Guid.NewGuid():N}.json");
+            try
+            {
+                var store = new CustomShapeProfileStore(profilePath);
+                var gold = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, timeStep: 0.03f);
+                Assert.That(store.TrySaveSlot(0, "test wind", "test|wind|line", SpellFamily.Wind, gold, out var message), Is.True, message);
+                var service = new HeuristicStrokeRecognitionService(null, store);
+                var session = StrokeInputSessionExtensions.FromStrokeSamples(gold, "custom-without-seal", 0.2f);
+
+                var result = service.Recognize(session, new RecognitionContext
+                {
+                    activeSeals = Array.Empty<CompiledSeal>(),
+                    allowCustomShapes = true,
+                    customShapesOnlyWhenSealActive = true,
+                    now = 0.2f
+                });
+
+                Assert.That(result.kind, Is.EqualTo(StrokeRecognitionKind.Base));
+                Assert.That(result.baseResult.spell.isCustomShape, Is.False);
+                Assert.That(result.baseResult.spell.customShapeLabel, Is.Empty);
+            }
+            finally
+            {
+                if (File.Exists(profilePath))
+                {
+                    File.Delete(profilePath);
+                }
+            }
+        }
+
+        [Test]
         public void NearGoalWeakIntentAddsSmallLiftWithoutStrongConsideration()
         {
             var wind = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Wind, timeStep: 0.03f);
@@ -289,6 +347,40 @@ namespace MagicExamHall.Tests
             Assert.That(result.baseResult.spell.intentWeakConsiderationApplied, Is.True);
             Assert.That(result.baseResult.spell.intentStrongConsiderationApplied, Is.False);
             Assert.That(service.PersonalizationStore.CaptureCount, Is.EqualTo(1));
+        }
+
+        [TestCase(SpellFamily.Earth, "custom_earth")]
+        [TestCase(SpellFamily.Earth, "earth_stairs")]
+        [TestCase(SpellFamily.Earth, "beam_earth")]
+        [TestCase(SpellFamily.Water, "final_puddle")]
+        public void LaterFloorGoalIntentKeepsStrongConsiderationAfterEarlierBaseCapture(SpellFamily family, string goalId)
+        {
+            var service = new HeuristicStrokeRecognitionService();
+            var seed = GestureRecognizer.CreateCanonicalSamples(family, timeStep: 0.03f);
+            var seedSession = StrokeInputSessionExtensions.FromStrokeSamples(seed, "base-seed", 0f);
+            var seedResult = service.Recognize(seedSession, new RecognitionContext { activeSeals = new List<CompiledSeal>(), now = 0f });
+            service.RecordAcceptedResult(seedResult, 0.2f);
+
+            var intent = new BaseRecognitionIntent
+            {
+                family = family,
+                goalId = goalId,
+                source = "near_goal_symbol",
+                radius = 3f,
+                strength = 1f
+            };
+            var strokes = family == SpellFamily.Earth
+                ? EarthTrapezoidSamples()
+                : GestureRecognizer.CreateCanonicalSamples(family, timeStep: 0.03f);
+            var current = StrokeInputSessionExtensions.FromStrokeSamples(strokes, "later-floor-goal", 10f);
+
+            var result = service.Recognize(current, new RecognitionContext { baseIntent = intent, activeSeals = new List<CompiledSeal>(), now = 10f });
+
+            Assert.That(result.baseResult.intent.tutorialCaptureCount, Is.EqualTo(1));
+            Assert.That(result.baseResult.intent.strongConsiderationEnabled, Is.True);
+            Assert.That(result.baseResult.spell.recognizedFamily, Is.EqualTo(family));
+            Assert.That(result.baseResult.spell.intentFamily, Is.EqualTo(family));
+            Assert.That(result.baseResult.spell.intentGoalId, Is.EqualTo(goalId));
         }
 
         [Test]
@@ -542,6 +634,19 @@ namespace MagicExamHall.Tests
                     new Vector2(0.62f, 0.58f),
                     new Vector2(-0.62f, 0.58f),
                     new Vector2(-0.18f, -0.26f))
+            };
+        }
+
+        private static List<List<StrokeSample>> EarthTrapezoidSamples()
+        {
+            return new List<List<StrokeSample>>
+            {
+                Polyline(
+                    new Vector2(-0.25f, -0.32f),
+                    new Vector2(0.25f, -0.32f),
+                    new Vector2(0.42f, 0.28f),
+                    new Vector2(-0.40f, 0.30f),
+                    new Vector2(-0.25f, -0.32f))
             };
         }
 

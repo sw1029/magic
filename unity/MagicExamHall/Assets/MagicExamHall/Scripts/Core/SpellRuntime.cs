@@ -77,7 +77,7 @@ namespace MagicExamHall
                     ? CustomSpellEffectCatalog.Korean(customEffectKind)
                     : "";
                 var baseLabel = !string.IsNullOrWhiteSpace(customEffectLabel)
-                    ? $"{customEffectLabel} seal"
+                    ? $"{customEffectLabel} 문양"
                     : string.IsNullOrWhiteSpace(customShapeLabel)
                     ? SpellLabels.Korean(baseFamily)
                     : $"{customShapeLabel} ({SpellLabels.Korean(baseFamily)})";
@@ -116,7 +116,8 @@ namespace MagicExamHall
             var candidates = Enum.GetValues(typeof(SpellFamily))
                 .Cast<SpellFamily>()
                 .Select(family => GestureRecognizer.Recognize(strokes, family, intent))
-                .OrderByDescending(result => result.intentStrongConsiderationApplied ? 3 : result.success ? 2 : result.status == RecognitionStatus.Recognized ? 1 : 0)
+                .OrderByDescending(RecognitionRank)
+                .ThenByDescending(result => ActiveIntentTargetRank(result, intent))
                 .ThenByDescending(result => result.confidence)
                 .ToList();
             var best = candidates.First();
@@ -130,6 +131,33 @@ namespace MagicExamHall
                 bufferStrokeCount = strokes.Count,
                 intent = intent
             };
+        }
+
+        private static int RecognitionRank(SpellResult result)
+        {
+            if (result.intentStrongConsiderationApplied)
+            {
+                return 3;
+            }
+
+            if (result.success)
+            {
+                return 2;
+            }
+
+            return result.status == RecognitionStatus.Recognized ? 1 : 0;
+        }
+
+        private static int ActiveIntentTargetRank(SpellResult result, BaseRecognitionIntent intent)
+        {
+            if (intent?.IsActive != true ||
+                result.targetFamily != intent.family ||
+                intent.strength < 0.45f)
+            {
+                return 0;
+            }
+
+            return result.success || result.status == RecognitionStatus.Recognized ? 1 : 0;
         }
 
         public static CompiledSeal CreateSeal(BaseRecognitionResult baseResult, float now, float durationSeconds = DefaultSealDurationSeconds)
@@ -213,7 +241,7 @@ namespace MagicExamHall
                     scaleRatio = features.scaleRatio,
                     scaleHint = scaleHint,
                     anchorZone = top.anchorZone,
-                    feedbackReason = "축 장식은 먼저 절단 장식이 붙은 seal에서만 섭니다. 대각선 절단을 붙인 뒤 중심을 가르는 축을 그리세요."
+                    feedbackReason = "축 장식은 먼저 절단 장식이 붙은 문양에서만 섭니다. 대각선 절단을 붙인 뒤 중심을 가르는 축을 그리세요."
                 };
             }
 
@@ -259,7 +287,7 @@ namespace MagicExamHall
                     scaleRatio = features.scaleRatio,
                     scaleHint = scaleHint,
                     anchorZone = top.anchorZone,
-                    feedbackReason = $"{SpellLabels.Korean(top.op)} 장식이 seal에 붙었습니다."
+                    feedbackReason = $"{SpellLabels.Korean(top.op)} 장식이 문양에 붙었습니다."
                 };
             }
 
@@ -390,12 +418,12 @@ namespace MagicExamHall
         {
             if (scaleHint == OverlayScaleHint.TooSmall)
             {
-                return $"{SpellLabels.Korean(top.op)} 장식처럼 보였지만 너무 작아 seal에 고정되지 않았습니다.";
+                return $"{SpellLabels.Korean(top.op)} 장식처럼 보였지만 너무 작아 문양에 고정되지 않았습니다.";
             }
 
             if (scaleHint == OverlayScaleHint.TooLarge)
             {
-                return $"{SpellLabels.Korean(top.op)} 장식처럼 보였지만 너무 커서 seal 안쪽 기준을 벗어났습니다.";
+                return $"{SpellLabels.Korean(top.op)} 장식처럼 보였지만 너무 커서 빛나는 원 안쪽 기준을 벗어났습니다.";
             }
 
             if (top.shapeConfidence >= 0.55f)
@@ -404,8 +432,8 @@ namespace MagicExamHall
             }
 
             return ambiguous
-                ? "장식 후보가 겹쳐 아직 seal에 붙이지 않았습니다. 한 번에 한 가지 장식만 더 단순하게 그려 보세요."
-                : "장식의 모양과 위치가 seal 기준과 충분히 맞지 않았습니다.";
+                ? "장식 후보가 겹쳐 아직 문양에 붙이지 않았습니다. 한 번에 한 가지 장식만 더 단순하게 그려 보세요."
+                : "장식의 모양과 위치가 문양 기준과 충분히 맞지 않았습니다.";
         }
 
         private static bool OverlaySpecificGate(OverlayOperator op, int strokeCount, OverlayFeatures features)
@@ -434,7 +462,7 @@ namespace MagicExamHall
         {
             return op switch
             {
-                OverlayOperator.SoulDot => "집중 장식은 seal 중심에 작은 원 또는 점처럼 한 번에 닫아 그려야 합니다. 두 줄만 그은 모양은 집중으로 확정하지 않습니다.",
+                OverlayOperator.SoulDot => "집중 장식은 문양 중심에 작은 원 또는 점처럼 한 번에 닫아 그려야 합니다. 두 줄만 그은 모양은 집중으로 확정하지 않습니다.",
                 OverlayOperator.IceBar => "얼음 장식은 한 획의 곧은 수평선으로 그려야 합니다.",
                 OverlayOperator.VoidCut => "절단 장식은 한 획의 곧은 대각선으로 그려야 합니다.",
                 OverlayOperator.SteelBrace => "보강 장식은 꺾인 ㄷ자 형태가 분명해야 합니다.",

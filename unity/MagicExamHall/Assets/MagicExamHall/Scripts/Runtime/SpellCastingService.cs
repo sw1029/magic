@@ -348,7 +348,7 @@ namespace MagicExamHall
             if (hasExplicitTarget && sealById == null)
             {
                 result.status = RecognitionStatus.Invalid;
-                result.feedbackReason = "지정된 targetSealId가 만료되었거나 현재 활성 seal 목록에 없습니다.";
+                result.feedbackReason = "지정된 문양이 만료되었거나 현재 활성 문양 목록에 없습니다.";
                 return new SpellCastOutcome
                 {
                     kind = SpellCastOutcomeKind.OverlayNoActiveSeal,

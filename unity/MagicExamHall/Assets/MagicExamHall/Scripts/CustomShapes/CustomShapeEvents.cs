@@ -89,7 +89,7 @@ namespace MagicExamHall
                 SpellFamily.Water when HasToken(spell, "ellipse") || IsEvent(spell, CustomShapeEventKind.Barrier) => For(CustomSpellEffectKind.Cleanse),
                 SpellFamily.Fire when HasToken(spell, "star") || IsEvent(spell, CustomShapeEventKind.MagicAmplify) => For(CustomSpellEffectKind.Focus),
                 SpellFamily.Wind when HasToken(spell, "wave") || IsEvent(spell, CustomShapeEventKind.MoveSpeedBuff) => For(CustomSpellEffectKind.Flow),
-                SpellFamily.Life when IsEvent(spell, CustomShapeEventKind.DirectionalProjectile) && HasToken(spell, "rect") => For(CustomSpellEffectKind.LivingBridge),
+                SpellFamily.Life when IsEvent(spell, CustomShapeEventKind.DirectionalProjectile) || HasToken(spell, "arrow") => For(CustomSpellEffectKind.LivingBridge),
                 SpellFamily.Life when HasToken(spell, "brace") || IsEvent(spell, CustomShapeEventKind.AttackBuff) => For(CustomSpellEffectKind.Connection),
                 SpellFamily.Earth when HasToken(spell, "pentagon") || IsEvent(spell, CustomShapeEventKind.GuardBuff) => For(CustomSpellEffectKind.Steel),
                 SpellFamily.Wind when HasToken(spell, "rect") || IsEvent(spell, CustomShapeEventKind.WallEntity) => For(CustomSpellEffectKind.WindPlatform),
@@ -126,9 +126,9 @@ namespace MagicExamHall
                 CustomSpellEffectKind.Focus => new(kind, "불꽃 초점", "불꽃 + 별 초점", "별 모양 초점이 다음 타격이 모일 지점을 밝혀 줍니다.", 24),
                 CustomSpellEffectKind.Flow => new(kind, "바람 물결", "바람 + 물결", "바람이 물결 경로를 따라 이동 흐름을 만듭니다.", 20),
                 CustomSpellEffectKind.Connection => new(kind, "생명 연결", "생명 + 연결선", "생명력이 떨어진 대상을 묶어 연결합니다.", 22),
-                CustomSpellEffectKind.Steel => new(kind, "강철 오각형", "땅 + 오각형", "땅 seal이 오각형 구조로 압축되어 강철 seal로 굳습니다.", 26),
+                CustomSpellEffectKind.Steel => new(kind, "강철 오각형", "땅 + 오각형", "땅 문양이 오각형 구조로 압축되어 강철 문양으로 굳습니다.", 26),
                 CustomSpellEffectKind.Stability => new(kind, "구멍 메우기", "땅 + 메움판", "사각 암반판이 깨진 바닥 구멍을 메워 길을 안정시킵니다.", 16),
-                CustomSpellEffectKind.LivingBridge => new(kind, "덩굴 다리", "생명 + 화살표 + 사각판", "덩굴이 화살 방향으로 뻗어 낭떠러지를 잇습니다.", 0),
+                CustomSpellEffectKind.LivingBridge => new(kind, "덩굴 다리", "생명 + 화살표", "덩굴이 화살 방향으로 뻗어 낭떠러지를 잇습니다.", 0),
                 CustomSpellEffectKind.WindPlatform => new(kind, "바람 발판", "바람 + 발판", "바람이 사각 발판을 띄워 건너갈 길을 만듭니다.", 0),
                 _ => new(CustomSpellEffectKind.None, "", "", "", 0)
             };
@@ -272,21 +272,21 @@ namespace MagicExamHall
     {
         private static readonly CustomShapeEventDefinition[] Definitions =
         {
-            new("line", "line_slash_damage", "절단 피해", CustomShapeEventRole.Effect, CustomShapeEventKind.SlashDamage, "이벤트: 절단 피해", usesDirection: true),
+            new("line", "line_slash_damage", "절단 피해", CustomShapeEventRole.Effect, CustomShapeEventKind.SlashDamage, "반응: 절단 피해", usesDirection: true),
             new("arrow", "arrow_operator", "방향 사출", CustomShapeEventRole.Operator, CustomShapeEventKind.DirectionalProjectile, "연산자: 끝점 방향 사출", usesDirection: true, emitsFromEndPoint: true, operatorOnlyKind: CustomShapeEventKind.AttributeLaser, operatorTargetKind: CustomShapeEventKind.DirectionalProjectile),
-            new("rect", "rect_wall_entity", "벽 생성", CustomShapeEventRole.Effect, CustomShapeEventKind.WallEntity, "이벤트: 벽 구조물", visualPersistence: CustomShapeEventPersistence.Permanent),
-            new("roundRect", "round_rect_guard_buff", "방어 버프", CustomShapeEventRole.Effect, CustomShapeEventKind.GuardBuff, "이벤트: 방어 버프"),
-            new("ellipse", "ellipse_barrier", "배리어", CustomShapeEventRole.Effect, CustomShapeEventKind.Barrier, "이벤트: 배리어"),
-            new("triangle", "triangle_trap", "함정", CustomShapeEventRole.Effect, CustomShapeEventKind.Trap, "이벤트: 함정 설치"),
-            new("diamond", "diamond_piercing_mark", "관통 표식", CustomShapeEventRole.Effect, CustomShapeEventKind.PiercingMark, "이벤트: 관통 표식"),
-            new("pentagon", "pentagon_guard_buff", "수호 버프", CustomShapeEventRole.Effect, CustomShapeEventKind.GuardBuff, "이벤트: 수호 버프"),
-            new("hexagon", "hexagon_stun", "스턴", CustomShapeEventRole.Effect, CustomShapeEventKind.Stun, "이벤트: 스턴"),
-            new("star", "star_magic_amplify", "마법 강화", CustomShapeEventRole.Effect, CustomShapeEventKind.MagicAmplify, "이벤트: 다음 마법 강화"),
-            new("arc", "arc_special_attack", "특공 상승", CustomShapeEventRole.Effect, CustomShapeEventKind.SpecialAttackBoost, "이벤트: 특공 상승"),
-            new("curve", "curve_projectile", "곡선 사출", CustomShapeEventRole.Effect, CustomShapeEventKind.CurveProjectile, "이벤트: 곡선 사출", usesDirection: true),
-            new("wave", "wave_move_speed", "이동속도", CustomShapeEventRole.Effect, CustomShapeEventKind.MoveSpeedBuff, "이벤트: 이동속도"),
-            new("brace", "brace_attack_buff", "공격력 버프", CustomShapeEventRole.Effect, CustomShapeEventKind.AttackBuff, "이벤트: 공격력 버프"),
-            new("cross", "cross_operator", "버프 삭제", CustomShapeEventRole.Operator, CustomShapeEventKind.BuffDispel, "연산자: 겹친 이벤트 차단", blocksOverlappedEvent: true, operatorOnlyKind: CustomShapeEventKind.RandomBuffDispel, operatorTargetKind: CustomShapeEventKind.EventBlock)
+            new("rect", "rect_wall_entity", "벽 생성", CustomShapeEventRole.Effect, CustomShapeEventKind.WallEntity, "반응: 벽 구조물", visualPersistence: CustomShapeEventPersistence.Permanent),
+            new("roundRect", "round_rect_guard_buff", "방어 버프", CustomShapeEventRole.Effect, CustomShapeEventKind.GuardBuff, "반응: 방어 버프"),
+            new("ellipse", "ellipse_barrier", "배리어", CustomShapeEventRole.Effect, CustomShapeEventKind.Barrier, "반응: 배리어"),
+            new("triangle", "triangle_trap", "함정", CustomShapeEventRole.Effect, CustomShapeEventKind.Trap, "반응: 함정 설치"),
+            new("diamond", "diamond_piercing_mark", "관통 표식", CustomShapeEventRole.Effect, CustomShapeEventKind.PiercingMark, "반응: 관통 표식"),
+            new("pentagon", "pentagon_guard_buff", "수호 버프", CustomShapeEventRole.Effect, CustomShapeEventKind.GuardBuff, "반응: 수호 버프"),
+            new("hexagon", "hexagon_stun", "스턴", CustomShapeEventRole.Effect, CustomShapeEventKind.Stun, "반응: 스턴"),
+            new("star", "star_magic_amplify", "마법 강화", CustomShapeEventRole.Effect, CustomShapeEventKind.MagicAmplify, "반응: 다음 마법 강화"),
+            new("arc", "arc_special_attack", "특공 상승", CustomShapeEventRole.Effect, CustomShapeEventKind.SpecialAttackBoost, "반응: 특공 상승"),
+            new("curve", "curve_projectile", "곡선 사출", CustomShapeEventRole.Effect, CustomShapeEventKind.CurveProjectile, "반응: 곡선 사출", usesDirection: true),
+            new("wave", "wave_move_speed", "이동속도", CustomShapeEventRole.Effect, CustomShapeEventKind.MoveSpeedBuff, "반응: 이동속도"),
+            new("brace", "brace_attack_buff", "공격력 버프", CustomShapeEventRole.Effect, CustomShapeEventKind.AttackBuff, "반응: 공격력 버프"),
+            new("cross", "cross_operator", "버프 삭제", CustomShapeEventRole.Operator, CustomShapeEventKind.BuffDispel, "연산자: 겹친 반응 차단", blocksOverlappedEvent: true, operatorOnlyKind: CustomShapeEventKind.RandomBuffDispel, operatorTargetKind: CustomShapeEventKind.EventBlock)
         };
 
         public static IReadOnlyList<CustomShapeEventDefinition> All => Definitions;
@@ -387,7 +387,7 @@ namespace MagicExamHall
             if (operatorDefinition.blocksOverlappedEvent)
             {
                 target.eventId = $"{operatorDefinition.token}_blocks_{target.shapeToken}";
-                target.displayName = "이벤트 차단";
+                target.displayName = "반응 차단";
                 target.eventKind = CustomShapeEventKind.EventBlock;
                 target.eventBlocked = true;
                 target.blockedByToken = operatorDefinition.token;
@@ -490,7 +490,7 @@ namespace MagicExamHall
             {
                 CustomShapeEventKind.AttributeLaser => "속성 레이저",
                 CustomShapeEventKind.RandomBuffDispel => "무작위 버프 삭제",
-                CustomShapeEventKind.EventBlock => "이벤트 차단",
+                CustomShapeEventKind.EventBlock => "반응 차단",
                 CustomShapeEventKind.DirectionalProjectile => "방향 사출",
                 _ => definition.displayName
             };

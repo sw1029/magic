@@ -322,6 +322,22 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void RoundedWaterLoopWithMinorCornersDoesNotResolveAsEarth()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeEllipseArc(-10f, 358f, 64, new Vector2(220f, 220f), 160f, 135f, 0f)
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes);
+
+            Assert.That(
+                result.spell.recognizedFamily,
+                Is.Not.EqualTo(SpellFamily.Earth),
+                $"target={result.spell.targetFamily}, status={result.spell.status}, confidence={result.spell.confidence:0.000}, reason={result.spell.feedbackReason}");
+        }
+
+        [Test]
         public void ColdStartWaterIntentKeepsOvalWaterInputOnWater()
         {
             var strokes = new List<List<StrokeSample>>
@@ -348,6 +364,32 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
+        public void ColdStartWaterIntentAcceptsSoftWaterDropLoop()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakeWaterDropLoop(new Vector2(220f, 220f), 165f, 132f, 72, 0f)
+            };
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Water,
+                goalId = "puddle",
+                source = "near_goal_symbol",
+                radius = 2f,
+                strength = 1f,
+                tutorialCaptureCount = 0,
+                strongConsiderationEnabled = true
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes, intent);
+
+            Assert.That(
+                result.spell.recognizedFamily,
+                Is.EqualTo(SpellFamily.Water),
+                $"target={result.spell.targetFamily}, status={result.spell.status}, confidence={result.spell.confidence:0.000}, preIntent={result.spell.preIntentFamily}, reason={result.spell.feedbackReason}");
+        }
+
+        [Test]
         public void ColdStartWaterIntentStillAcceptsClosedCanonicalCircle()
         {
             var strokes = GestureRecognizer.CreateCanonicalSamples(SpellFamily.Water, timeStep: 0.03f);
@@ -366,6 +408,197 @@ namespace MagicExamHall.Tests
 
             Assert.That(result.status, Is.EqualTo(RecognitionStatus.Recognized));
             Assert.That(result.recognizedFamily, Is.EqualTo(SpellFamily.Water));
+        }
+
+        [Test]
+        public void CompactAngularEarthLoopDoesNotResolveAsWater()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakePolyline(
+                    0f,
+                    new Vector2(-0.24f, -0.30f),
+                    new Vector2(0.25f, -0.32f),
+                    new Vector2(0.42f, 0.28f),
+                    new Vector2(-0.40f, 0.31f),
+                    new Vector2(-0.24f, -0.30f))
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes);
+
+            Assert.That(
+                result.spell.recognizedFamily,
+                Is.EqualTo(SpellFamily.Earth),
+                $"target={result.spell.targetFamily}, status={result.spell.status}, confidence={result.spell.confidence:0.000}, preIntent={result.spell.preIntentFamily}");
+        }
+
+        [Test]
+        public void WaterIntentDoesNotConvertClosedFireTriangle()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakePolyline(
+                    0f,
+                    new Vector2(0f, -0.52f),
+                    new Vector2(0.48f, 0.44f),
+                    new Vector2(-0.48f, 0.44f),
+                    new Vector2(0f, -0.52f))
+            };
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Water,
+                goalId = "custom_water",
+                source = "near_goal_symbol",
+                radius = 3f,
+                strength = 1f
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes, intent);
+
+            Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Fire));
+            Assert.That(result.spell.intentStrongConsiderationApplied, Is.False);
+        }
+
+        [Test]
+        public void WaterIntentDoesNotConvertAngularEarthLoop()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakePolyline(
+                    0f,
+                    new Vector2(-0.24f, -0.30f),
+                    new Vector2(0.25f, -0.32f),
+                    new Vector2(0.42f, 0.28f),
+                    new Vector2(-0.40f, 0.31f),
+                    new Vector2(-0.24f, -0.30f))
+            };
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Water,
+                goalId = "custom_water",
+                source = "near_goal_symbol",
+                radius = 3f,
+                strength = 1f
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes, intent);
+
+            Assert.That(result.spell.recognizedFamily, Is.EqualTo(SpellFamily.Earth));
+            Assert.That(result.spell.intentStrongConsiderationApplied, Is.False);
+        }
+
+        [Test]
+        public void EarthNearGoalIntentKeepsWideTrapezoidFromResolvingAsWater()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakePolyline(
+                    0f,
+                    new Vector2(-0.58f, -0.44f),
+                    new Vector2(-0.22f, 0.42f),
+                    new Vector2(0.38f, 0.36f),
+                    new Vector2(0.58f, -0.52f),
+                    new Vector2(-0.58f, -0.44f))
+            };
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Earth,
+                goalId = "custom_earth",
+                source = "near_goal_symbol",
+                radius = 3f,
+                strength = 1f
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes, intent);
+
+            Assert.That(
+                result.spell.recognizedFamily,
+                Is.EqualTo(SpellFamily.Earth),
+                $"target={result.spell.targetFamily}, status={result.spell.status}, confidence={result.spell.confidence:0.000}, preIntent={result.spell.preIntentFamily}");
+            Assert.That(result.spell.recognizedFamily, Is.Not.EqualTo(SpellFamily.Water));
+        }
+
+        [Test]
+        public void ClosedSquareLoopDoesNotResolveAsWater()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakePolyline(
+                    0f,
+                    new Vector2(-0.44f, -0.36f),
+                    new Vector2(0.44f, -0.36f),
+                    new Vector2(0.44f, 0.36f),
+                    new Vector2(-0.44f, 0.36f),
+                    new Vector2(-0.44f, -0.36f))
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes);
+
+            Assert.That(
+                result.spell.recognizedFamily,
+                Is.EqualTo(SpellFamily.Earth),
+                $"target={result.spell.targetFamily}, status={result.spell.status}, confidence={result.spell.confidence:0.000}, preIntent={result.spell.preIntentFamily}");
+            Assert.That(result.spell.recognizedFamily, Is.Not.EqualTo(SpellFamily.Water));
+        }
+
+        [Test]
+        public void EarthNearGoalIntentKeepsClosedSquareFromResolvingAsWater()
+        {
+            var strokes = new List<List<StrokeSample>>
+            {
+                MakePolyline(
+                    0f,
+                    new Vector2(-0.46f, -0.38f),
+                    new Vector2(0.46f, -0.38f),
+                    new Vector2(0.46f, 0.38f),
+                    new Vector2(-0.46f, 0.38f),
+                    new Vector2(-0.46f, -0.38f))
+            };
+            var intent = new BaseRecognitionIntent
+            {
+                family = SpellFamily.Earth,
+                goalId = "custom_earth",
+                source = "near_goal_symbol",
+                radius = 3f,
+                strength = 1f
+            };
+
+            var result = SpellRuntime.RecognizeBase(strokes, intent);
+
+            Assert.That(
+                result.spell.recognizedFamily,
+                Is.EqualTo(SpellFamily.Earth),
+                $"target={result.spell.targetFamily}, status={result.spell.status}, confidence={result.spell.confidence:0.000}, preIntent={result.spell.preIntentFamily}");
+            Assert.That(result.spell.recognizedFamily, Is.Not.EqualTo(SpellFamily.Water));
+        }
+
+        [TestCase(SpellFamily.Earth)]
+        [TestCase(SpellFamily.Fire)]
+        [TestCase(SpellFamily.Water)]
+        public void CompactClosedBaseShapeRemainsRecognized(SpellFamily family)
+        {
+            var scale = 0.72f;
+            var strokes = Offset(GestureRecognizer.CreateCanonicalSamples(family, scale, 0.03f), Vector2.zero, scale * 0.5f);
+
+            var result = SpellRuntime.RecognizeBase(strokes);
+
+            Assert.That(
+                result.spell.recognizedFamily,
+                Is.EqualTo(family),
+                $"family={family}, target={result.spell.targetFamily}, status={result.spell.status}, confidence={result.spell.confidence:0.000}, preIntent={result.spell.preIntentFamily}");
+        }
+
+        [Test]
+        public void CompactEarthFeaturesPreserveCornersForPersonalization()
+        {
+            var scale = 0.72f;
+            var strokes = Offset(GestureRecognizer.CreateCanonicalSamples(SpellFamily.Earth, scale, 0.03f), Vector2.zero, scale * 0.5f);
+
+            var features = TutorialPersonalizationStore.DeriveShapeFeatures(strokes);
+
+            Assert.That(features.corners, Is.GreaterThanOrEqualTo(3));
+            Assert.That(features.fillRatio, Is.GreaterThan(0.55f));
+            Assert.That(features.circularity, Is.LessThan(0.82f));
         }
 
         [Test]
@@ -513,10 +746,97 @@ namespace MagicExamHall.Tests
 
             Assert.That(System.IO.File.Exists(System.IO.Path.Combine(logger.OutputDirectory, "attempts.csv")), Is.True);
             Assert.That(System.IO.File.Exists(System.IO.Path.Combine(logger.OutputDirectory, "survey.csv")), Is.True);
+            Assert.That(System.IO.File.Exists(System.IO.Path.Combine(logger.OutputDirectory, "action-events.csv")), Is.True);
             var attemptsCsv = System.IO.File.ReadAllText(System.IO.Path.Combine(logger.OutputDirectory, "attempts.csv"));
             Assert.That(attemptsCsv, Does.Contain("phase,baseFamily,overlayStack,sealId,floorId,targetObject,worldEffect"));
             Assert.That(attemptsCsv, Does.Contain("hintShown,assistLevel,assisted"));
             AssertLastAttemptCsvFields(logger, success: true, hintShown: true, assistLevel: 2, assisted: true);
+        }
+
+        [Test]
+        public void LoggerWritesActionEventsAndCertificateCsv()
+        {
+            var sessionId = "logger-events-" + System.Guid.NewGuid().ToString("N");
+            var logger = CreateEnabledLoggerForTest(sessionId);
+
+            logger.LogActionEvent(new ActionEventLog
+            {
+                sessionId = sessionId,
+                eventId = "event-1",
+                utc = "2026-06-13T00:00:00.0000000Z",
+                elapsedMs = 1200,
+                floorElapsedMs = 800,
+                floorId = "2",
+                floorTitle = "Second floor",
+                eventType = "stroke_updated",
+                actor = "player",
+                phase = "input",
+                positionX = 1.25f,
+                positionY = -0.5f,
+                inputSessionId = "session-a",
+                strokeId = "stroke-a",
+                strokePointCount = 7,
+                value = "draw",
+                payloadJson = "{\"lastPointTime\":\"1.2\"}"
+            });
+
+            var certificatePath = logger.WriteCertificateCsv(new CertificateLog
+            {
+                sessionId = sessionId,
+                issuedAtUtc = "2026-06-13T00:00:01.0000000Z",
+                buildVersion = ExamGameController.BuildVersion,
+                title = "수료증",
+                recipient = "플레이어",
+                status = "최종 시험 통과",
+                certificateNote = "csv certificate",
+                finalTasks = "task 1 | task 2 | task 3",
+                completedFinalGoals = 3,
+                totalFinalGoals = 3,
+                totalElapsedMs = 45000,
+                totalAttempts = 12,
+                totalSuccess = 8,
+                successRate = 0.66f,
+                questCompletionRate = 1f,
+                outputDirectory = logger.OutputDirectory
+            });
+            var enrollmentPath = logger.WriteEnrollmentCsv(new EnrollmentLog
+            {
+                sessionId = sessionId,
+                issuedAtUtc = "2026-06-13T00:00:02.0000000Z",
+                buildVersion = ExamGameController.BuildVersion,
+                status = "재학 중",
+                currentFloor = 3,
+                currentFloorTitle = "Third floor",
+                completedGoals = 2,
+                totalGoals = 4,
+                globalCompletedGoals = 8,
+                globalTotalGoals = 18,
+                completedFinalGoals = 0,
+                totalFinalGoals = 3,
+                currentFinalTask = "",
+                totalElapsedMs = 46000,
+                totalAttempts = 13,
+                lastEventType = "goal_completed",
+                lastEventUtc = "2026-06-13T00:00:02.0000000Z",
+                outputDirectory = logger.OutputDirectory
+            });
+
+            Assert.That(System.IO.File.Exists(logger.ActionEventsCsvPath), Is.True);
+            Assert.That(System.IO.File.Exists(logger.ActionEventsJsonPath), Is.True);
+            Assert.That(System.IO.Path.GetFileName(certificatePath), Is.EqualTo("수료증.csv"));
+            Assert.That(System.IO.Path.GetFileName(enrollmentPath), Is.EqualTo("재학증서.csv"));
+            Assert.That(System.IO.File.Exists(certificatePath), Is.True);
+            Assert.That(System.IO.File.Exists(enrollmentPath), Is.True);
+            var eventsCsv = System.IO.File.ReadAllText(logger.ActionEventsCsvPath);
+            var certificateCsv = System.IO.File.ReadAllText(certificatePath);
+            var enrollmentCsv = System.IO.File.ReadAllText(enrollmentPath);
+            Assert.That(eventsCsv, Does.Contain("eventType,actor,phase"));
+            Assert.That(eventsCsv, Does.Contain("stroke_updated"));
+            Assert.That(certificateCsv, Does.Contain("sessionId,issuedAtUtc,buildVersion,title"));
+            Assert.That(certificateCsv, Does.Contain("최종 시험 통과"));
+            Assert.That(enrollmentCsv, Does.Contain("status,currentFloor,currentFloorTitle"));
+            Assert.That(enrollmentCsv, Does.Contain("재학 중"));
+            Assert.That(enrollmentCsv, Does.Contain("goal_completed"));
         }
 
         [Test]
@@ -1181,6 +1501,41 @@ namespace MagicExamHall.Tests
                     return new StrokeSample(point, startTime + index * 0.025f);
                 })
                 .ToList();
+        }
+
+        private static List<StrokeSample> MakeWaterDropLoop(Vector2 center, float radiusX, float radiusY, int count, float startTime)
+        {
+            return Enumerable.Range(0, count)
+                .Select(index =>
+                {
+                    var t = index / Mathf.Max(count - 1f, 1f);
+                    var angle = t * Mathf.PI * 2f;
+                    var widthScale = 0.88f + 0.12f * Mathf.Cos(angle);
+                    var heightScale = 0.96f - 0.14f * Mathf.Cos(angle);
+                    var point = center + new Vector2(
+                        Mathf.Sin(angle) * radiusX * widthScale,
+                        Mathf.Cos(angle) * radiusY * heightScale - Mathf.Pow(Mathf.Sin(angle), 2f) * radiusY * 0.12f);
+                    return new StrokeSample(point, startTime + index * 0.025f);
+                })
+                .ToList();
+        }
+
+        private static List<StrokeSample> MakePolyline(float startTime, params Vector2[] points)
+        {
+            var samples = new List<StrokeSample>();
+            var time = startTime;
+
+            for (var segment = 0; segment < points.Length - 1; segment++)
+            {
+                for (var index = segment == 0 ? 0 : 1; index <= 8; index++)
+                {
+                    var t = index / 8f;
+                    samples.Add(new StrokeSample(Vector2.Lerp(points[segment], points[segment + 1], t), time));
+                    time += 0.025f;
+                }
+            }
+
+            return samples;
         }
 
         private static CompiledSeal CreateWorldSeal(params OverlayOperator[] overlays)

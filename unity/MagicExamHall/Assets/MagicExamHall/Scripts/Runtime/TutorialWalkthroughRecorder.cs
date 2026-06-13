@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using UnityEngine;
 
 namespace MagicExamHall
@@ -111,20 +110,12 @@ namespace MagicExamHall
 
         private IEnumerator RunFloorTwo()
         {
-            segmentNotes.Add("floor2: import shelf presets and draw each custom reference shape near the target symbols");
+            segmentNotes.Add("floor2: examiner grants the current slot shape, then each target is solved in sequence");
             controller.LoadFloorForTests(1);
             yield return RecordSeconds(1.2f);
 
-            yield return MoveTo(controller.CustomReferenceShelfPositionForTests, 0.85f);
-            controller.OpenCustomReferencePanelForTests();
-            yield return RecordSeconds(1.1f);
-            ImportReferences(SpellFamily.Fire, SpellFamily.Water, SpellFamily.Wind, SpellFamily.Earth, SpellFamily.Life);
-            yield return RecordSeconds(1.1f);
-            CloseCustomReferencePanel();
-            yield return RecordSeconds(0.35f);
-
-            yield return DrawCustomBaseGoal("custom_fire", SpellFamily.Fire, 0.72f);
             yield return DrawCustomBaseGoal("custom_water", SpellFamily.Water, 0.72f);
+            yield return DrawCustomBaseGoal("custom_fire", SpellFamily.Fire, 0.72f);
             yield return DrawCustomBaseGoal("custom_wind", SpellFamily.Wind, 0.72f);
             yield return DrawCustomBaseGoal("custom_earth", SpellFamily.Earth, 0.72f);
             yield return DrawCustomBaseGoal("custom_life", SpellFamily.Life, 1.0f);
@@ -132,17 +123,9 @@ namespace MagicExamHall
 
         private IEnumerator RunFloorThree()
         {
-            segmentNotes.Add("floor3: side-scrolling obstacle tutorial, solving river, hole, chasm, and wind gap with custom spell effects");
+            segmentNotes.Add("floor3: examiner grants traversal shapes, then river, hole, chasm, and wind gap are solved");
             controller.LoadFloorForTests(2);
             yield return RecordSeconds(1.35f);
-
-            yield return MoveTo(controller.CustomReferenceShelfPositionForTests, 0.9f);
-            controller.OpenCustomReferencePanelForTests();
-            yield return RecordSeconds(1.0f);
-            ImportReferences(SpellFamily.Water, SpellFamily.Earth, SpellFamily.Life, SpellFamily.Wind);
-            yield return RecordSeconds(1.0f);
-            CloseCustomReferencePanel();
-            yield return RecordSeconds(0.35f);
 
             yield return SolveFloorThreeObstacle("frozen_river", SpellFamily.Water, 0.2f);
             yield return SolveFloorThreeObstacle("earth_stairs", SpellFamily.Earth, 5.2f);
@@ -396,22 +379,6 @@ namespace MagicExamHall
             File.WriteAllBytes(path, texture.EncodeToPNG());
             Destroy(texture);
             frameIndex++;
-        }
-
-        private void ImportReferences(params SpellFamily[] families)
-        {
-            foreach (var family in families)
-            {
-                controller.ImportCustomReferenceForTests(family, out _, out _);
-            }
-        }
-
-        private void CloseCustomReferencePanel()
-        {
-            var method = typeof(ExamGameController).GetMethod(
-                "CloseCustomReferencePanel",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            method?.Invoke(controller, Array.Empty<object>());
         }
 
         private void ClearTransientObjects()

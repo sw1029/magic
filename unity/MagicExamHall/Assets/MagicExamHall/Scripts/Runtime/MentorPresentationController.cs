@@ -16,18 +16,19 @@ namespace MagicExamHall
     public sealed class MentorPresentationController : MonoBehaviour
     {
         private const float ReactionDurationSeconds = 0.55f;
-        private const float SpeechPanelWidth = 340f;
-        private const float SpeechBodyWidth = 332f;
-        private const float SpeechMinPanelHeight = 96f;
-        private const float SpeechMaxPanelHeight = 126f;
-        private const float SpeechBodyBaseHeight = 84f;
+        private const float SpeechPanelWidth = 430f;
+        private const float SpeechBodyWidth = 422f;
+        private const float SpeechMinPanelHeight = 112f;
+        private const float SpeechMaxPanelHeight = 178f;
+        private const float SpeechBodyBaseHeight = 104f;
         private const float SpeechBodyVerticalInset = 12f;
-        private const float SpeechTextWidth = 298f;
-        private const float SpeechTextMinHeight = 44f;
-        private const float SpeechTextMaxHeight = 70f;
+        private const float SpeechTextWidth = 382f;
+        private const float SpeechTextMinHeight = 56f;
+        private const float SpeechTextMaxHeight = 120f;
         private const float SpeechTextTop = 30f;
         private const float SpeechTextBottomPadding = 14f;
-        private const int MaxSpeechLineLength = 20;
+        private const int MaxSpeechLineLength = 28;
+        private const int SpeechLinesPerPage = 3;
 
         private PixelSpriteView spriteView = null!;
         private SpriteRenderer spriteRenderer = null!;
@@ -42,6 +43,7 @@ namespace MagicExamHall
         private MentorProfile profile;
         private Vector3 homePosition;
         private float reactionStartedAt = -1f;
+        private float speechPageShownAt = -1f;
         private string[] speechPages = Array.Empty<string>();
         private int speechPageIndex;
 
@@ -50,6 +52,8 @@ namespace MagicExamHall
         public string SpeechText => bodyText == null ? "" : bodyText.text;
         public int SpeechPageCount => speechPages.Length;
         public int SpeechPageIndex => speechPageIndex;
+        public bool HasUnreadSpeechPages => speechPages.Length > 0 && speechPageIndex < speechPages.Length - 1;
+        public float CurrentSpeechPageAgeSeconds => speechPageShownAt < 0f ? float.PositiveInfinity : Time.time - speechPageShownAt;
         public bool IsSpeechNextButtonVisible => speechNextButton != null && speechNextButton.gameObject.activeInHierarchy;
         public bool IsVisible => spriteView != null && spriteView.gameObject.activeSelf && speechPanel != null && speechPanel.gameObject.activeSelf;
         public Vector3 WorldPositionForTests => spriteView == null ? Vector3.zero : spriteView.transform.position;
@@ -202,7 +206,7 @@ namespace MagicExamHall
             speechNextButton = CreateSpeechNextButton(speechBody, font);
             speakerText.color = new Color(0.15f, 0.22f, 0.24f);
             bodyText.color = new Color(0.10f, 0.12f, 0.13f);
-            bodyText.lineSpacing = 1.0f;
+            bodyText.lineSpacing = 1.04f;
             bodyText.resizeTextForBestFit = true;
             bodyText.resizeTextMinSize = 13;
             bodyText.resizeTextMaxSize = 15;
@@ -264,11 +268,18 @@ namespace MagicExamHall
 
             var canvasSize = canvasRect.rect.size;
             var anchored = localPoint + Vector2.Scale(canvasSize, canvasRect.pivot);
-            var desired = anchored + new Vector2(-SpeechPanelWidth + 36f, 24f);
             var size = speechPanel.sizeDelta;
+            var desired = UsesRightSideSpeech()
+                ? anchored + new Vector2(92f, -Mathf.Min(18f, size.y * 0.14f))
+                : anchored + new Vector2(-SpeechPanelWidth + 36f, 24f);
             desired.x = Mathf.Clamp(desired.x, 16f, Mathf.Max(16f, canvasSize.x - size.x - 16f));
             desired.y = Mathf.Clamp(desired.y, 16f, Mathf.Max(16f, canvasSize.y - size.y - 16f));
             speechPanel.anchoredPosition = desired;
+        }
+
+        private bool UsesRightSideSpeech()
+        {
+            return string.Equals(profile.spriteSetKey, "Floor5_GrandWizard", StringComparison.Ordinal);
         }
 
         private void ApplySpeechPage()
@@ -279,6 +290,7 @@ namespace MagicExamHall
             }
 
             bodyText.text = speechPages.Length == 0 ? "" : speechPages[Mathf.Clamp(speechPageIndex, 0, speechPages.Length - 1)];
+            speechPageShownAt = speechPages.Length == 0 ? -1f : Time.time;
             RefreshSpeechNextButton();
             UpdateSpeechTextLayout();
         }
@@ -315,10 +327,9 @@ namespace MagicExamHall
             }
 
             var pages = new List<string>();
-            for (var index = 0; index < visualLines.Count; index += 2)
+            for (var index = 0; index < visualLines.Count; index += SpeechLinesPerPage)
             {
-                var secondLine = index + 1 < visualLines.Count ? $"\n{visualLines[index + 1]}" : "";
-                pages.Add($"{visualLines[index]}{secondLine}");
+                pages.Add(string.Join("\n", visualLines.Skip(index).Take(SpeechLinesPerPage)));
             }
 
             return pages.ToArray();
@@ -338,6 +349,8 @@ namespace MagicExamHall
                 {
                     yield return line;
                 }
+
+                yield break;
             }
 
             foreach (var line in SplitSpeechLines(text))
@@ -394,32 +407,32 @@ namespace MagicExamHall
         private static string BuildContextualSpeech(string text)
         {
             var normalized = text.Replace("\r", "\n").Replace("\n", " ").Trim();
-            if (ContainsAny(normalized, "gold capture", "레퍼런스", "커스텀 도형", "슬롯으로"))
+            if (ContainsAny(normalized, "gold capture", "기준 그림", "레퍼런스", "도형 예시", "커스텀 도형", "가져온 도형", "슬롯으로"))
             {
-                return "책장에 도형 샘플이 있어.\n보기 눌러 슬롯에 담아 봐.";
+                return "필요한 도형은 슬롯에 넣었습니다.\n책장에서 다시 확인할 수 있습니다.";
             }
 
             if (ContainsAny(normalized, "처음에는 물", "물 도형을 먼저", "바닥에 직접 그린 선"))
             {
-                return "바닥에 그린 선이 문양이 돼.\n먼저 물만 따라 그려 봐.";
+                return "바닥에 그린 선이 문양이 됩니다.\n먼저 물 문양부터 따라 그려 주세요.";
             }
 
             if (ContainsAny(normalized, "보호막", "안정화"))
             {
                 var baseFamilyLabel = ExtractBaseFamilyLabel(normalized);
                 return string.IsNullOrWhiteSpace(baseFamilyLabel)
-                    ? "빛나는 원을 그렸어.\n보호막으로 굳었어."
-                    : $"{baseFamilyLabel} 빛나는 원을 그렸어.\n보호막으로 굳었어.";
+                    ? "문양이 보호막으로 안정됐습니다.\n다음 문양을 이어 진행하세요."
+                    : $"{baseFamilyLabel} 문양이 보호막이 되었습니다.\n다음 문양을 이어 진행하세요.";
             }
 
-            if (ContainsAny(normalized, "빛나는 원", "기본 문양 위"))
+            if (ContainsAny(normalized, "기본 문양 위", "기본 문양을 먼저", "그 빛나는 원 안", "기본 문양이 빛나면"))
             {
-                return "기본 문양을 먼저 만들고,\n그 안에 도형을 얹어 봐.";
+                return "먼저 기본 문양을 만들어 주세요.\n빛나는 원 안에 도형을 이어 그려 주세요.";
             }
 
             if (ContainsAny(normalized, "성좌심의 빈 조각", "마지막 시험은 하나의 정답"))
             {
-                return "성좌심의 빈 조각을 봐.\n배운 문양으로 하나씩 채워 봐.";
+                return "빈 조각이 묻는 뜻을 보세요.\n배운 문양으로 차례대로 채워 주세요.";
             }
 
             return "";
@@ -436,6 +449,11 @@ namespace MagicExamHall
             var markerIndex = sealIndex >= 0
                 ? sealIndex
                 : text.IndexOf("기초 속성 마법진", StringComparison.Ordinal);
+            if (markerIndex < 0)
+            {
+                markerIndex = text.IndexOf("문양", StringComparison.Ordinal);
+            }
+
             if (markerIndex < 0)
             {
                 return "";
@@ -481,15 +499,15 @@ namespace MagicExamHall
         private static string ShortenSpeechLine(string line)
         {
             var trimmed = line.Trim();
-            if (trimmed.Contains("의도는 보여", StringComparison.Ordinal) &&
-                trimmed.Contains("쪽도 섞였어", StringComparison.Ordinal))
+            if (trimmed.Contains("의도는 보입니다", StringComparison.Ordinal) &&
+                trimmed.Contains("특징도 함께 섞였습니다", StringComparison.Ordinal))
             {
-                return trimmed.Replace("음, ", "", StringComparison.Ordinal).Replace(" 다만 ", " ", StringComparison.Ordinal);
+                return trimmed.Replace(" 다만 ", " ", StringComparison.Ordinal);
             }
 
             if (trimmed.Contains("끝점만 시작점", StringComparison.Ordinal))
             {
-                return "끝점만 시작점 옆에 붙여 봐.";
+                return "끝점을 시작점 옆에 붙여 주세요.";
             }
 
             return trimmed.Length <= MaxSpeechLineLength

@@ -128,9 +128,15 @@ stroke session(다획 입력 버퍼 0.8초) → 특징 추출 → family 판정 
 | family별 첫 시도 성공률 | base family별 첫 attempt 성공 비율 분포 | RQ3 | attempts.csv |
 | 실패 유형 분포 | invalid/incomplete/dependency/detached/no-seal | RQ2 | attempts.csv |
 | assist level 도달률 | 힌트 단계 1/2/3 사용 횟수 | RQ2 | attempts.csv |
-| 피드백 이해도 | 실패 후 다음 행동을 말로 설명 가능한지 | RQ2 | 인터뷰 |
+| 피드백 이해도 (자기보고) | 실패 후 다음 행동을 말로 설명 가능한지 | RQ2 | 인터뷰 |
+| 피드백 이해도 (행동) | 발화한 교정 방향과 다음 시도의 실제 변화 일치율 | RQ2 | 인터뷰 + attempts.csv 대조 |
+| 학습 곡선 | 세션 내 성공률 이동 평균 (전반부 vs 후반부 변화) | RQ1 | attempts.csv |
+| 힌트 효과 | 힌트 노출 전후 성공률 변화 (창 5회, 관찰 경향) | RQ2 | attempts.csv |
 | 막힘 지점 | 2분 이상 정체 또는 동일 목표 3회 이상 실패 | RQ1 | 관찰 |
 | 설문 5점 척도 | 명확성·공정성·피드백 도움·조작감·몰입감 | 전체 | 설문 |
+| SUS | 표준 사용성 점수 (기준선 68) | 전체 | SUS 설문 |
+
+로그 기반 지표는 `scripts/analyze-playtest-attempts.py`로 자동 산출된다 (학습 곡선·힌트 전후·혼동 행렬·실패 유형·막힘 지점·SUS 채점).
 
 ### 5.3 사전 수집: stroke 데이터
 

@@ -26,6 +26,74 @@ namespace MagicExamHall.Editor
             Export(output);
         }
 
+        /// <summary>
+        /// Captures the boot/title screen (no StartNewGame) so the first thing a
+        /// player sees can be reviewed like the floor shots.
+        /// </summary>
+        public static void ExportTitle()
+        {
+            var output = GetArgument("-floorScreenshotOutput");
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                output = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "..", "outputs", "unity-title-screen"));
+            }
+
+            Directory.CreateDirectory(output);
+            EditorSceneManager.OpenScene(ScenePath);
+
+            var controller = UnityEngine.Object.FindFirstObjectByType<ExamGameController>();
+            if (controller == null)
+            {
+                throw new InvalidOperationException("ExamGameController was not found in the scene.");
+            }
+
+            if (controller.ActiveGoalCount == 0)
+            {
+                InvokePrivate(controller, "Awake");
+            }
+
+            var camera = controller.mainCamera != null ? controller.mainCamera : Camera.main;
+            var canvas = controller.canvas;
+            if (camera == null || canvas == null)
+            {
+                throw new InvalidOperationException("No camera/canvas available for the title capture.");
+            }
+
+            var pixelPerfect = PixelRenderSetup.ConfigureCamera(camera, ExamGameController.GameplayCameraOrthographicSize, camera.backgroundColor);
+            var wasEnabled = pixelPerfect != null && pixelPerfect.enabled;
+            if (pixelPerfect != null)
+            {
+                pixelPerfect.enabled = false;
+            }
+
+            camera.transform.position = new Vector3(0f, 0f, -10f);
+            camera.orthographicSize = ExamGameController.GameplayCameraOrthographicSize;
+            var originalMode = canvas.renderMode;
+            var originalCamera = canvas.worldCamera;
+            var originalPlane = canvas.planeDistance;
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = camera;
+            canvas.planeDistance = 1f;
+
+            try
+            {
+                Canvas.ForceUpdateCanvases();
+                Capture(camera, output, "unity_title.png");
+            }
+            finally
+            {
+                if (pixelPerfect != null)
+                {
+                    pixelPerfect.enabled = wasEnabled;
+                }
+                canvas.renderMode = originalMode;
+                canvas.worldCamera = originalCamera;
+                canvas.planeDistance = originalPlane;
+            }
+
+            Debug.Log($"Title screenshot exported to {output}");
+        }
+
         public static void Export(string output)
         {
             Directory.CreateDirectory(output);

@@ -408,15 +408,26 @@ namespace MagicExamHall
 
         private void BuildUi()
         {
-            overlayRoot = CreatePanel("Boot Overlay", canvas.transform, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0.012f, 0.015f, 0.023f, 0.94f));
+            // Fully opaque: the gameplay floor and HUD are already built behind this
+            // overlay at launch, and a translucent backdrop let the whole level bleed
+            // through the title/menu screens, making them look cluttered.
+            overlayRoot = CreatePanel("Boot Overlay", canvas.transform, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0.012f, 0.015f, 0.023f, 1f));
+            // Render the boot overlay on its own canvas above every gameplay layer
+            // (HUD at 100, world labels at 42) so the opaque title/menu/pause screens
+            // fully cover the game instead of letting stray panels poke through.
+            var overlayCanvas = overlayRoot.gameObject.AddComponent<Canvas>();
+            overlayCanvas.overrideSorting = true;
+            overlayCanvas.sortingOrder = 200;
+            overlayRoot.gameObject.AddComponent<GraphicRaycaster>();
             overlayRoot.gameObject.SetActive(true);
 
             titlePanel = CreatePanel("Title Screen", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
-            CreateText("Title", titlePanel, "Magic Exam Hall", 54, FontStyle.Bold, new Vector2(0f, 92f), new Vector2(920, 72), Anchor.Center, TextAnchor.MiddleCenter, new Color(1f, 0.86f, 0.48f));
-            CreateText("Subtitle", titlePanel, "Magic Recognizer Playable", 21, FontStyle.Bold, new Vector2(0f, 32f), new Vector2(640, 36), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.72f, 0.88f, 1f));
+            // Tower is a centered backdrop emblem drawn first so the title text reads on top of it.
             CreateTowerSilhouette(titlePanel);
-            CreateText("Title Flavor", titlePanel, "떠 있는 탑은 오늘도 입학생을 기다린다.", 15, FontStyle.Italic, new Vector2(0f, -168f), new Vector2(640, 30), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.74f, 0.81f, 0.93f, 0.92f));
-            CreateText("Any Key", titlePanel, "아무 키나 눌러 시작", 18, FontStyle.Bold, new Vector2(0f, -210f), new Vector2(420, 34), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.92f, 0.95f, 1f));
+            CreateText("Title", titlePanel, "Magic Exam Hall", 54, FontStyle.Bold, new Vector2(0f, 92f), new Vector2(920, 72), Anchor.Center, TextAnchor.MiddleCenter, new Color(1f, 0.86f, 0.48f));
+            CreateText("Subtitle", titlePanel, "Magic Recognizer Playable", 21, FontStyle.Bold, new Vector2(0f, 40f), new Vector2(640, 36), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.72f, 0.88f, 1f));
+            CreateText("Title Flavor", titlePanel, "떠 있는 탑은 오늘도 입학생을 기다린다.", 15, FontStyle.Italic, new Vector2(0f, -188f), new Vector2(720, 30), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.74f, 0.81f, 0.93f, 0.92f));
+            CreateText("Any Key", titlePanel, "아무 키나 눌러 시작", 18, FontStyle.Bold, new Vector2(0f, -226f), new Vector2(420, 34), Anchor.Center, TextAnchor.MiddleCenter, new Color(0.92f, 0.95f, 1f));
 
             menuPanel = CreatePanel("Main Menu", overlayRoot, Vector2.zero, new Vector2(1280, 720), Anchor.Stretch, new Color(0f, 0f, 0f, 0f));
             CreateText("Menu Title", menuPanel, "Magic Exam Hall", 42, FontStyle.Bold, new Vector2(-288f, 190f), new Vector2(520, 56), Anchor.Center, TextAnchor.MiddleLeft, new Color(1f, 0.86f, 0.48f));
@@ -1096,12 +1107,16 @@ namespace MagicExamHall
 
         private void CreateTowerSilhouette(Transform parent)
         {
-            CreateImage("Tower Body", parent, new Vector2(250f, -10f), new Vector2(150, 320), Anchor.Center, new Color(0.08f, 0.12f, 0.18f, 0.74f));
-            CreateImage("Tower Roof", parent, new Vector2(250f, 178f), new Vector2(210, 42), Anchor.Center, new Color(0.15f, 0.10f, 0.17f, 0.82f));
-            CreateImage("Tower Door", parent, new Vector2(250f, -162f), new Vector2(46, 72), Anchor.Center, new Color(0.90f, 0.68f, 0.24f, 0.58f));
-            for (var index = 0; index < 5; index++)
+            // Centered, low-contrast backdrop so the title reads clearly on top.
+            const float cx = 0f;
+            const float cy = 6f;
+            CreateImage("Tower Body", parent, new Vector2(cx, cy), new Vector2(132, 300), Anchor.Center, new Color(0.10f, 0.13f, 0.20f, 0.32f));
+            CreateImage("Tower Roof", parent, new Vector2(cx, cy + 168f), new Vector2(186, 38), Anchor.Center, new Color(0.16f, 0.11f, 0.19f, 0.36f));
+            CreateImage("Tower Roof Cap", parent, new Vector2(cx, cy + 196f), new Vector2(60, 26), Anchor.Center, new Color(0.20f, 0.14f, 0.24f, 0.38f));
+            CreateImage("Tower Door", parent, new Vector2(cx, cy - 132f), new Vector2(40, 60), Anchor.Center, new Color(0.95f, 0.74f, 0.32f, 0.32f));
+            for (var index = 0; index < 4; index++)
             {
-                CreateImage($"Tower Window {index}", parent, new Vector2(250f, 98f - index * 52f), new Vector2(42, 12), Anchor.Center, new Color(0.48f, 0.84f, 1f, 0.42f));
+                CreateImage($"Tower Window {index}", parent, new Vector2(cx, cy + 92f - index * 52f), new Vector2(34, 12), Anchor.Center, new Color(0.55f, 0.86f, 1f, 0.22f));
             }
         }
 

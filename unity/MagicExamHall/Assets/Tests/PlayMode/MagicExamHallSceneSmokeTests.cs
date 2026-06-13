@@ -307,6 +307,7 @@ namespace MagicExamHall.Tests
             Assert.That(controller.CurrentHealthHalfUnitsForTests, Is.EqualTo(6));
             Assert.That(GameObject.Find("Health Bar"), Is.Not.Null);
             Assert.That(GameObject.Find("Health Heart 1")?.GetComponent<HeartHealthGraphic>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Health Heart 1")?.GetComponent<CanvasRenderer>(), Is.Not.Null);
             Assert.That(controller.QuestStatusForTests, Does.Contain("층 1"));
             Assert.That(controller.QuestProgressForTests, Is.EqualTo(controller.FloorProgressForTests));
 
@@ -2559,6 +2560,11 @@ namespace MagicExamHall.Tests
 
             var controller = Object.FindFirstObjectByType<ExamGameController>();
             Assert.That(controller, Is.Not.Null);
+            var boot = Object.FindFirstObjectByType<GameBootController>();
+            Assert.That(boot, Is.Not.Null);
+            boot.StartNewGameForTests();
+            controller.CloseFirstFloorLetterForTests();
+            yield return null;
 
             controller.CastSyntheticBaseForTests(SpellFamily.Fire, new Vector2(-5.5f, 2.6f));
             yield return null;
@@ -2585,6 +2591,11 @@ namespace MagicExamHall.Tests
 
             Assert.That(controller.HasEndingReport, Is.True);
             Assert.That(controller.IsResultPanelVisible, Is.False);
+            Assert.That(controller.IsHealthBarVisibleForTests, Is.False);
+            Assert.That(controller.IsFloorSkipButtonVisibleForTests, Is.False);
+            Assert.That(boot.StateForTests, Is.EqualTo(GameBootState.Ending));
+            Assert.That(boot.CodexQuickButtonVisibleForTests, Is.False);
+            Assert.That(boot.CodexBackdropBlocksRaycastsForTests, Is.False);
             Assert.That(controller.EndingReportTextForTests, Does.Contain("입학 시험"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("도달 상태"));
             Assert.That(controller.EndingReportTextForTests, Does.Contain("진엔딩 (6/6 완전 복구)"));

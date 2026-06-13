@@ -261,6 +261,7 @@ namespace MagicExamHall
         public int CurrentHealthHalfUnitsForTests => playerHealthHalfUnits;
         public int HealthHeartCountForTests => healthHearts.Count;
         public int LastHealthHeartStateForTests => healthHearts.Count == 0 ? -1 : healthHearts[^1].State;
+        public bool IsHealthBarVisibleForTests => healthPanel != null && healthPanel.gameObject.activeInHierarchy;
         public bool IsPlayerBlinkingForTests => Time.time < playerBlinkUntil;
         public Color PlayerBlinkTintForTests => playerBlinkRenderers.Count == 0 ? Color.clear : playerBlinkRenderers[0].color;
         public int ActiveBuffQueueCountForTests => buffQueues.Count(queue => queue.IsActive);
@@ -1215,6 +1216,7 @@ namespace MagicExamHall
                 ApplyAnchor(rect, Anchor.TopLeft);
                 rect.anchoredPosition = new Vector2(11f + index * 47f, -5f);
                 rect.sizeDelta = new Vector2(38f, 36f);
+                heartObject.AddComponent<CanvasRenderer>();
                 var heart = heartObject.AddComponent<HeartHealthGraphic>();
                 heart.color = new Color(0.92f, 0.035f, 0.045f, 1f);
                 heart.raycastTarget = false;
@@ -1907,7 +1909,8 @@ namespace MagicExamHall
                 resultText.text = "";
             }
 
-            floorSkipButton.gameObject.SetActive(true);
+            floorSkipButton.gameObject.SetActive(Debug.isDebugBuild || Application.isEditor);
+            healthPanel.gameObject.SetActive(true);
             questScrollPanel.gameObject.SetActive(true);
             CloseCustomReferenceUi();
             HideGoalProximityBubble();
@@ -5919,6 +5922,7 @@ namespace MagicExamHall
             notePanel.gameObject.SetActive(false);
             resultPanel.gameObject.SetActive(false);
             floorSkipButton.gameObject.SetActive(false);
+            healthPanel.gameObject.SetActive(false);
             questScrollPanel.gameObject.SetActive(false);
             audioDirector?.PlaySfx(AudioCue.EndingReportOpened, 0.88f);
             mentor?.Say(MentorMood.Neutral, "");

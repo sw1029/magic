@@ -536,8 +536,8 @@ namespace MagicExamHall
             CreateButton("Codex Manual Save", codexBook, "수동 저장", new Vector2(150f, -260f), ManualSaveFromCodex, MagicExamButtonStyle.Parchment);
             codexCloseButton = CreateButton("Codex Close", codexBook, "닫기", new Vector2(400f, -260f), ResumeGameplay, MagicExamButtonStyle.Primary);
 
-            endingPromptPanel = MagicExamUiFactory.CreateFramedPanel("Ending Prompt", overlayRoot, new Vector2(0f, -292f), new Vector2(600, 58), MagicExamUiAnchor.Center, MagicExamUiSpriteId.ScrollPanel, Color.white, MagicExamUiTheme.BorderBrown, 2f);
-            var endingPromptText = CreateText("Ending Prompt Text", endingPromptPanel, "Enter 또는 클릭으로 타이틀 복귀", 17, FontStyle.Bold, Vector2.zero, new Vector2(560, 38), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.ParchmentInk);
+            endingPromptPanel = MagicExamUiFactory.CreateFramedPanel("Ending Prompt", overlayRoot, new Vector2(0f, -334f), new Vector2(520, 44), MagicExamUiAnchor.Center, MagicExamUiSpriteId.ScrollPanel, Color.white, MagicExamUiTheme.BorderBrown, 2f);
+            var endingPromptText = CreateText("Ending Prompt Text", endingPromptPanel, "Enter 또는 클릭으로 타이틀 복귀", 14, FontStyle.Bold, Vector2.zero, new Vector2(480, 30), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.ParchmentInk);
             MagicExamUiFactory.StyleParchmentText(endingPromptText, emphasized: true);
             codexQuickButton = CreateQuickCodexButton(canvas.transform);
             codexQuickButton.gameObject.SetActive(false);
@@ -705,7 +705,7 @@ namespace MagicExamHall
             controller.SetGameplayInputEnabled(false);
             StateForTests = GameBootState.Ending;
             overlayRoot.gameObject.SetActive(true);
-            SetOverlayBackdrop(true);
+            SetOverlayBackdrop(false);
             HideAllPanels();
             endingPromptPanel.gameObject.SetActive(true);
             SetQuickCodexVisible(false);
@@ -1067,7 +1067,7 @@ namespace MagicExamHall
 
             overlayRootImage.color = dimmed
                 ? new Color(0.012f, 0.015f, 0.023f, 0.94f)
-                : new Color(0.012f, 0.015f, 0.023f, 0.18f);
+                : Color.clear;
             overlayRootImage.raycastTarget = dimmed;
         }
 

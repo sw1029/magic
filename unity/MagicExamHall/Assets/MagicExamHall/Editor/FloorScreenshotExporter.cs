@@ -82,6 +82,7 @@ namespace MagicExamHall.Editor
                 boot.StartNewGameForTests();
                 controller.CloseFirstFloorLetterForTests();
                 InvokePrivate(controller, "UpdateHud");
+                HidePresentationOnlyControls();
                 Canvas.ForceUpdateCanvases();
                 Capture(camera, output, "ui_04_gameplay.png");
 
@@ -105,12 +106,15 @@ namespace MagicExamHall.Editor
                     controller.LoadFloorForTests(floor);
                     DestroyStaleFloorRoots(floor + 1);
                     InvokePrivate(controller, "UpdateHud");
+                    HidePresentationOnlyControls();
                     Canvas.ForceUpdateCanvases();
                     Capture(camera, output, $"unity_floor_{floor + 1:00}.png");
                 }
 
                 controller.CompleteCurrentFloorForTests();
                 controller.AdvanceFloorForTests();
+                InvokePrivate(boot, "ShowEndingPrompt");
+                HidePresentationOnlyControls();
                 Canvas.ForceUpdateCanvases();
                 Capture(camera, output, "ui_08_ending_report.png");
             });
@@ -173,6 +177,7 @@ namespace MagicExamHall.Editor
                     controller.LoadFloorForTests(floor);
                     DestroyStaleFloorRoots(floor + 1);
                     InvokePrivate(controller, "UpdateHud");
+                    HidePresentationOnlyControls();
                     Canvas.ForceUpdateCanvases();
                     Capture(camera, output, $"unity_floor_{floor + 1:00}.png");
                 }
@@ -204,6 +209,12 @@ namespace MagicExamHall.Editor
             var originalPlane = canvas.planeDistance;
             var originalOverrideSorting = canvas.overrideSorting;
             var originalSortingOrder = canvas.sortingOrder;
+            var childCanvases = canvas.GetComponentsInChildren<Canvas>(true);
+            var originalChildSortingOrders = new int[childCanvases.Length];
+            for (var index = 0; index < childCanvases.Length; index++)
+            {
+                originalChildSortingOrders[index] = childCanvases[index].sortingOrder;
+            }
 
             camera.transform.position = new Vector3(0f, 0f, -10f);
             PixelRenderSetup.ConfigureCamera(camera, ExamGameController.GameplayCameraOrthographicSize, camera.backgroundColor);
@@ -212,6 +223,15 @@ namespace MagicExamHall.Editor
             canvas.planeDistance = 1f;
             canvas.overrideSorting = true;
             canvas.sortingOrder = 10000;
+            var sortingOrderDelta = canvas.sortingOrder - originalSortingOrder;
+            for (var index = 0; index < childCanvases.Length; index++)
+            {
+                var childCanvas = childCanvases[index];
+                if (childCanvas != canvas && childCanvas.overrideSorting)
+                {
+                    childCanvas.sortingOrder = originalChildSortingOrders[index] + sortingOrderDelta;
+                }
+            }
 
             try
             {
@@ -227,6 +247,10 @@ namespace MagicExamHall.Editor
                 canvas.planeDistance = originalPlane;
                 canvas.overrideSorting = originalOverrideSorting;
                 canvas.sortingOrder = originalSortingOrder;
+                for (var index = 0; index < childCanvases.Length; index++)
+                {
+                    childCanvases[index].sortingOrder = originalChildSortingOrders[index];
+                }
             }
         }
 
@@ -244,6 +268,15 @@ namespace MagicExamHall.Editor
                 {
                     UnityEngine.Object.DestroyImmediate(root);
                 }
+            }
+        }
+
+        private static void HidePresentationOnlyControls()
+        {
+            var floorSkipButton = GameObject.Find("Floor Test Skip Button");
+            if (floorSkipButton != null)
+            {
+                floorSkipButton.SetActive(false);
             }
         }
 

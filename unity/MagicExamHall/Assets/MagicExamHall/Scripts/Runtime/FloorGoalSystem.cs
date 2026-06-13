@@ -37,6 +37,18 @@ namespace MagicExamHall
             {
                 if (goal.MatchesBase(family, center))
                 {
+                    if (goal.requiredCustomEventKind.HasValue)
+                    {
+                        return new GoalResolution
+                        {
+                            kind = GoalResolutionKind.CustomEffectRequired,
+                            targetGoal = goal,
+                            worldEffect = "custom_event_required",
+                            distance = Vector2.Distance(center, goal.position),
+                            radius = goal.radius
+                        };
+                    }
+
                     if (goal.requiresCustomShape && !isCustomShape)
                     {
                         return new GoalResolution

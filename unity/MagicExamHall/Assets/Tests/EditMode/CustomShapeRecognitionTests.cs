@@ -61,7 +61,20 @@ namespace MagicExamHall.Tests
             AssertEffect(SpellFamily.Fire, "star", CustomShapeEventKind.MagicAmplify, CustomSpellEffectKind.Focus);
             AssertEffect(SpellFamily.Wind, "wave", CustomShapeEventKind.MoveSpeedBuff, CustomSpellEffectKind.Flow);
             AssertEffect(SpellFamily.Life, "brace", CustomShapeEventKind.AttackBuff, CustomSpellEffectKind.Connection);
+            AssertEffect(SpellFamily.Life, "arrow", CustomShapeEventKind.AttributeLaser, CustomSpellEffectKind.LivingBridge);
+            AssertEffect(SpellFamily.Earth, "pentagon", CustomShapeEventKind.GuardBuff, CustomSpellEffectKind.Steel);
             AssertEffect(SpellFamily.Earth, "rect", CustomShapeEventKind.WallEntity, CustomSpellEffectKind.Stability);
+        }
+
+        [Test]
+        public void SingleStepCustomEffectsAreMarkedAsSealTransforms()
+        {
+            Assert.That(Transform(SpellFamily.Fire, "line", CustomShapeEventKind.SlashDamage, CustomSpellEffectKind.Electric), Is.True);
+            Assert.That(Transform(SpellFamily.Water, "hexagon", CustomShapeEventKind.Stun, CustomSpellEffectKind.Ice), Is.True);
+            Assert.That(Transform(SpellFamily.Earth, "pentagon", CustomShapeEventKind.GuardBuff, CustomSpellEffectKind.Steel), Is.True);
+            Assert.That(Transform(SpellFamily.Wind, "wave", CustomShapeEventKind.MoveSpeedBuff, CustomSpellEffectKind.Flow), Is.True);
+            Assert.That(Transform(SpellFamily.Life, "brace", CustomShapeEventKind.AttackBuff, CustomSpellEffectKind.Connection), Is.True);
+            Assert.That(Transform(SpellFamily.Earth, "rect", CustomShapeEventKind.WallEntity, CustomSpellEffectKind.Stability), Is.False);
         }
 
         [Test]
@@ -136,7 +149,7 @@ namespace MagicExamHall.Tests
                 var saved = store.TrySaveSlot(0, "freeform", "freeform", SpellFamily.Wind, new List<IReadOnlyList<StrokeSample>>(), out var message);
 
                 Assert.That(saved, Is.False);
-                Assert.That(message, Does.Contain("gold capture"));
+                Assert.That(message, Does.Contain("기준 그림"));
                 Assert.That(store.IsSlotOccupied(0), Is.False);
             }
             finally
@@ -218,7 +231,7 @@ namespace MagicExamHall.Tests
                     strength = 1f
                 });
 
-                var applied = CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, store, SpellFamily.Life);
+                var applied = CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, store, SpellFamily.Life, new[] { "brace" });
 
                 Assert.That(applied, Is.True);
                 Assert.That(baseResult.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
@@ -285,24 +298,51 @@ namespace MagicExamHall.Tests
         }
 
         [Test]
-        public void ShadowGateHoldsWhenMappedFamilyConflictsWithStrongDefault()
+        public void PreferredBaseFamilyOverridesCustomSlotMappedFamily()
         {
             var store = TempStore(out var path);
             try
             {
-                var strokes = Samples(SpellFamily.Wind);
-                Assert.That(store.TrySaveSlot(0, "red wind", "red|wind|line", SpellFamily.Fire, strokes, out _), Is.True);
+                var strokes = LineStrokes(Vector2.zero, new Vector2(2f, 0f));
+                Assert.That(store.TrySaveSlot(0, "borrowed line", "borrowed|line", "line", new[] { "line" }, SpellFamily.Fire, strokes, out _), Is.True);
                 var baseResult = SpellRuntime.RecognizeBase(strokes);
 
-                var applied = CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, store);
+                var applied = CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, store, SpellFamily.Earth, new[] { "line" });
 
                 Assert.That(applied, Is.True);
                 Assert.That(baseResult.spell.isCustomShape, Is.True);
-                Assert.That(baseResult.spell.status, Is.EqualTo(RecognitionStatus.Incomplete));
-                Assert.That(baseResult.spell.success, Is.False);
-                Assert.That(baseResult.spell.recognizedFamily, Is.Null);
-                Assert.That(baseResult.spell.mappedFamily, Is.EqualTo(SpellFamily.Fire));
-                Assert.That(baseResult.spell.defaultSimilarityScore, Is.GreaterThan(0.78f));
+                Assert.That(baseResult.spell.status, Is.EqualTo(RecognitionStatus.Recognized));
+                Assert.That(baseResult.spell.success, Is.True);
+                Assert.That(baseResult.spell.customShapeToken, Is.EqualTo("line"));
+                Assert.That(baseResult.spell.recognizedFamily, Is.EqualTo(SpellFamily.Earth));
+                Assert.That(baseResult.spell.targetFamily, Is.EqualTo(SpellFamily.Earth));
+                Assert.That(baseResult.spell.mappedFamily, Is.EqualTo(SpellFamily.Earth));
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        }
+
+        [Test]
+        public void MultiStrokeWindInputDoesNotMatchSingleLineCustomShape()
+        {
+            var store = TempStore(out var path);
+            try
+            {
+                var line = LineStrokes(Vector2.zero, new Vector2(2f, 0f));
+                Assert.That(
+                    store.TrySaveSlot(0, "fire line", "fire|line", "line", new[] { "line" }, SpellFamily.Fire, line, out var message),
+                    Is.True,
+                    message);
+                var wind = Samples(SpellFamily.Wind);
+                var baseResult = SpellRuntime.RecognizeBase(wind);
+
+                var applied = CustomShapeRecognition.ApplyToBaseResult(baseResult, wind, store, SpellFamily.Fire, new[] { "line" });
+
+                Assert.That(applied, Is.False);
+                Assert.That(baseResult.spell.isCustomShape, Is.False);
+                Assert.That(baseResult.spell.recognizedFamily, Is.EqualTo(SpellFamily.Wind));
             }
             finally
             {
@@ -375,7 +415,7 @@ namespace MagicExamHall.Tests
                 Assert.That(store.TrySaveSlot(1, "cross mark", "cross|mark", "cross", new[] { "cross" }, SpellFamily.Fire, cross, out var crossMessage), Is.True, crossMessage);
 
                 var noSeal = CustomShapeRecognition.Recognize(line, SpellRuntime.RecognizeBase(line), store);
-                var postSeal = CustomShapeRecognition.Recognize(line, SpellRuntime.RecognizeBase(line), store, SpellFamily.Wind);
+                var postSeal = CustomShapeRecognition.Recognize(line, SpellRuntime.RecognizeBase(line), store, SpellFamily.Wind, new[] { "line" });
 
                 Assert.That(noSeal, Is.Not.Null);
                 Assert.That(postSeal, Is.Not.Null);
@@ -384,6 +424,29 @@ namespace MagicExamHall.Tests
                 Assert.That(postSeal.contrastBoost, Is.GreaterThan(0f));
                 Assert.That(postSeal.acceptThreshold, Is.LessThan(noSeal.acceptThreshold));
                 Assert.That(postSeal.summary.reason, Does.Contain("contrast="));
+            }
+            finally
+            {
+                DeleteIfExists(path);
+            }
+        }
+
+        [Test]
+        public void PreferredCompositeShapeTokensBeatSingleShapeSlot()
+        {
+            var store = TempStore(out var path);
+            try
+            {
+                var rect = RectStrokes(Vector2.zero);
+                Assert.That(store.TrySaveSlot(0, "plain wall", "plain|wall|rect", "rect", new[] { "rect" }, SpellFamily.Wind, rect, out var wallMessage), Is.True, wallMessage);
+                Assert.That(store.TrySaveSlot(1, "bridge wall", "bridge|arrow|rect", "rect", new[] { "arrow", "rect" }, SpellFamily.Life, rect, out var bridgeMessage), Is.True, bridgeMessage);
+
+                var baseResult = SpellRuntime.RecognizeBase(rect);
+                var result = CustomShapeRecognition.Recognize(rect, baseResult, store, SpellFamily.Earth, new[] { "arrow", "rect" });
+
+                Assert.That(result, Is.Not.Null);
+                Assert.That(result.slot.shapeId, Is.EqualTo("custom-slot-02"));
+                Assert.That(result.accepted, Is.True);
             }
             finally
             {
@@ -483,6 +546,23 @@ namespace MagicExamHall.Tests
             Assert.That(effect.requirementLabel, Is.Not.Empty);
         }
 
+        private static bool Transform(
+            SpellFamily baseFamily,
+            string token,
+            CustomShapeEventKind eventKind,
+            CustomSpellEffectKind expected)
+        {
+            var spell = new SpellResult
+            {
+                isCustomShape = true,
+                customShapeToken = token,
+                customEventId = $"{token}_{eventKind.ToString().ToLowerInvariant()}",
+                customEventKind = eventKind.ToString()
+            };
+
+            return CustomSpellEffectCatalog.IsSingleStepTransform(baseFamily, spell, expected);
+        }
+
         private static IReadOnlyList<IReadOnlyList<StrokeSample>> Samples(SpellFamily family)
         {
             return GestureRecognizer.CreateCanonicalSamples(family, 1.6f, 0.03f)
@@ -516,6 +596,24 @@ namespace MagicExamHall.Tests
                     new(new Vector2(1f, -1f), 0.12f),
                     new(new Vector2(-1f, 1f), 0.22f)
                 }
+            };
+        }
+
+        private static IReadOnlyList<IReadOnlyList<StrokeSample>> RectStrokes(Vector2 center)
+        {
+            var points = new[]
+            {
+                new Vector2(-0.8f, -0.45f),
+                new Vector2(0.8f, -0.45f),
+                new Vector2(0.8f, 0.45f),
+                new Vector2(-0.8f, 0.45f),
+                new Vector2(-0.8f, -0.45f)
+            };
+            return new List<IReadOnlyList<StrokeSample>>
+            {
+                points
+                    .Select((point, index) => new StrokeSample(point + center, index * 0.04f))
+                    .ToList()
             };
         }
 

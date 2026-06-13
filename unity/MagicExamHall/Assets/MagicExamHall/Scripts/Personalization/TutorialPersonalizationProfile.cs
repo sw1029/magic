@@ -215,11 +215,14 @@ namespace MagicExamHall
             result.personalization = summary;
             result.confidence = summary.adjustedConfidence;
 
+            var repeatedMismatch = summary.acceleratedByRepeatedCase &&
+                (result.status == RecognitionStatus.Invalid ||
+                    result.status == RecognitionStatus.Incomplete ||
+                    result.status == RecognitionStatus.Ambiguous ||
+                    result.status == RecognitionStatus.Recognized && result.recognizedFamily != family);
             var canPromote = result.status == RecognitionStatus.Ambiguous ||
                 summary.extremeColdStartCorrection ||
-                summary.acceleratedByRepeatedCase &&
-                result.status == RecognitionStatus.Recognized &&
-                result.recognizedFamily != family;
+                repeatedMismatch;
             if (canPromote && summary.decision == TutorialDynamicDecision.Accept)
             {
                 result.status = RecognitionStatus.Recognized;
@@ -640,7 +643,7 @@ namespace MagicExamHall
             var allPoints = valid.SelectMany(stroke => stroke).Select(sample => sample.position).ToList();
             var min = new Vector2(allPoints.Min(point => point.x), allPoints.Min(point => point.y));
             var max = new Vector2(allPoints.Max(point => point.x), allPoints.Max(point => point.y));
-            var diagonal = Mathf.Max(Vector2.Distance(min, max), 1f);
+            var diagonal = Mathf.Max(Vector2.Distance(min, max), 0.15f);
             var first = dominant[0].position;
             var last = dominant[^1].position;
             var closureGap = Vector2.Distance(first, last);
@@ -652,8 +655,8 @@ namespace MagicExamHall
             {
                 strokeCount = valid.Count,
                 closure = Clamp(1f - closureGap / (diagonal * 0.32f), 0f, 1f),
-                corners = CountCorners(dominant, Mathf.Max(diagonal * 0.05f, 4f)),
-                endpointClusters = ClusterEndpointCount(valid, Mathf.Max(diagonal * 0.08f, 0.14f)),
+                corners = CountCorners(dominant, Mathf.Max(diagonal * 0.05f, 0.012f)),
+                endpointClusters = ClusterEndpointCount(valid, Mathf.Max(diagonal * 0.08f, 0.035f)),
                 circularity = Clamp(1f - Mathf.Sqrt(variance) / Mathf.Max(meanRadius, 0.0001f) / 0.45f, 0f, 1f),
                 fillRatio = CalculateFillRatio(dominant),
                 parallelism = CalculateParallelism(valid),
@@ -862,11 +865,12 @@ namespace MagicExamHall
                 return 0f;
             }
 
-            var simplified = RdpSimplify(points, 6f);
-            var area = Mathf.Abs(PolygonArea(simplified));
             var min = new Vector2(points.Min(point => point.x), points.Min(point => point.y));
             var max = new Vector2(points.Max(point => point.x), points.Max(point => point.y));
-            var boxArea = Mathf.Max((max.x - min.x) * (max.y - min.y), 1f);
+            var diagonal = Mathf.Max(Vector2.Distance(min, max), 0.15f);
+            var simplified = RdpSimplify(points, Mathf.Max(diagonal * 0.035f, 0.008f));
+            var area = Mathf.Abs(PolygonArea(simplified));
+            var boxArea = Mathf.Max((max.x - min.x) * (max.y - min.y), 0.0001f);
             return Clamp(area / boxArea, 0f, 1f);
         }
 

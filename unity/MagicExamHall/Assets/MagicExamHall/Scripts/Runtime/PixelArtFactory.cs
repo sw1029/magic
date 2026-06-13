@@ -110,11 +110,23 @@ namespace MagicExamHall
                 case PixelSpriteKind.MentorArchivistFrown:
                     DrawMentor(texture, primary, secondary, MentorExpression.Frown, 4);
                     break;
+                case PixelSpriteKind.MentorGrandWizardNeutral:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Neutral, 5);
+                    break;
+                case PixelSpriteKind.MentorGrandWizardHappy:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Happy, 5);
+                    break;
+                case PixelSpriteKind.MentorGrandWizardFrown:
+                    DrawMentor(texture, primary, secondary, MentorExpression.Frown, 5);
+                    break;
                 case PixelSpriteKind.Station:
                     DrawStation(texture, primary, secondary);
                     break;
                 case PixelSpriteKind.Target:
                     DrawTarget(texture, primary, secondary);
+                    break;
+                case PixelSpriteKind.Scarecrow:
+                    DrawScarecrow(texture, primary, secondary);
                     break;
                 case PixelSpriteKind.Pulse:
                     DrawPulse(texture, primary);
@@ -626,6 +638,31 @@ namespace MagicExamHall
                     Fill(texture, 22, 12, 3, 7, outline);
                     Fill(texture, 23, 13, 2, 6, robeLight);
                     break;
+                case 5:
+                    Fill(texture, 8, 24, 16, 2, outline);
+                    Fill(texture, 10, 25, 12, 1, robeLight);
+                    Line(texture, 10, 26, 16, 31, outline);
+                    Line(texture, 22, 26, 16, 31, outline);
+                    Fill(texture, 12, 26, 9, 1, robeDark);
+                    Fill(texture, 13, 27, 7, 1, robe);
+                    Fill(texture, 14, 28, 5, 1, robeLight);
+                    Fill(texture, 15, 29, 3, 1, robeDark);
+                    Set(texture, 16, 30, new Color(1f, 0.92f, 0.44f, 1f));
+                    Set(texture, 16, 31, Color.white);
+                    Fill(texture, 11, 22, 10, 2, new Color(0.92f, 0.90f, 0.82f, 1f));
+                    Fill(texture, 12, 20, 8, 3, new Color(0.86f, 0.86f, 0.80f, 1f));
+                    Fill(texture, 13, 18, 6, 3, new Color(0.80f, 0.80f, 0.76f, 1f));
+                    Fill(texture, 14, 16, 4, 2, new Color(0.72f, 0.72f, 0.70f, 1f));
+                    Set(texture, 12, 23, Color.white);
+                    Set(texture, 19, 23, Color.white);
+                    Fill(texture, 24, 10, 2, 14, outline);
+                    Fill(texture, 25, 11, 1, 13, new Color(0.72f, 0.54f, 0.30f, 1f));
+                    Set(texture, 25, 25, new Color(1f, 0.85f, 0.30f, 1f));
+                    Set(texture, 24, 24, Color.white);
+                    Set(texture, 26, 24, Color.white);
+                    Set(texture, 12, 14, new Color(1f, 0.88f, 0.35f, 1f));
+                    Set(texture, 18, 12, new Color(0.72f, 0.88f, 1f, 1f));
+                    break;
                 default:
                     Fill(texture, 10, 27, 12, 2, outline);
                     Fill(texture, 11, 28, 10, 1, robeDark);
@@ -683,6 +720,36 @@ namespace MagicExamHall
             Set(texture, 18, 26, Color.white);
             Set(texture, 11, 14, Shade(core, 0.8f));
             Set(texture, 21, 14, Shade(core, 0.8f));
+        }
+
+        private static void DrawScarecrow(Texture2D texture, Color primary, Color secondary)
+        {
+            var outline = new Color(0.035f, 0.030f, 0.022f, 1f);
+            var straw = Mix(primary, new Color(0.95f, 0.78f, 0.40f, 1f), 0.52f);
+            var cloth = Mix(secondary, new Color(0.42f, 0.18f, 0.10f, 1f), 0.35f);
+            var pole = new Color(0.30f, 0.18f, 0.09f, 1f);
+
+            Ellipse(texture, 16, 4, 9, 3, new Color(0f, 0f, 0f, 0.34f));
+            Fill(texture, 14, 4, 4, 18, outline);
+            Fill(texture, 15, 5, 2, 17, pole);
+            Fill(texture, 7, 17, 18, 3, outline);
+            Fill(texture, 8, 18, 16, 1, pole);
+            Fill(texture, 10, 8, 12, 10, outline);
+            Fill(texture, 11, 9, 10, 9, cloth);
+            Line(texture, 11, 17, 20, 9, Shade(cloth, 0.72f));
+            Fill(texture, 11, 21, 10, 6, outline);
+            Fill(texture, 12, 22, 8, 5, straw);
+            Fill(texture, 9, 26, 14, 2, outline);
+            Fill(texture, 10, 27, 12, 1, secondary);
+            Line(texture, 12, 28, 16, 31, secondary);
+            Line(texture, 20, 28, 16, 31, secondary);
+            Set(texture, 13, 24, outline);
+            Set(texture, 18, 24, outline);
+            Line(texture, 14, 22, 18, 22, Shade(straw, 0.65f));
+            Fill(texture, 5, 16, 3, 5, straw);
+            Fill(texture, 24, 16, 3, 5, straw);
+            Line(texture, 7, 13, 4, 10, straw);
+            Line(texture, 25, 13, 28, 10, straw);
         }
 
         private static void DrawPulse(Texture2D texture, Color primary)
@@ -1474,6 +1541,10 @@ namespace MagicExamHall
         MentorArchivistNeutral = 46,
         MentorArchivistHappy = 47,
         MentorArchivistFrown = 48,
-        LightHalo = 49
+        LightHalo = 49,
+        Scarecrow = 50,
+        MentorGrandWizardNeutral = 51,
+        MentorGrandWizardHappy = 52,
+        MentorGrandWizardFrown = 53
     }
 }

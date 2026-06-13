@@ -103,6 +103,74 @@ namespace MagicExamHall
     }
 
     [Serializable]
+    public sealed class ActionEventLog
+    {
+        public string sessionId = "";
+        public string eventId = "";
+        public string utc = "";
+        public int elapsedMs;
+        public int floorElapsedMs;
+        public string floorId = "";
+        public string floorTitle = "";
+        public string eventType = "";
+        public string actor = "";
+        public string phase = "";
+        public string targetId = "";
+        public string targetLabel = "";
+        public float positionX;
+        public float positionY;
+        public string inputSessionId = "";
+        public string strokeId = "";
+        public int strokePointCount;
+        public string value = "";
+        public string payloadJson = "";
+    }
+
+    [Serializable]
+    public sealed class CertificateLog
+    {
+        public string sessionId = "";
+        public string issuedAtUtc = "";
+        public string buildVersion = "";
+        public string title = "";
+        public string recipient = "";
+        public string status = "";
+        public string certificateNote = "";
+        public string finalTasks = "";
+        public int completedFinalGoals;
+        public int totalFinalGoals;
+        public int totalElapsedMs;
+        public int totalAttempts;
+        public int totalSuccess;
+        public float successRate;
+        public float questCompletionRate;
+        public string outputDirectory = "";
+    }
+
+    [Serializable]
+    public sealed class EnrollmentLog
+    {
+        public string sessionId = "";
+        public string issuedAtUtc = "";
+        public string buildVersion = "";
+        public string status = "";
+        public int currentFloor;
+        public string currentFloorTitle = "";
+        public int completedGoals;
+        public int totalGoals;
+        public int globalCompletedGoals;
+        public int globalTotalGoals;
+        public int completedFinalGoals;
+        public int totalFinalGoals;
+        public string currentFinalTask = "";
+        public int totalElapsedMs;
+        public int totalAttempts;
+        public string lastEventType = "";
+        public string lastEventUtc = "";
+        public string outputDirectory = "";
+    }
+
+    [Serializable]
     public sealed class SessionResultContextLog
     {
         public string sessionId = "";
@@ -222,23 +290,33 @@ namespace MagicExamHall
         public const string DisabledOutputDirectory = "log collection disabled";
 
         public string OutputDirectory { get; }
+        public string CertificateOutputDirectory { get; }
         public bool IsCollectionEnabled { get; }
         public string SessionResultJsonPath => sessionResultJsonPath;
         public string SessionResultCsvPath => sessionResultCsvPath;
         public string FloorResultsCsvPath => floorResultsCsvPath;
+        public string ActionEventsJsonPath => actionEventsJsonPath;
+        public string ActionEventsCsvPath => actionEventsCsvPath;
+        public string CertificateCsvPath => certificateCsvPath;
+        public string EnrollmentCsvPath => enrollmentCsvPath;
         private readonly string attemptsJsonPath;
         private readonly string attemptsCsvPath;
         private readonly string surveyJsonPath;
         private readonly string surveyCsvPath;
         private readonly string questChecklistJsonPath;
         private readonly string questChecklistCsvPath;
+        private readonly string actionEventsJsonPath;
+        private readonly string actionEventsCsvPath;
         private readonly string sessionResultJsonPath;
         private readonly string sessionResultCsvPath;
         private readonly string floorResultsCsvPath;
+        private readonly string certificateCsvPath;
+        private readonly string enrollmentCsvPath;
         private readonly string globalSessionResultsCsvPath;
         private readonly List<AttemptLog> attemptHistory = new();
         private readonly List<SurveyLog> surveyHistory = new();
         private readonly List<QuestChecklistLog> questChecklistHistory = new();
+        private readonly List<ActionEventLog> actionEventHistory = new();
         private bool sessionResultAppended;
 
         public ExamLogger(string sessionId)
@@ -246,44 +324,82 @@ namespace MagicExamHall
         {
         }
 
-        public ExamLogger(string sessionId, string outputRoot, bool? enableCollection = null)
+        public ExamLogger(string sessionId, string outputRoot, bool? enableCollection = null, string certificateOutputRoot = "")
         {
             sessionId = string.IsNullOrWhiteSpace(sessionId) ? "session" : sessionId;
             IsCollectionEnabled = enableCollection ?? !ShouldSuppressCollection(sessionId);
             if (!IsCollectionEnabled)
             {
                 OutputDirectory = DisabledOutputDirectory;
+                CertificateOutputDirectory = DisabledOutputDirectory;
                 attemptsJsonPath = "";
                 attemptsCsvPath = "";
                 surveyJsonPath = "";
                 surveyCsvPath = "";
                 questChecklistJsonPath = "";
                 questChecklistCsvPath = "";
+                actionEventsJsonPath = "";
+                actionEventsCsvPath = "";
                 sessionResultJsonPath = "";
                 sessionResultCsvPath = "";
                 floorResultsCsvPath = "";
+                certificateCsvPath = "";
+                enrollmentCsvPath = "";
                 globalSessionResultsCsvPath = "";
                 return;
             }
 
-            var root = string.IsNullOrWhiteSpace(outputRoot)
+            var usesDefaultOutputRoot = string.IsNullOrWhiteSpace(outputRoot);
+            var root = usesDefaultOutputRoot
                 ? Path.Combine(Application.persistentDataPath, "MagicExamHallLogs")
                 : outputRoot;
             OutputDirectory = Path.Combine(root, sessionId);
             Directory.CreateDirectory(OutputDirectory);
+            CertificateOutputDirectory = string.IsNullOrWhiteSpace(certificateOutputRoot)
+                ? usesDefaultOutputRoot ? ResolveExecutableDirectory() : OutputDirectory
+                : certificateOutputRoot;
+            Directory.CreateDirectory(CertificateOutputDirectory);
             attemptsJsonPath = Path.Combine(OutputDirectory, "attempts.jsonl");
             attemptsCsvPath = Path.Combine(OutputDirectory, "attempts.csv");
             surveyJsonPath = Path.Combine(OutputDirectory, "survey.jsonl");
             surveyCsvPath = Path.Combine(OutputDirectory, "survey.csv");
             questChecklistJsonPath = Path.Combine(OutputDirectory, "quest-checklist.jsonl");
             questChecklistCsvPath = Path.Combine(OutputDirectory, "quest-checklist.csv");
+            actionEventsJsonPath = Path.Combine(OutputDirectory, "action-events.jsonl");
+            actionEventsCsvPath = Path.Combine(OutputDirectory, "action-events.csv");
             sessionResultJsonPath = Path.Combine(OutputDirectory, "session-result.json");
             sessionResultCsvPath = Path.Combine(OutputDirectory, "session-result.csv");
             floorResultsCsvPath = Path.Combine(OutputDirectory, "floor-results.csv");
+            certificateCsvPath = Path.Combine(CertificateOutputDirectory, "\uC218\uB8CC\uC99D.csv");
+            enrollmentCsvPath = Path.Combine(CertificateOutputDirectory, "\uC7AC\uD559\uC99D\uC11C.csv");
             globalSessionResultsCsvPath = Path.Combine(root, "session-results.csv");
             EnsureAttemptHeader();
             EnsureSurveyHeader();
             EnsureQuestChecklistHeader();
+            EnsureActionEventHeader();
+        }
+
+        private static string ResolveExecutableDirectory()
+        {
+            var dataPath = Application.dataPath;
+            if (!string.IsNullOrWhiteSpace(dataPath))
+            {
+                var dataDirectory = new DirectoryInfo(dataPath);
+                if (dataDirectory.Exists && dataDirectory.Name.EndsWith("_Data", StringComparison.OrdinalIgnoreCase))
+                {
+                    return dataDirectory.Parent?.FullName ?? dataDirectory.FullName;
+                }
+
+                if (Application.isEditor)
+                {
+                    return dataDirectory.Parent?.FullName ?? dataDirectory.FullName;
+                }
+            }
+
+            var baseDirectory = AppContext.BaseDirectory;
+            return string.IsNullOrWhiteSpace(baseDirectory)
+                ? Directory.GetCurrentDirectory()
+                : Path.GetFullPath(baseDirectory);
         }
 
         public void LogAttempt(AttemptLog log)
@@ -400,6 +516,48 @@ namespace MagicExamHall
                 Csv(log.items)) + Environment.NewLine, Encoding.UTF8);
         }
 
+        public void LogActionEvent(ActionEventLog log)
+        {
+            if (!IsCollectionEnabled)
+            {
+                return;
+            }
+
+            log ??= new ActionEventLog();
+            if (string.IsNullOrWhiteSpace(log.eventId))
+            {
+                log.eventId = Guid.NewGuid().ToString("N");
+            }
+
+            if (string.IsNullOrWhiteSpace(log.utc))
+            {
+                log.utc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            }
+
+            actionEventHistory.Add(log);
+            File.AppendAllText(actionEventsJsonPath, JsonUtility.ToJson(log) + Environment.NewLine, Encoding.UTF8);
+            File.AppendAllText(actionEventsCsvPath, string.Join(",",
+                Csv(log.sessionId),
+                Csv(log.eventId),
+                Csv(log.utc),
+                log.elapsedMs,
+                log.floorElapsedMs,
+                Csv(log.floorId),
+                Csv(log.floorTitle),
+                Csv(log.eventType),
+                Csv(log.actor),
+                Csv(log.phase),
+                Csv(log.targetId),
+                Csv(log.targetLabel),
+                Float(log.positionX),
+                Float(log.positionY),
+                Csv(log.inputSessionId),
+                Csv(log.strokeId),
+                log.strokePointCount,
+                Csv(log.value),
+                Csv(log.payloadJson)) + Environment.NewLine, Encoding.UTF8);
+        }
+
         public SessionResultLog WriteSessionResult(SessionResultContextLog context)
         {
             if (!IsCollectionEnabled)
@@ -414,6 +572,58 @@ namespace MagicExamHall
             WriteFloorResultsCsv(result.floors);
             AppendGlobalSessionResultCsv(result);
             return result;
+        }
+
+        public string WriteCertificateCsv(CertificateLog certificate)
+        {
+            if (!IsCollectionEnabled)
+            {
+                return "";
+            }
+
+            certificate ??= new CertificateLog();
+            if (string.IsNullOrWhiteSpace(certificate.issuedAtUtc))
+            {
+                certificate.issuedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            }
+
+            if (string.IsNullOrWhiteSpace(certificate.outputDirectory) ||
+                string.Equals(certificate.outputDirectory, OutputDirectory, StringComparison.Ordinal))
+            {
+                certificate.outputDirectory = CertificateOutputDirectory;
+            }
+
+            File.WriteAllText(
+                certificateCsvPath,
+                CertificateCsvHeader() + Environment.NewLine + CertificateCsvRow(certificate) + Environment.NewLine,
+                Encoding.UTF8);
+            return certificateCsvPath;
+        }
+
+        public string WriteEnrollmentCsv(EnrollmentLog enrollment)
+        {
+            if (!IsCollectionEnabled)
+            {
+                return "";
+            }
+
+            enrollment ??= new EnrollmentLog();
+            if (string.IsNullOrWhiteSpace(enrollment.issuedAtUtc))
+            {
+                enrollment.issuedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            }
+
+            if (string.IsNullOrWhiteSpace(enrollment.outputDirectory) ||
+                string.Equals(enrollment.outputDirectory, OutputDirectory, StringComparison.Ordinal))
+            {
+                enrollment.outputDirectory = CertificateOutputDirectory;
+            }
+
+            File.WriteAllText(
+                enrollmentCsvPath,
+                EnrollmentCsvHeader() + Environment.NewLine + EnrollmentCsvRow(enrollment) + Environment.NewLine,
+                Encoding.UTF8);
+            return enrollmentCsvPath;
         }
 
         private void EnsureAttemptHeader()
@@ -440,6 +650,14 @@ namespace MagicExamHall
             if (!File.Exists(questChecklistCsvPath))
             {
                 File.WriteAllText(questChecklistCsvPath, "sessionId,floorId,floorTitle,reason,completed,total,globalCompleted,globalTotal,elapsedMs,items" + Environment.NewLine, Encoding.UTF8);
+            }
+        }
+
+        private void EnsureActionEventHeader()
+        {
+            if (!File.Exists(actionEventsCsvPath))
+            {
+                File.WriteAllText(actionEventsCsvPath, "sessionId,eventId,utc,elapsedMs,floorElapsedMs,floorId,floorTitle,eventType,actor,phase,targetId,targetLabel,positionX,positionY,inputSessionId,strokeId,strokePointCount,value,payloadJson" + Environment.NewLine, Encoding.UTF8);
             }
         }
 
@@ -504,7 +722,7 @@ namespace MagicExamHall
                 averageTimeToFirstSuccessMs = averageTimeToFirstSuccess,
                 gqmB1UnderstandingDeltaProxy = BuildUnderstandingDelta(allAttempts),
                 floors = floors.ToArray(),
-                coverageNotes = "raw_strokes=false; test_sessions_excluded=true; attempt+quest+survey+ending_summary=true; cancel/backtrack require future movement instrumentation"
+                coverageNotes = "raw_strokes=true; action_events=true; test_sessions_excluded=true; attempt+quest+survey+ending_summary=true; movement logged as key/action state changes"
             };
             result.gqmA1ShapeDifficultyScore = ShapeDifficultyScore(
                 result.successRate,
@@ -743,6 +961,60 @@ namespace MagicExamHall
                 Csv(floor.weakestQuality),
                 Csv(floor.dominantPhase),
                 Csv(floor.coverageNotes));
+        }
+
+        private static string CertificateCsvHeader()
+        {
+            return "sessionId,issuedAtUtc,buildVersion,title,recipient,status,certificateNote,finalTasks,completedFinalGoals,totalFinalGoals,totalElapsedMs,totalAttempts,totalSuccess,successRate,questCompletionRate,outputDirectory";
+        }
+
+        private static string EnrollmentCsvHeader()
+        {
+            return "sessionId,issuedAtUtc,buildVersion,status,currentFloor,currentFloorTitle,completedGoals,totalGoals,globalCompletedGoals,globalTotalGoals,completedFinalGoals,totalFinalGoals,currentFinalTask,totalElapsedMs,totalAttempts,lastEventType,lastEventUtc,outputDirectory";
+        }
+
+        private static string CertificateCsvRow(CertificateLog certificate)
+        {
+            return string.Join(",",
+                Csv(certificate.sessionId),
+                Csv(certificate.issuedAtUtc),
+                Csv(certificate.buildVersion),
+                Csv(certificate.title),
+                Csv(certificate.recipient),
+                Csv(certificate.status),
+                Csv(certificate.certificateNote),
+                Csv(certificate.finalTasks),
+                certificate.completedFinalGoals,
+                certificate.totalFinalGoals,
+                certificate.totalElapsedMs,
+                certificate.totalAttempts,
+                certificate.totalSuccess,
+                Float(certificate.successRate),
+                Float(certificate.questCompletionRate),
+                Csv(certificate.outputDirectory));
+        }
+
+        private static string EnrollmentCsvRow(EnrollmentLog enrollment)
+        {
+            return string.Join(",",
+                Csv(enrollment.sessionId),
+                Csv(enrollment.issuedAtUtc),
+                Csv(enrollment.buildVersion),
+                Csv(enrollment.status),
+                enrollment.currentFloor,
+                Csv(enrollment.currentFloorTitle),
+                enrollment.completedGoals,
+                enrollment.totalGoals,
+                enrollment.globalCompletedGoals,
+                enrollment.globalTotalGoals,
+                enrollment.completedFinalGoals,
+                enrollment.totalFinalGoals,
+                Csv(enrollment.currentFinalTask),
+                enrollment.totalElapsedMs,
+                enrollment.totalAttempts,
+                Csv(enrollment.lastEventType),
+                Csv(enrollment.lastEventUtc),
+                Csv(enrollment.outputDirectory));
         }
 
         private int HighestObservedFloorId()

@@ -16,6 +16,7 @@ namespace MagicExamHall
     {
         public IReadOnlyList<CompiledSeal> activeSeals = Array.Empty<CompiledSeal>();
         public BaseRecognitionIntent baseIntent;
+        public IReadOnlyList<string> preferredCustomShapeTokens = Array.Empty<string>();
         public bool allowCustomShapes = true;
         public bool customShapesOnlyWhenSealActive;
         public bool hasCastCenter;
@@ -70,17 +71,18 @@ namespace MagicExamHall
             var center = context.hasCastCenter ? context.castCenter : session.GetWorldCenter();
             var strokeCount = strokes.Count;
             var seals = context.activeSeals ?? Array.Empty<CompiledSeal>();
-            var hasActiveSeal = seals.Any(seal => context.now <= seal.expiresAt);
             var targetSeal = SpellCastingService.FindAttachableSeal(seals, center, context.now);
             var intentPreferredFamily = context.baseIntent?.IsActive == true
                 ? context.baseIntent.family
                 : (SpellFamily?)null;
-            if (context.customShapesOnlyWhenSealActive && hasActiveSeal)
+            var preferredCustomShapeTokens = context.preferredCustomShapeTokens ?? Array.Empty<string>();
+            if (context.customShapesOnlyWhenSealActive && targetSeal != null)
             {
                 var customOnlyBase = RecognizeBaseCandidate(
                     strokes,
                     context.baseIntent,
-                    targetSeal?.baseFamily ?? intentPreferredFamily,
+                    null,
+                    preferredCustomShapeTokens,
                     context.allowCustomShapes,
                     recordColdStartAttempt: false,
                     now: context.now);
@@ -107,7 +109,8 @@ namespace MagicExamHall
                 var baseResult = RecognizeBaseCandidate(
                     strokes,
                     context.baseIntent,
-                    targetSeal.baseFamily,
+                    null,
+                    preferredCustomShapeTokens,
                     context.allowCustomShapes,
                     recordColdStartAttempt: false,
                     now: context.now);
@@ -142,7 +145,8 @@ namespace MagicExamHall
                 strokes,
                 context.baseIntent,
                 intentPreferredFamily,
-                context.allowCustomShapes,
+                preferredCustomShapeTokens,
+                context.allowCustomShapes && !context.customShapesOnlyWhenSealActive,
                 recordColdStartAttempt: context.baseIntent?.IsActive == true,
                 now: context.now);
             if (recognizedBase.spell.status == RecognitionStatus.Recognized && recognizedBase.spell.recognizedFamily.HasValue)
@@ -189,6 +193,7 @@ namespace MagicExamHall
             List<List<StrokeSample>> strokes,
             BaseRecognitionIntent intent,
             SpellFamily? preferredCustomFamily = null,
+            IReadOnlyList<string> preferredCustomShapeTokens = null,
             bool allowCustomShapes = true,
             bool recordColdStartAttempt = false,
             float now = 0f)
@@ -196,9 +201,10 @@ namespace MagicExamHall
             var preparedIntent = PrepareBaseIntent(intent);
             var baseResult = SpellRuntime.RecognizeBase(strokes, preparedIntent);
             var personalizationTarget = preparedIntent?.IsActive == true ? preparedIntent.family : (SpellFamily?)null;
+            var goalLocalColdStart = IsGoalLocalColdStartIntent(preparedIntent);
             var rawColdStartSpell = recordColdStartAttempt &&
                 preparedIntent?.IsActive == true &&
-                preparedIntent.tutorialCaptureCount < 3
+                (preparedIntent.tutorialCaptureCount < 3 || goalLocalColdStart)
                     ? CloneColdStartSpellResult(baseResult.spell)
                     : null;
             PersonalizationStore.ApplyBasePersonalization(baseResult.spell, strokes, personalizationTarget);
@@ -209,7 +215,7 @@ namespace MagicExamHall
 
             if (allowCustomShapes)
             {
-                CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, CustomShapeStore, preferredCustomFamily);
+                CustomShapeRecognition.ApplyToBaseResult(baseResult, strokes, CustomShapeStore, preferredCustomFamily, preferredCustomShapeTokens);
             }
 
             return baseResult;
@@ -275,6 +281,7 @@ namespace MagicExamHall
             }
 
             var targetCaptureCount = PersonalizationStore.CountBaseCaptures(intent.family);
+            var goalLocalColdStart = IsGoalLocalColdStartIntent(intent);
             return new BaseRecognitionIntent
             {
                 family = intent.family,
@@ -284,8 +291,28 @@ namespace MagicExamHall
                 radius = intent.radius,
                 strength = intent.strength,
                 tutorialCaptureCount = targetCaptureCount,
-                strongConsiderationEnabled = targetCaptureCount < StrongIntentColdStartCaptureLimit
+                strongConsiderationEnabled = targetCaptureCount < StrongIntentColdStartCaptureLimit || goalLocalColdStart
             };
+        }
+
+        private static bool IsGoalLocalColdStartIntent(BaseRecognitionIntent intent)
+        {
+            return intent?.IsActive == true &&
+                   string.Equals(intent.source, "near_goal_symbol", StringComparison.Ordinal) &&
+                   IsLaterFloorGoalId(intent.goalId);
+        }
+
+        private static bool IsLaterFloorGoalId(string goalId)
+        {
+            if (string.IsNullOrWhiteSpace(goalId))
+            {
+                return false;
+            }
+
+            return goalId.StartsWith("custom_", StringComparison.Ordinal) ||
+                   goalId.StartsWith("beam_", StringComparison.Ordinal) ||
+                   goalId.StartsWith("final_", StringComparison.Ordinal) ||
+                   string.Equals(goalId, "earth_stairs", StringComparison.Ordinal);
         }
 
         private static void RejectNonCustomPostSealInput(BaseRecognitionResult baseResult)
@@ -298,8 +325,8 @@ namespace MagicExamHall
             baseResult.spell.status = RecognitionStatus.Invalid;
             baseResult.spell.recognizedFamily = null;
             baseResult.spell.success = false;
-            baseResult.spell.feedbackReason = "활성 seal 이후의 추가 입력은 저장된 커스텀 도형만 사용합니다.";
-            baseResult.spell.nextHint = "커스텀 도형 책에 도형을 저장한 뒤, seal이 떠 있는 동안 그 도형을 그려 보세요.";
+            baseResult.spell.feedbackReason = "기본 문양이 빛나는 동안에는 원 안에 추가 도형만 이어 그릴 수 있습니다.";
+            baseResult.spell.nextHint = "새 기본 문양을 그리려면 빛나는 원 밖에서 다시 시작하세요. 원 안에서는 슬롯에 있는 추가 도형을 그리세요.";
         }
 
         public void RecordAcceptedResult(StrokeRecognitionResult result, float now)

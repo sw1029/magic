@@ -8,7 +8,7 @@ namespace MagicExamHall
     public sealed class WorldDrawingController : MonoBehaviour
     {
         public const float DefaultBufferSeconds = 1.75f;
-        public const float DefaultMinPointDistance = 0.05f;
+        public const float DefaultMinPointDistance = 0.035f;
         public const float StrokeVisualLifetimeSeconds = WorldStrokeVisuals.DefaultStrokeVisualLifetimeSeconds;
 
         public Camera mainCamera = null!;
@@ -26,12 +26,16 @@ namespace MagicExamHall
         private bool wired;
 
         public event Action<StrokeInputSession> StrokeSessionCompleted = delegate { };
+        public event Action<string, StrokeInputStroke> RawStrokeEvent = delegate { };
+        public event Action<string> RawStrokeStateEvent = delegate { };
 
         // Legacy event kept for tests/tools that still hand off StrokeSample groups directly.
         public event Action<List<List<StrokeSample>>, Vector2, int> SpellBuffered = delegate { };
         public event Action InputCancelled = delegate { };
 
         public bool HasBufferedInput => (sessionBuffer?.HasPendingStrokes ?? false) || (inputSource?.IsDrawing ?? false);
+        public bool HasActiveStrokeCenter => inputSource?.HasActiveWorldCenter == true;
+        public Vector2 ActiveStrokeCenter => inputSource?.ActiveWorldCenter ?? Vector2.zero;
         public int BufferedStrokeCountForTests => sessionBuffer?.PendingStrokeCount ?? 0;
         public int StrokeVisualCountForTests => strokeVisuals?.VisualCountForTests ?? 0;
 
@@ -60,12 +64,16 @@ namespace MagicExamHall
 
             inputSource.StrokeStarted -= strokeVisuals.HandleStrokeStarted;
             inputSource.StrokeStarted -= OnStrokeAudioStarted;
+            inputSource.StrokeStarted -= OnRawStrokeStarted;
             inputSource.StrokeUpdated -= strokeVisuals.HandleStrokeUpdated;
             inputSource.StrokeUpdated -= OnStrokeAudioUpdated;
+            inputSource.StrokeUpdated -= OnRawStrokeUpdated;
             inputSource.StrokeCompleted -= strokeVisuals.HandleStrokeCompleted;
             inputSource.StrokeCompleted -= OnStrokeAudioCompleted;
             inputSource.StrokeCompleted -= OnStrokeCompleted;
+            inputSource.StrokeCompleted -= OnRawStrokeCompleted;
             inputSource.StrokeCanceled -= strokeVisuals.HandleStrokeCanceled;
+            inputSource.StrokeCanceled -= OnRawStrokeCanceled;
             sessionBuffer.SessionCompleted -= OnSessionCompleted;
             wired = false;
         }
@@ -110,6 +118,15 @@ namespace MagicExamHall
             }
 
             return hadInput || canceledActive;
+        }
+
+        public void SetStrokeColor(Color color)
+        {
+            strokeColor = color;
+            if (strokeVisuals != null)
+            {
+                strokeVisuals.strokeColor = color;
+            }
         }
 
         public void MarkLastBufferedStrokesRecognized(Color color)
@@ -159,12 +176,16 @@ namespace MagicExamHall
 
             inputSource.StrokeStarted += strokeVisuals.HandleStrokeStarted;
             inputSource.StrokeStarted += OnStrokeAudioStarted;
+            inputSource.StrokeStarted += OnRawStrokeStarted;
             inputSource.StrokeUpdated += strokeVisuals.HandleStrokeUpdated;
             inputSource.StrokeUpdated += OnStrokeAudioUpdated;
+            inputSource.StrokeUpdated += OnRawStrokeUpdated;
             inputSource.StrokeCompleted += strokeVisuals.HandleStrokeCompleted;
             inputSource.StrokeCompleted += OnStrokeAudioCompleted;
             inputSource.StrokeCompleted += OnStrokeCompleted;
+            inputSource.StrokeCompleted += OnRawStrokeCompleted;
             inputSource.StrokeCanceled += strokeVisuals.HandleStrokeCanceled;
+            inputSource.StrokeCanceled += OnRawStrokeCanceled;
             sessionBuffer.SessionCompleted += OnSessionCompleted;
             wired = true;
         }
@@ -192,6 +213,26 @@ namespace MagicExamHall
         private void OnStrokeCompleted(StrokeInputStroke stroke)
         {
             sessionBuffer.PushCompletedStroke(stroke, Time.time);
+        }
+
+        private void OnRawStrokeStarted(StrokeInputStroke stroke)
+        {
+            RawStrokeEvent("stroke_started", stroke);
+        }
+
+        private void OnRawStrokeUpdated(StrokeInputStroke stroke)
+        {
+            RawStrokeEvent("stroke_updated", stroke);
+        }
+
+        private void OnRawStrokeCompleted(StrokeInputStroke stroke)
+        {
+            RawStrokeEvent("stroke_completed", stroke);
+        }
+
+        private void OnRawStrokeCanceled()
+        {
+            RawStrokeStateEvent("stroke_canceled");
         }
 
         private void OnStrokeAudioStarted(StrokeInputStroke stroke)

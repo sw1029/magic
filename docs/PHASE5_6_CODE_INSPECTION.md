@@ -53,11 +53,11 @@
 
 | # | 항목 | 판정 | 증거 |
 | --- | --- | --- | --- |
-| 1 | 트리거 6종 | **부분** | 5분 침묵(300s) ✓ (`firstFloorLongSilenceShown`, 5343행). 실패 escalator ✓ (PlayMode `FailedBaseCastsEscalateMagicNoteHints`). **1층 8초 침묵 트리거는 코드에서 발견 못 함** |
+| 1 | 트리거 6종 | **부분** | 5분 침묵(300s) ✓ (`firstFloorLongSilenceShown`, 5343행). 실패 escalator ✓ (PlayMode `FailedBaseCastsEscalateMagicNoteHints`). 1층 8초 침묵 ✓ — **정정(2026-06-12): `firstFloorGhostShown` 8초 트리거가 구현돼 있음** (ExamGameController 5331행, ghost gesture + 노트). 초기 검수의 grep 누락이었음 |
 | 2 | 의도적 미등장 | 빌드 검증 필요 | 코드 구조상 모순 없음, 전수 확인은 플레이 필요 |
 | 3 | 대사 풀 트리거당 3~5변주 ≈ 25줄 | **부분** | `MentorPresentationController`에 층별 멘토 프로필 5종(벽화 연구원·균열 감시자 등) 구현. 변주 수 전수 카운트는 미실시 |
 | 4 | 등장 연출 (페이드인+머리 위 룬+`npc_appear`, 4층 가장자리 윈도우) | **부분** | `npc_appear` SFX ✓, 멘토 프레젠테이션 ✓. 4층 가장자리 윈도우는 4층 디자인 자체가 변경돼 스펙 재정의 필요 |
-| 5 | EditMode 테스트 (쿨다운·1회성·풀 무작위) | **미구현** | EditMode 테스트 5클래스 중 멘토 트리거 테스트 없음 (CustomShape/Gesture/PlayerMovement/StageDefinition/StrokeInput뿐) |
+| 5 | EditMode 테스트 (쿨다운·1회성·풀 무작위) | **부분 (2026-06-12 갱신)** | `HintAssistanceTests` 추가 — escalator 단계 상승·캡·assisted 플래그·체크리스트·멘토 프로필을 EditMode로 검증. 단 "쿨다운·풀 무작위"는 **대사 풀/쿨다운 시스템 자체가 미구현**이라 테스트 대상이 없음 (스펙 §13 잔여 기능) |
 
 ## P6-2. 결정적 모먼트 검수
 

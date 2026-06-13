@@ -7,7 +7,7 @@ namespace MagicExamHall
     public sealed class WorldStrokeVisuals : MonoBehaviour
     {
         public const float DefaultStrokeVisualLifetimeSeconds = 4.2f;
-        public const float RecognizedStrokeFadeSeconds = 0.7f;
+        public const float RecognizedStrokeFadeSeconds = 0.32f;
         public const float InvalidStrokeFadeSeconds = 1.0f;
 
         public Color strokeColor = new(0.22f, 0.95f, 1f, 0.92f);
@@ -70,7 +70,7 @@ namespace MagicExamHall
 
         public void MarkLastCompletedSessionRecognized(Color color)
         {
-            MarkPendingRecognition(StrokeVisualState.Recognized, new Color(color.r, color.g, color.b, 0.92f));
+            MarkPendingRecognition(StrokeVisualState.Recognized, new Color(color.r, color.g, color.b, 0.38f));
         }
 
         public void MarkLastCompletedSessionInvalid()
@@ -212,10 +212,10 @@ namespace MagicExamHall
 
             private Color RecognizedColor(Color baseColor)
             {
-                var tintT = Mathf.Clamp01(stateAge / 0.2f);
-                var fadeT = Mathf.Clamp01((stateAge - 0.2f) / 0.5f);
+                var tintT = Mathf.Clamp01(stateAge / 0.08f);
+                var fadeT = Mathf.Clamp01((stateAge - 0.08f) / Mathf.Max(WorldStrokeVisuals.RecognizedStrokeFadeSeconds - 0.08f, 0.001f));
                 var color = Color.Lerp(baseColor, targetColor, tintT);
-                color.a = Mathf.Lerp(0.92f, 0f, fadeT);
+                color.a = Mathf.Lerp(0.38f, 0f, fadeT);
                 return color;
             }
 

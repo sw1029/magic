@@ -89,7 +89,7 @@ namespace MagicExamHall
                 PixelSpriteKind.RuneCircle => EnsurePointLight(target, $"{spriteName} Rune Light 2D", primary, 0.52f, 0.16f, 2.35f),
                 PixelSpriteKind.Pulse => EnsurePointLight(target, $"{spriteName} Pulse Light 2D", primary, 0.46f, 0.02f, 1.45f),
                 PixelSpriteKind.Station => EnsurePointLight(target, $"{spriteName} Core Light 2D", primary, 0.32f, 0.10f, 1.55f),
-                PixelSpriteKind.Target => EnsurePointLight(target, $"{spriteName} Target Light 2D", primary, 0.30f, 0.08f, 1.30f),
+                PixelSpriteKind.Target or PixelSpriteKind.Scarecrow => EnsurePointLight(target, $"{spriteName} Target Light 2D", primary, 0.30f, 0.08f, 1.30f),
                 _ => null
             };
         }

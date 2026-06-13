@@ -33,7 +33,8 @@ namespace MagicExamHall
             IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
             BaseRecognitionResult baseResult,
             CustomShapeProfileStore store,
-            SpellFamily? preferredMappedFamily = null)
+            SpellFamily? preferredMappedFamily = null,
+            IReadOnlyList<string> preferredShapeTokens = null)
         {
             if (store == null || baseResult?.spell == null)
             {
@@ -52,15 +53,15 @@ namespace MagicExamHall
             var defaultSimilarity = Mathf.Clamp01(baseResult.spell.confidence);
             var candidates = store.Slots
                 .Where(slot => slot.IsOccupied)
-                .Select(slot => ScoreSlot(slot, drawable, normalized.cloud, features, defaultFamily, defaultSimilarity, preferredMappedFamily))
+                .Select(slot => ScoreSlot(slot, drawable, normalized.cloud, features, defaultFamily, defaultSimilarity, preferredShapeTokens))
                 .ToList();
 
-            ApplyPostSealContrastPreference(candidates, preferredMappedFamily, defaultFamily, defaultSimilarity);
+            ApplyPostSealContrastPreference(candidates, defaultFamily, defaultSimilarity, preferredShapeTokens);
 
             var best = candidates
                 .Where(result => result.customScore >= result.holdThreshold)
                 .OrderByDescending(result => result.accepted ? 2 : result.held ? 1 : 0)
-                .ThenByDescending(result => preferredMappedFamily.HasValue && result.slot.mappedFamily == preferredMappedFamily.Value ? 1 : 0)
+                .ThenByDescending(result => PreferredShapeCoverage(result.slot, preferredShapeTokens))
                 .ThenByDescending(result => result.contrastMargin)
                 .ThenByDescending(result => result.customScore)
                 .FirstOrDefault();
@@ -86,9 +87,10 @@ namespace MagicExamHall
             BaseRecognitionResult baseResult,
             IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
             CustomShapeProfileStore store,
-            SpellFamily? preferredMappedFamily = null)
+            SpellFamily? preferredMappedFamily = null,
+            IReadOnlyList<string> preferredShapeTokens = null)
         {
-            var result = Recognize(strokes, baseResult, store, preferredMappedFamily);
+            var result = Recognize(strokes, baseResult, store, preferredMappedFamily, preferredShapeTokens);
             if (result == null || baseResult?.spell == null)
             {
                 return false;
@@ -103,43 +105,45 @@ namespace MagicExamHall
                     return false;
                 }
 
-                ApplyCustomMetadata(spell, result, strokes);
+                ApplyCustomMetadata(spell, result, strokes, preferredMappedFamily);
                 spell.status = result.defaultConflict ? RecognitionStatus.Incomplete : RecognitionStatus.Ambiguous;
                 spell.recognizedFamily = null;
-                spell.targetFamily = result.slot.mappedFamily;
+                spell.targetFamily = EffectiveMappedFamily(result, preferredMappedFamily);
                 spell.success = false;
                 spell.confidence = Mathf.Max(spell.confidence, result.customScore);
                 spell.feedbackReason = result.defaultConflict
-                    ? $"{result.slot.label} 도형은 보였지만 {SpellLabels.Korean(result.defaultFamily)} 기본 도형과 너무 가까워 보류했습니다."
-                    : $"{result.slot.label} 커스텀 도형이 아직 안정 기준에 조금 부족합니다.";
-                spell.nextHint = "같은 슬롯의 gold capture와 비슷한 크기와 획 순서로 한 번 더 그려 보세요.";
+                    ? $"{result.slot.label} 도형은 보였지만 {SpellLabels.Korean(result.defaultFamily)} 기본 문양과 너무 가까워 보류했습니다."
+                    : $"{result.slot.label} 가져온 도형이 아직 안정 기준에 조금 부족합니다.";
+                spell.nextHint = "같은 슬롯의 기준 그림과 비슷한 크기와 획 순서로 한 번 더 그려 보세요.";
                 return true;
             }
 
-            ApplyCustomMetadata(spell, result, strokes);
+            var effectiveFamily = EffectiveMappedFamily(result, preferredMappedFamily);
+            ApplyCustomMetadata(spell, result, strokes, preferredMappedFamily);
             spell.status = RecognitionStatus.Recognized;
-            spell.recognizedFamily = result.slot.mappedFamily;
-            spell.targetFamily = result.slot.mappedFamily;
-            spell.mappedFamily = result.slot.mappedFamily;
+            spell.recognizedFamily = effectiveFamily;
+            spell.targetFamily = effectiveFamily;
+            spell.mappedFamily = effectiveFamily;
             spell.success = true;
             spell.confidence = Mathf.Clamp01(Mathf.Max(spell.confidence, result.customScore));
             spell.feedbackReason =
-                $"{result.slot.label} 커스텀 도형이 {SpellLabels.Korean(result.slot.mappedFamily)} 효과로 안정화되었습니다.";
+                $"{result.slot.label} 가져온 도형이 {SpellLabels.Korean(effectiveFamily)} 효과로 안정화되었습니다.";
             spell.nextHint =
-                $"기본 유사도 {result.defaultSimilarityScore:0.00}, custom {result.customScore:0.00}. 이후 입력은 이 슬롯 보정에 반영됩니다.";
+                $"기본 유사도 {result.defaultSimilarityScore:0.00}, 가져온 도형 점수 {result.customScore:0.00}. 이후 입력은 이 슬롯 보정에 반영됩니다.";
             return true;
         }
 
         private static void ApplyCustomMetadata(
             SpellResult spell,
             CustomShapeRecognitionResult result,
-            IReadOnlyList<IReadOnlyList<StrokeSample>> strokes)
+            IReadOnlyList<IReadOnlyList<StrokeSample>> strokes,
+            SpellFamily? preferredMappedFamily)
         {
             spell.isCustomShape = true;
             spell.customShapeId = result.slot.shapeId;
             spell.customShapeLabel = result.slot.label;
             spell.customShapeToken = result.slot.shapeToken;
-            spell.mappedFamily = result.slot.mappedFamily;
+            spell.mappedFamily = EffectiveMappedFamily(result, preferredMappedFamily);
             spell.customScore = Round(result.customScore);
             spell.defaultSimilarityScore = Round(result.defaultSimilarityScore);
             spell.personalization = result.summary;
@@ -168,7 +172,7 @@ namespace MagicExamHall
             ShapeFeatures features,
             SpellFamily defaultFamily,
             float defaultSimilarity,
-            SpellFamily? preferredMappedFamily)
+            IReadOnlyList<string> preferredShapeTokens)
         {
             var goldScores = slot.goldCaptures
                 .Select(capture => ScoreCapture(capture, cloud, features))
@@ -192,23 +196,23 @@ namespace MagicExamHall
             var featureScore = ScoreFeatureSimilarity(features, AverageCaptureFeatures(slot));
             var maturity = Mathf.Clamp01((slot.goldCaptures.Count + slot.autoCaptures.Count + slot.followCaptures.Count * 0.7f) / 6f);
             var customScore = Mathf.Clamp01(goldScore * 0.57f + featureScore * 0.21f + autoScore * 0.10f + followScore * 0.07f + maturity * 0.05f);
-            var preferredSlot = preferredMappedFamily.HasValue && slot.mappedFamily == preferredMappedFamily.Value;
+            customScore = ApplyPrimitiveShapeGuards(slot, features, customScore);
+            var preferredShapeCoverage = PreferredShapeCoverage(slot, preferredShapeTokens);
             var acceptThreshold = Mathf.Clamp(
                 0.73f -
                 Mathf.Min(slot.autoCaptures.Count, 8) * 0.01f -
                 Mathf.Min(slot.followCaptures.Count, 6) * 0.008f,
                 0.62f,
                 0.78f);
-            if (preferredSlot)
+            if (preferredShapeCoverage > 0f)
             {
-                acceptThreshold = Mathf.Clamp(acceptThreshold - 0.07f, 0.62f, 0.78f);
+                var shapeBias = Mathf.Lerp(0.035f, 0.075f, preferredShapeCoverage);
+                acceptThreshold = Mathf.Clamp(acceptThreshold - shapeBias, 0.56f, 0.78f);
+                customScore = Mathf.Clamp01(customScore + 0.04f * preferredShapeCoverage);
             }
 
             var holdThreshold = Mathf.Clamp(acceptThreshold - 0.13f, 0.48f, 0.68f);
-            var conflict = !preferredSlot &&
-                           defaultSimilarity >= 0.78f &&
-                           defaultFamily != slot.mappedFamily &&
-                           customScore < defaultSimilarity + 0.08f;
+            var conflict = false;
             var accepted = customScore >= acceptThreshold && !conflict;
             var held = !accepted && (customScore >= holdThreshold || conflict);
 
@@ -246,13 +250,77 @@ namespace MagicExamHall
             };
         }
 
+        private static float ApplyPrimitiveShapeGuards(CustomShapeSlot slot, ShapeFeatures features, float score)
+        {
+            if (slot == null)
+            {
+                return score;
+            }
+
+            if (string.Equals(slot.shapeToken, "line", StringComparison.OrdinalIgnoreCase) &&
+                features.strokeCount > 1 &&
+                SlotWasCapturedAsSingleStroke(slot))
+            {
+                return Mathf.Min(score * 0.36f, 0.38f);
+            }
+
+            return score;
+        }
+
+        private static bool SlotMatchesPreferredShape(CustomShapeSlot slot, IReadOnlyList<string> preferredShapeTokens)
+        {
+            return PreferredShapeCoverage(slot, preferredShapeTokens) > 0f;
+        }
+
+        private static float PreferredShapeCoverage(CustomShapeSlot slot, IReadOnlyList<string> preferredShapeTokens)
+        {
+            if (slot == null || preferredShapeTokens == null || preferredShapeTokens.Count == 0)
+            {
+                return 0f;
+            }
+
+            var requestedTokens = preferredShapeTokens
+                .Where(token => !string.IsNullOrWhiteSpace(token))
+                .Select(token => token.Trim().ToLowerInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (requestedTokens.Count == 0)
+            {
+                return 0f;
+            }
+
+            var eventShapeTokens = slot.eventShapeTokens == null
+                ? Enumerable.Empty<string>()
+                : slot.eventShapeTokens;
+            var availableTokens = eventShapeTokens
+                .Where(token => !string.IsNullOrWhiteSpace(token))
+                .Select(token => token.Trim().ToLowerInvariant())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(slot.shapeToken))
+            {
+                availableTokens.Add(slot.shapeToken.Trim().ToLowerInvariant());
+            }
+
+            var covered = requestedTokens.Count(token => availableTokens.Contains(token));
+            return Mathf.Clamp01((float)covered / requestedTokens.Count);
+        }
+
+        private static bool SlotWasCapturedAsSingleStroke(CustomShapeSlot slot)
+        {
+            return slot.AllCaptures()
+                .Select(capture => capture.ToStrokeSamples().Count)
+                .Where(count => count > 0)
+                .DefaultIfEmpty(1)
+                .Max() <= 1;
+        }
+
         private static void ApplyPostSealContrastPreference(
             IReadOnlyList<CustomShapeRecognitionResult> candidates,
-            SpellFamily? preferredMappedFamily,
             SpellFamily defaultFamily,
-            float defaultSimilarity)
+            float defaultSimilarity,
+            IReadOnlyList<string> preferredShapeTokens)
         {
-            if (!preferredMappedFamily.HasValue || candidates.Count == 0)
+            if (candidates.Count == 0)
             {
                 return;
             }
@@ -270,19 +338,17 @@ namespace MagicExamHall
                 if (contrastWinner && candidate.customScore >= 0.52f)
                 {
                     var followMaturity = Mathf.Clamp01(candidate.slot.followCaptures.Count / 3f);
+                    var shapeCoverage = PreferredShapeCoverage(candidate.slot, preferredShapeTokens);
                     var contrastBoost = Mathf.Clamp((Mathf.Max(margin, 0.12f) - 0.015f) * 0.45f, 0f, 0.045f);
                     contrastBoost += followMaturity * 0.025f;
-                    if (candidate.slot.mappedFamily == preferredMappedFamily.Value)
-                    {
-                        contrastBoost += 0.012f;
-                    }
+                    contrastBoost += shapeCoverage * 0.018f;
 
                     candidate.contrastBoost = Round(contrastBoost);
                     candidate.acceptThreshold = Round(Mathf.Clamp(candidate.acceptThreshold - contrastBoost, 0.56f, 0.78f));
                     candidate.holdThreshold = Round(Mathf.Clamp(candidate.acceptThreshold - 0.14f, 0.44f, 0.68f));
                 }
 
-                RefreshDecision(candidate, defaultFamily, defaultSimilarity, preferredMappedFamily, contrastWinner);
+                RefreshDecision(candidate, defaultFamily, defaultSimilarity, contrastWinner);
             }
         }
 
@@ -290,22 +356,9 @@ namespace MagicExamHall
             CustomShapeRecognitionResult result,
             SpellFamily defaultFamily,
             float defaultSimilarity,
-            SpellFamily? preferredMappedFamily,
             bool contrastWinner)
         {
-            var preferredSlot = preferredMappedFamily.HasValue && result.slot.mappedFamily == preferredMappedFamily.Value;
-            var conflict = !preferredSlot &&
-                           defaultSimilarity >= 0.78f &&
-                           defaultFamily != result.slot.mappedFamily &&
-                           result.customScore < defaultSimilarity + 0.08f;
-            if (preferredMappedFamily.HasValue &&
-                contrastWinner &&
-                result.contrastBoost > 0f &&
-                result.customScore >= result.acceptThreshold &&
-                result.contrastMargin >= 0.015f)
-            {
-                conflict = false;
-            }
+            var conflict = false;
 
             result.defaultConflict = conflict;
             result.accepted = result.customScore >= result.acceptThreshold && !conflict;
@@ -328,6 +381,11 @@ namespace MagicExamHall
                     ? $"shadow conflict with {defaultFamily}"
                     : $"gold={result.goldScore:0.000}, auto={result.autoScore:0.000}, follow={result.followScore:0.000}, feature={result.featureScore:0.000}, contrast={result.contrastMargin:0.000}, boost={result.contrastBoost:0.000}"
             };
+        }
+
+        private static SpellFamily EffectiveMappedFamily(CustomShapeRecognitionResult result, SpellFamily? preferredMappedFamily)
+        {
+            return preferredMappedFamily ?? result.slot.mappedFamily;
         }
 
         private static float ScoreCapture(CustomShapeCaptureRecord capture, IReadOnlyList<Vector2> cloud, ShapeFeatures features)

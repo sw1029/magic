@@ -26,10 +26,15 @@ namespace MagicExamHall
         public int floorNumber = 1;
         public int completedGoals;
         public int totalGoals;
+        public string[] completedGoalIds = Array.Empty<string>();
         public string[] noteLines = Array.Empty<string>();
         public string savedAtUtc = "";
         public int slotIndex;
         public int discoveries;
+        public string[] discoveredFamilies = Array.Empty<string>();
+        public string[] discoveredOverlays = Array.Empty<string>();
+        public string[] discoveredReactions = Array.Empty<string>();
+        public string[] encounteredFinalTaskIds = Array.Empty<string>();
         public string endingLabel = "";
     }
 
@@ -567,7 +572,7 @@ namespace MagicExamHall
             }
 
             Time.timeScale = 1f;
-            controller.LoadSavedProgress(snapshot.floorNumber, snapshot.noteLines);
+            controller.LoadSavedProgress(snapshot);
             EnterGameplay();
         }
 
@@ -680,7 +685,7 @@ namespace MagicExamHall
         {
             yield return FadeTo(1f, 0.45f);
             Time.timeScale = 1f;
-            controller.LoadSavedProgress(snapshot.floorNumber, snapshot.noteLines);
+            controller.LoadSavedProgress(snapshot);
             EnterGameplay();
             yield return FadeTo(0f, 0.65f);
         }
@@ -854,6 +859,26 @@ namespace MagicExamHall
                 if (snapshot.noteLines == null)
                 {
                     snapshot.noteLines = Array.Empty<string>();
+                }
+                if (snapshot.completedGoalIds == null)
+                {
+                    snapshot.completedGoalIds = Array.Empty<string>();
+                }
+                if (snapshot.discoveredFamilies == null)
+                {
+                    snapshot.discoveredFamilies = Array.Empty<string>();
+                }
+                if (snapshot.discoveredOverlays == null)
+                {
+                    snapshot.discoveredOverlays = Array.Empty<string>();
+                }
+                if (snapshot.discoveredReactions == null)
+                {
+                    snapshot.discoveredReactions = Array.Empty<string>();
+                }
+                if (snapshot.encounteredFinalTaskIds == null)
+                {
+                    snapshot.encounteredFinalTaskIds = Array.Empty<string>();
                 }
                 return snapshot;
             }

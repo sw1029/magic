@@ -50,7 +50,8 @@ namespace MagicExamHall
         Connection,
         Stability,
         LivingBridge,
-        WindPlatform
+        WindPlatform,
+        Steel
     }
 
     public readonly struct CustomSpellEffectDefinition
@@ -90,9 +91,28 @@ namespace MagicExamHall
                 SpellFamily.Wind when HasToken(spell, "wave") || IsEvent(spell, CustomShapeEventKind.MoveSpeedBuff) => For(CustomSpellEffectKind.Flow),
                 SpellFamily.Life when IsEvent(spell, CustomShapeEventKind.DirectionalProjectile) && HasToken(spell, "rect") => For(CustomSpellEffectKind.LivingBridge),
                 SpellFamily.Life when HasToken(spell, "brace") || IsEvent(spell, CustomShapeEventKind.AttackBuff) => For(CustomSpellEffectKind.Connection),
+                SpellFamily.Earth when HasToken(spell, "pentagon") || IsEvent(spell, CustomShapeEventKind.GuardBuff) => For(CustomSpellEffectKind.Steel),
                 SpellFamily.Wind when HasToken(spell, "rect") || IsEvent(spell, CustomShapeEventKind.WallEntity) => For(CustomSpellEffectKind.WindPlatform),
                 SpellFamily.Earth when HasToken(spell, "rect") || IsEvent(spell, CustomShapeEventKind.WallEntity) => For(CustomSpellEffectKind.Stability),
                 _ => For(CustomSpellEffectKind.None)
+            };
+        }
+
+        public static bool IsSingleStepTransform(SpellFamily baseFamily, SpellResult spell, CustomSpellEffectKind kind)
+        {
+            if (spell == null || !spell.isCustomShape)
+            {
+                return false;
+            }
+
+            return baseFamily switch
+            {
+                SpellFamily.Fire => kind == CustomSpellEffectKind.Electric && HasToken(spell, "line"),
+                SpellFamily.Water => kind == CustomSpellEffectKind.Ice && HasToken(spell, "hexagon"),
+                SpellFamily.Earth => kind == CustomSpellEffectKind.Steel && HasToken(spell, "pentagon"),
+                SpellFamily.Wind => kind == CustomSpellEffectKind.Flow && HasToken(spell, "wave"),
+                SpellFamily.Life => kind == CustomSpellEffectKind.Connection && HasToken(spell, "brace"),
+                _ => false
             };
         }
 
@@ -106,6 +126,7 @@ namespace MagicExamHall
                 CustomSpellEffectKind.Focus => new(kind, "불꽃 초점", "불꽃 + 별 초점", "별 모양 초점이 다음 타격이 모일 지점을 밝혀 줍니다.", 24),
                 CustomSpellEffectKind.Flow => new(kind, "바람 물결", "바람 + 물결", "바람이 물결 경로를 따라 이동 흐름을 만듭니다.", 20),
                 CustomSpellEffectKind.Connection => new(kind, "생명 연결", "생명 + 연결선", "생명력이 떨어진 대상을 묶어 연결합니다.", 22),
+                CustomSpellEffectKind.Steel => new(kind, "강철 오각형", "땅 + 오각형", "땅 seal이 오각형 구조로 압축되어 강철 seal로 굳습니다.", 26),
                 CustomSpellEffectKind.Stability => new(kind, "구멍 메우기", "땅 + 메움판", "사각 암반판이 깨진 바닥 구멍을 메워 길을 안정시킵니다.", 16),
                 CustomSpellEffectKind.LivingBridge => new(kind, "덩굴 다리", "생명 + 화살표 + 사각판", "덩굴이 화살 방향으로 뻗어 낭떠러지를 잇습니다.", 0),
                 CustomSpellEffectKind.WindPlatform => new(kind, "바람 발판", "바람 + 발판", "바람이 사각 발판을 띄워 건너갈 길을 만듭니다.", 0),

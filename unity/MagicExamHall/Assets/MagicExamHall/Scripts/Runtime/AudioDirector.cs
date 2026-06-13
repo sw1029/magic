@@ -32,26 +32,49 @@ namespace MagicExamHall
         private const int SampleRate = 44100;
 
         private readonly Dictionary<AudioCue, AudioClip> sfxClips = new();
+        private readonly Dictionary<SpellFamily, AudioClip> familyLayerClips = new();
+        private readonly Dictionary<CustomSpellEffectKind, AudioClip> customEffectLayerClips = new();
+        private readonly Dictionary<CustomShapeEventKind, AudioClip> customShapeEventLayerClips = new();
         private readonly Dictionary<BgmCue, AudioClip> bgmClips = new();
         private AudioSource sfxSource = null!;
+        private AudioSource familyLayerSource = null!;
+        private AudioSource customEffectLayerSource = null!;
+        private AudioSource customShapeEventLayerSource = null!;
         private AudioSource bgmSource = null!;
         private BgmCue currentBgm = BgmCue.None;
 
         public BgmCue CurrentBgmForTests => currentBgm;
         public int SfxClipCountForTests => sfxClips.Count;
+        public int FamilyLayerClipCountForTests => familyLayerClips.Count;
+        public int CustomEffectLayerClipCountForTests => customEffectLayerClips.Count;
+        public int CustomShapeEventLayerClipCountForTests => customShapeEventLayerClips.Count;
         public int BgmClipCountForTests => bgmClips.Count;
+        public bool HasFamilyLayerClipForTests(SpellFamily family) => familyLayerClips.ContainsKey(family);
+        public bool HasCustomEffectLayerClipForTests(CustomSpellEffectKind effect) => customEffectLayerClips.ContainsKey(effect);
+        public bool HasCustomShapeEventLayerClipForTests(CustomShapeEventKind eventKind) => customShapeEventLayerClips.ContainsKey(eventKind);
 
         public void Initialize()
         {
-            if (sfxSource != null && bgmSource != null)
+            if (sfxSource != null &&
+                familyLayerSource != null &&
+                customEffectLayerSource != null &&
+                customShapeEventLayerSource != null &&
+                bgmSource != null)
             {
                 return;
             }
 
             sfxSource = gameObject.AddComponent<AudioSource>();
-            sfxSource.playOnAwake = false;
-            sfxSource.spatialBlend = 0f;
-            sfxSource.ignoreListenerPause = true;
+            ConfigureSfxSource(sfxSource);
+
+            familyLayerSource = gameObject.AddComponent<AudioSource>();
+            ConfigureSfxSource(familyLayerSource);
+
+            customEffectLayerSource = gameObject.AddComponent<AudioSource>();
+            ConfigureSfxSource(customEffectLayerSource);
+
+            customShapeEventLayerSource = gameObject.AddComponent<AudioSource>();
+            ConfigureSfxSource(customShapeEventLayerSource);
 
             bgmSource = gameObject.AddComponent<AudioSource>();
             bgmSource.playOnAwake = false;
@@ -102,16 +125,10 @@ namespace MagicExamHall
 
         public void PlayBaseSuccess(SpellFamily family, QualityVector quality)
         {
-            var pitch = family switch
-            {
-                SpellFamily.Fire => 1.12f,
-                SpellFamily.Water => 0.94f,
-                SpellFamily.Wind => 1.06f,
-                SpellFamily.Earth => 0.88f,
-                SpellFamily.Life => 1.0f,
-                _ => 1f
-            };
-            PlaySfx(AudioCue.CastBaseSuccess, quality.Average() < 0.58f ? 0.50f : 0.82f, pitch);
+            var pitch = FamilyPitch(family);
+            var averageQuality = quality.Average();
+            PlaySfx(AudioCue.CastBaseSuccess, averageQuality < 0.58f ? 0.50f : 0.82f, pitch);
+            PlayFamilyLayer(family, averageQuality < 0.58f ? 0.28f : 0.44f, pitch);
         }
 
         public void PlayOverlaySuccess(OverlayOperator op)
@@ -129,6 +146,30 @@ namespace MagicExamHall
             PlaySfx(AudioCue.CastOverlaySuccess, 0.78f, pitch);
         }
 
+        public void PlayCustomSpellEffect(CustomSpellEffectKind effect, SpellFamily baseFamily)
+        {
+            if (effect == CustomSpellEffectKind.None)
+            {
+                return;
+            }
+
+            var familyPitch = FamilyPitch(baseFamily);
+            var effectPitch = CustomEffectPitch(effect);
+            PlaySfx(AudioCue.CastOverlaySuccess, 0.52f, Mathf.Lerp(familyPitch, effectPitch, 0.35f));
+            PlayFamilyLayer(baseFamily, 0.32f, familyPitch);
+            PlayCustomEffectLayer(effect, 0.64f, effectPitch);
+        }
+
+        public void PlayCustomShapeEvent(CustomShapeEventKind eventKind)
+        {
+            if (eventKind == CustomShapeEventKind.None)
+            {
+                return;
+            }
+
+            PlayCustomShapeEventLayer(eventKind, 0.46f, CustomShapeEventPitch(eventKind));
+        }
+
         public void PlaySfx(AudioCue cue, float volume = 0.82f, float pitch = 1f)
         {
             Initialize();
@@ -142,11 +183,57 @@ namespace MagicExamHall
             sfxSource.pitch = 1f;
         }
 
+        private void PlayFamilyLayer(SpellFamily family, float volume, float pitch)
+        {
+            Initialize();
+            if (familyLayerClips.TryGetValue(family, out var clip))
+            {
+                PlayLayerClip(familyLayerSource, clip, volume, pitch);
+            }
+        }
+
+        private void PlayCustomEffectLayer(CustomSpellEffectKind effect, float volume, float pitch)
+        {
+            Initialize();
+            if (customEffectLayerClips.TryGetValue(effect, out var clip))
+            {
+                PlayLayerClip(customEffectLayerSource, clip, volume, pitch);
+            }
+        }
+
+        private void PlayCustomShapeEventLayer(CustomShapeEventKind eventKind, float volume, float pitch)
+        {
+            Initialize();
+            if (customShapeEventLayerClips.TryGetValue(eventKind, out var clip))
+            {
+                PlayLayerClip(customShapeEventLayerSource, clip, volume, pitch);
+            }
+        }
+
+        private static void PlayLayerClip(AudioSource source, AudioClip clip, float volume, float pitch)
+        {
+            source.pitch = Mathf.Clamp(pitch, 0.5f, 1.6f);
+            source.PlayOneShot(clip, Mathf.Clamp01(volume) * MagicExamSettings.SfxVolume);
+            source.pitch = 1f;
+        }
+
         private void ApplyVolumes()
         {
             if (sfxSource != null)
             {
                 sfxSource.volume = MagicExamSettings.SfxVolume;
+            }
+            if (familyLayerSource != null)
+            {
+                familyLayerSource.volume = MagicExamSettings.SfxVolume;
+            }
+            if (customEffectLayerSource != null)
+            {
+                customEffectLayerSource.volume = MagicExamSettings.SfxVolume;
+            }
+            if (customShapeEventLayerSource != null)
+            {
+                customShapeEventLayerSource.volume = MagicExamSettings.SfxVolume;
             }
             if (bgmSource != null)
             {
@@ -156,11 +243,34 @@ namespace MagicExamHall
 
         private void BuildClips()
         {
-            if (sfxClips.Count > 0)
+            if (sfxClips.Count == 0)
             {
-                return;
+                BuildCoreSfxClips();
             }
 
+            if (familyLayerClips.Count == 0)
+            {
+                BuildFamilyLayerClips();
+            }
+
+            if (customEffectLayerClips.Count == 0)
+            {
+                BuildCustomEffectLayerClips();
+            }
+
+            if (customShapeEventLayerClips.Count == 0)
+            {
+                BuildCustomShapeEventLayerClips();
+            }
+
+            if (bgmClips.Count == 0)
+            {
+                BuildBgmClips();
+            }
+        }
+
+        private void BuildCoreSfxClips()
+        {
             sfxClips[AudioCue.CastBaseSuccess] = ExternalSfx("cast_base_success") ?? Tone("cast_base_success", 0.40f, 523f, 784f, Wave.Sine, 0.12f);
             sfxClips[AudioCue.CastOverlaySuccess] = ExternalSfx("cast_overlay_success") ?? Tone("cast_overlay_success", 0.30f, 660f, 990f, Wave.Triangle, 0.10f);
             sfxClips[AudioCue.CastFinalEffect] = ExternalSfx("cast_final_effect") ?? Tone("cast_final_effect", 0.80f, 392f, 1175f, Wave.Sine, 0.18f);
@@ -173,6 +283,54 @@ namespace MagicExamHall
             sfxClips[AudioCue.HazardReset] = ExternalSfx("hazard_reset") ?? Noise("hazard_reset", 0.50f, 0.18f);
             sfxClips[AudioCue.NpcAppear] = ExternalSfx("npc_appear") ?? Tone("npc_appear", 0.40f, 620f, 930f, Wave.Sine, 0.10f);
             sfxClips[AudioCue.EndingReportOpened] = ExternalSfx("ending_report_opened") ?? Tone("ending_report_opened", 0.70f, 294f, 880f, Wave.Sine, 0.16f);
+        }
+
+        private void BuildFamilyLayerClips()
+        {
+            familyLayerClips[SpellFamily.Fire] = ExternalSfx("element_fire") ?? Tone("element_fire", 0.24f, 880f, 1320f, Wave.Triangle, 0.08f);
+            familyLayerClips[SpellFamily.Water] = ExternalSfx("element_water") ?? Noise("element_water", 0.28f, 0.08f);
+            familyLayerClips[SpellFamily.Wind] = ExternalSfx("element_wind") ?? Tone("element_wind", 0.32f, 720f, 1080f, Wave.Sine, 0.07f);
+            familyLayerClips[SpellFamily.Earth] = ExternalSfx("element_earth") ?? Tone("element_earth", 0.30f, 180f, 240f, Wave.Square, 0.06f);
+            familyLayerClips[SpellFamily.Life] = ExternalSfx("element_life") ?? Tone("element_life", 0.34f, 440f, 660f, Wave.Triangle, 0.07f);
+        }
+
+        private void BuildCustomEffectLayerClips()
+        {
+            customEffectLayerClips[CustomSpellEffectKind.Ice] = ExternalSfx("custom_ice") ?? Tone("custom_ice", 0.28f, 988f, 1480f, Wave.Triangle, 0.08f);
+            customEffectLayerClips[CustomSpellEffectKind.Electric] = ExternalSfx("custom_electric") ?? Noise("custom_electric", 0.20f, 0.12f);
+            customEffectLayerClips[CustomSpellEffectKind.Cleanse] = ExternalSfx("custom_cleanse") ?? Tone("custom_cleanse", 0.38f, 523f, 880f, Wave.Sine, 0.07f);
+            customEffectLayerClips[CustomSpellEffectKind.Focus] = ExternalSfx("custom_focus") ?? Tone("custom_focus", 0.26f, 660f, 1320f, Wave.Sine, 0.09f);
+            customEffectLayerClips[CustomSpellEffectKind.Flow] = ExternalSfx("custom_flow") ?? Tone("custom_flow", 0.34f, 620f, 760f, Wave.Sine, 0.07f);
+            customEffectLayerClips[CustomSpellEffectKind.Connection] = ExternalSfx("custom_connection") ?? Tone("custom_connection", 0.32f, 392f, 784f, Wave.Triangle, 0.07f);
+            customEffectLayerClips[CustomSpellEffectKind.Steel] = ExternalSfx("custom_steel") ?? Tone("custom_steel", 0.30f, 246f, 370f, Wave.Square, 0.06f);
+            customEffectLayerClips[CustomSpellEffectKind.Stability] = ExternalSfx("custom_stability") ?? Tone("custom_stability", 0.30f, 196f, 294f, Wave.Square, 0.06f);
+            customEffectLayerClips[CustomSpellEffectKind.LivingBridge] = ExternalSfx("custom_living_bridge") ?? Tone("custom_living_bridge", 0.36f, 330f, 660f, Wave.Triangle, 0.07f);
+            customEffectLayerClips[CustomSpellEffectKind.WindPlatform] = ExternalSfx("custom_wind_platform") ?? Tone("custom_wind_platform", 0.30f, 740f, 1110f, Wave.Sine, 0.07f);
+        }
+
+        private void BuildCustomShapeEventLayerClips()
+        {
+            customShapeEventLayerClips[CustomShapeEventKind.SlashDamage] = ExternalSfx("event_slash_damage") ?? Tone("event_slash_damage", 0.18f, 520f, 260f, Wave.Square, 0.08f);
+            customShapeEventLayerClips[CustomShapeEventKind.DirectionalProjectile] = ExternalSfx("event_directional_projectile") ?? Tone("event_directional_projectile", 0.24f, 620f, 980f, Wave.Triangle, 0.07f);
+            customShapeEventLayerClips[CustomShapeEventKind.WallEntity] = ExternalSfx("event_wall_entity") ?? Tone("event_wall_entity", 0.26f, 190f, 160f, Wave.Square, 0.07f);
+            customShapeEventLayerClips[CustomShapeEventKind.Barrier] = ExternalSfx("event_barrier") ?? Tone("event_barrier", 0.30f, 392f, 784f, Wave.Sine, 0.07f);
+            customShapeEventLayerClips[CustomShapeEventKind.Trap] = ExternalSfx("event_trap") ?? Noise("event_trap", 0.20f, 0.08f);
+            customShapeEventLayerClips[CustomShapeEventKind.Stun] = ExternalSfx("event_stun") ?? Tone("event_stun", 0.20f, 988f, 494f, Wave.Triangle, 0.08f);
+            customShapeEventLayerClips[CustomShapeEventKind.MagicAmplify] = ExternalSfx("event_magic_amplify") ?? Tone("event_magic_amplify", 0.26f, 660f, 1320f, Wave.Sine, 0.08f);
+            customShapeEventLayerClips[CustomShapeEventKind.AttackBuff] = ExternalSfx("event_attack_buff") ?? Tone("event_attack_buff", 0.24f, 440f, 880f, Wave.Triangle, 0.07f);
+            customShapeEventLayerClips[CustomShapeEventKind.MoveSpeedBuff] = ExternalSfx("event_move_speed_buff") ?? Tone("event_move_speed_buff", 0.24f, 740f, 980f, Wave.Sine, 0.07f);
+            customShapeEventLayerClips[CustomShapeEventKind.SpecialAttackBoost] = ExternalSfx("event_special_attack_boost") ?? Tone("event_special_attack_boost", 0.24f, 740f, 1480f, Wave.Triangle, 0.08f);
+            customShapeEventLayerClips[CustomShapeEventKind.BuffDispel] = ExternalSfx("event_buff_dispel") ?? Noise("event_buff_dispel", 0.22f, 0.08f);
+            customShapeEventLayerClips[CustomShapeEventKind.EventBlock] = ExternalSfx("event_event_block") ?? Tone("event_event_block", 0.22f, 294f, 147f, Wave.Square, 0.07f);
+            customShapeEventLayerClips[CustomShapeEventKind.AttributeLaser] = ExternalSfx("event_attribute_laser") ?? Tone("event_attribute_laser", 0.22f, 880f, 1760f, Wave.Sine, 0.08f);
+            customShapeEventLayerClips[CustomShapeEventKind.RandomBuffDispel] = ExternalSfx("event_random_buff_dispel") ?? Noise("event_random_buff_dispel", 0.24f, 0.08f);
+            customShapeEventLayerClips[CustomShapeEventKind.PiercingMark] = ExternalSfx("event_piercing_mark") ?? Tone("event_piercing_mark", 0.22f, 520f, 1040f, Wave.Triangle, 0.07f);
+            customShapeEventLayerClips[CustomShapeEventKind.GuardBuff] = ExternalSfx("event_guard_buff") ?? Tone("event_guard_buff", 0.26f, 330f, 495f, Wave.Triangle, 0.07f);
+            customShapeEventLayerClips[CustomShapeEventKind.CurveProjectile] = ExternalSfx("event_curve_projectile") ?? Tone("event_curve_projectile", 0.24f, 620f, 840f, Wave.Sine, 0.07f);
+        }
+
+        private void BuildBgmClips()
+        {
             bgmClips[BgmCue.AmbientTower] = ExternalBgm("ambient_tower") ?? PadLoop(
                 "ambient_tower",
                 32f,
@@ -185,6 +343,69 @@ namespace MagicExamHall
                 new[] { 146.83f, 220f, 293.66f, 440f },
                 new[] { 130.81f, 196f, 261.63f, 392f },
                 pulseCycles: 12);
+        }
+
+        private static void ConfigureSfxSource(AudioSource source)
+        {
+            source.playOnAwake = false;
+            source.spatialBlend = 0f;
+            source.ignoreListenerPause = true;
+        }
+
+        private static float FamilyPitch(SpellFamily family)
+        {
+            return family switch
+            {
+                SpellFamily.Fire => 1.12f,
+                SpellFamily.Water => 0.94f,
+                SpellFamily.Wind => 1.06f,
+                SpellFamily.Earth => 0.88f,
+                SpellFamily.Life => 1.0f,
+                _ => 1f
+            };
+        }
+
+        private static float CustomEffectPitch(CustomSpellEffectKind effect)
+        {
+            return effect switch
+            {
+                CustomSpellEffectKind.Ice => 1.12f,
+                CustomSpellEffectKind.Electric => 1.24f,
+                CustomSpellEffectKind.Cleanse => 0.98f,
+                CustomSpellEffectKind.Focus => 1.16f,
+                CustomSpellEffectKind.Flow => 1.04f,
+                CustomSpellEffectKind.Connection => 0.96f,
+                CustomSpellEffectKind.Steel => 0.90f,
+                CustomSpellEffectKind.Stability => 0.86f,
+                CustomSpellEffectKind.LivingBridge => 0.92f,
+                CustomSpellEffectKind.WindPlatform => 1.10f,
+                _ => 1f
+            };
+        }
+
+        private static float CustomShapeEventPitch(CustomShapeEventKind eventKind)
+        {
+            return eventKind switch
+            {
+                CustomShapeEventKind.SlashDamage => 1.10f,
+                CustomShapeEventKind.DirectionalProjectile => 1.08f,
+                CustomShapeEventKind.WallEntity => 0.86f,
+                CustomShapeEventKind.Barrier => 0.96f,
+                CustomShapeEventKind.Trap => 0.92f,
+                CustomShapeEventKind.Stun => 1.14f,
+                CustomShapeEventKind.MagicAmplify => 1.18f,
+                CustomShapeEventKind.AttackBuff => 1.06f,
+                CustomShapeEventKind.MoveSpeedBuff => 1.16f,
+                CustomShapeEventKind.SpecialAttackBoost => 1.20f,
+                CustomShapeEventKind.BuffDispel => 0.90f,
+                CustomShapeEventKind.EventBlock => 0.84f,
+                CustomShapeEventKind.AttributeLaser => 1.22f,
+                CustomShapeEventKind.RandomBuffDispel => 0.94f,
+                CustomShapeEventKind.PiercingMark => 1.02f,
+                CustomShapeEventKind.GuardBuff => 0.88f,
+                CustomShapeEventKind.CurveProjectile => 1.12f,
+                _ => 1f
+            };
         }
 
         /// <summary>

@@ -85,6 +85,8 @@ namespace MagicExamHall
         public bool IsElectric => customEffect == CustomSpellEffectKind.Electric ||
                                   eventKind == CustomShapeEventKind.SlashDamage && family == SpellFamily.Fire;
 
+        public bool IsSteel => customEffect == CustomSpellEffectKind.Steel;
+
         public bool IsWindForce => family == SpellFamily.Wind ||
                                    customEffect == CustomSpellEffectKind.Flow ||
                                    eventKind == CustomShapeEventKind.MoveSpeedBuff ||
@@ -259,6 +261,11 @@ namespace MagicExamHall
                 return ElementalReactionKind.Stabilize;
             }
 
+            if (context.IsSteel && (HasMaterial(ElementalMaterial.Stone) || HasMaterial(ElementalMaterial.Soil) || HasMaterial(ElementalMaterial.Metal)))
+            {
+                return ElementalReactionKind.Stabilize;
+            }
+
             return ElementalReactionKind.None;
         }
 
@@ -429,6 +436,7 @@ namespace MagicExamHall
             {
                 PixelSpriteKind.Player => ElementalMaterial.Creature | ElementalMaterial.Cloth,
                 PixelSpriteKind.Target => ElementalMaterial.Creature | ElementalMaterial.Wood | ElementalMaterial.Metal,
+                PixelSpriteKind.Scarecrow => ElementalMaterial.Creature | ElementalMaterial.Wood | ElementalMaterial.Plant,
                 PixelSpriteKind.FloorTile => ElementalMaterial.Stone | ElementalMaterial.Soil,
                 PixelSpriteKind.WallTrim => ElementalMaterial.Stone,
                 PixelSpriteKind.Rug => ElementalMaterial.Cloth,
@@ -506,6 +514,7 @@ namespace MagicExamHall
 
             var normalized = (name ?? "").ToLowerInvariant();
             return kind == PixelSpriteKind.Target ||
+                   kind == PixelSpriteKind.Scarecrow ||
                    kind == PixelSpriteKind.Rubble ||
                    kind == PixelSpriteKind.Candle ||
                    normalized.Contains("loose") ||
@@ -536,6 +545,7 @@ namespace MagicExamHall
                 CustomSpellEffectKind.Electric => 2.35f,
                 CustomSpellEffectKind.LivingBridge => 2.75f,
                 CustomSpellEffectKind.WindPlatform => 2.80f,
+                CustomSpellEffectKind.Steel => 2.45f,
                 CustomSpellEffectKind.Stability => 2.40f,
                 CustomSpellEffectKind.Connection => 2.50f,
                 _ => family == SpellFamily.Wind ? 2.70f : 2.20f

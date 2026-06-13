@@ -66,12 +66,19 @@ namespace MagicExamHall
         public string customEventRole = "";
         public Vector2 customEventOrigin;
         public Vector2 customEventDirection = Vector2.right;
+        public CustomSpellEffectKind customEffectKind = CustomSpellEffectKind.None;
+        public bool HasCustomEffectSeal => customEffectKind != CustomSpellEffectKind.None;
 
         public string Label
         {
             get
             {
-                var baseLabel = string.IsNullOrWhiteSpace(customShapeLabel)
+                var customEffectLabel = HasCustomEffectSeal
+                    ? CustomSpellEffectCatalog.Korean(customEffectKind)
+                    : "";
+                var baseLabel = !string.IsNullOrWhiteSpace(customEffectLabel)
+                    ? $"{customEffectLabel} seal"
+                    : string.IsNullOrWhiteSpace(customShapeLabel)
                     ? SpellLabels.Korean(baseFamily)
                     : $"{customShapeLabel} ({SpellLabels.Korean(baseFamily)})";
                 if (overlayStack.Count == 0)

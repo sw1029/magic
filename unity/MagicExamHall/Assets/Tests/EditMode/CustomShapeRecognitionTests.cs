@@ -61,7 +61,19 @@ namespace MagicExamHall.Tests
             AssertEffect(SpellFamily.Fire, "star", CustomShapeEventKind.MagicAmplify, CustomSpellEffectKind.Focus);
             AssertEffect(SpellFamily.Wind, "wave", CustomShapeEventKind.MoveSpeedBuff, CustomSpellEffectKind.Flow);
             AssertEffect(SpellFamily.Life, "brace", CustomShapeEventKind.AttackBuff, CustomSpellEffectKind.Connection);
+            AssertEffect(SpellFamily.Earth, "pentagon", CustomShapeEventKind.GuardBuff, CustomSpellEffectKind.Steel);
             AssertEffect(SpellFamily.Earth, "rect", CustomShapeEventKind.WallEntity, CustomSpellEffectKind.Stability);
+        }
+
+        [Test]
+        public void SingleStepCustomEffectsAreMarkedAsSealTransforms()
+        {
+            Assert.That(Transform(SpellFamily.Fire, "line", CustomShapeEventKind.SlashDamage, CustomSpellEffectKind.Electric), Is.True);
+            Assert.That(Transform(SpellFamily.Water, "hexagon", CustomShapeEventKind.Stun, CustomSpellEffectKind.Ice), Is.True);
+            Assert.That(Transform(SpellFamily.Earth, "pentagon", CustomShapeEventKind.GuardBuff, CustomSpellEffectKind.Steel), Is.True);
+            Assert.That(Transform(SpellFamily.Wind, "wave", CustomShapeEventKind.MoveSpeedBuff, CustomSpellEffectKind.Flow), Is.True);
+            Assert.That(Transform(SpellFamily.Life, "brace", CustomShapeEventKind.AttackBuff, CustomSpellEffectKind.Connection), Is.True);
+            Assert.That(Transform(SpellFamily.Earth, "rect", CustomShapeEventKind.WallEntity, CustomSpellEffectKind.Stability), Is.False);
         }
 
         [Test]
@@ -481,6 +493,23 @@ namespace MagicExamHall.Tests
 
             Assert.That(effect.kind, Is.EqualTo(expected));
             Assert.That(effect.requirementLabel, Is.Not.Empty);
+        }
+
+        private static bool Transform(
+            SpellFamily baseFamily,
+            string token,
+            CustomShapeEventKind eventKind,
+            CustomSpellEffectKind expected)
+        {
+            var spell = new SpellResult
+            {
+                isCustomShape = true,
+                customShapeToken = token,
+                customEventId = $"{token}_{eventKind.ToString().ToLowerInvariant()}",
+                customEventKind = eventKind.ToString()
+            };
+
+            return CustomSpellEffectCatalog.IsSingleStepTransform(baseFamily, spell, expected);
         }
 
         private static IReadOnlyList<IReadOnlyList<StrokeSample>> Samples(SpellFamily family)

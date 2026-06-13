@@ -154,7 +154,29 @@ namespace MagicExamHall.Tests
                 director.Initialize();
 
                 Assert.That(director.SfxClipCountForTests, Is.EqualTo(System.Enum.GetValues(typeof(AudioCue)).Length));
+                Assert.That(director.FamilyLayerClipCountForTests, Is.EqualTo(System.Enum.GetValues(typeof(SpellFamily)).Length));
+                Assert.That(
+                    director.CustomEffectLayerClipCountForTests,
+                    Is.EqualTo(System.Enum.GetValues(typeof(CustomSpellEffectKind)).Length - 1));
+                Assert.That(
+                    director.CustomShapeEventLayerClipCountForTests,
+                    Is.EqualTo(System.Enum.GetValues(typeof(CustomShapeEventKind)).Length - 1));
+                foreach (var family in System.Enum.GetValues(typeof(SpellFamily)).Cast<SpellFamily>())
+                {
+                    Assert.That(director.HasFamilyLayerClipForTests(family), Is.True, family.ToString());
+                }
+                foreach (var effect in System.Enum.GetValues(typeof(CustomSpellEffectKind)).Cast<CustomSpellEffectKind>().Where(effect => effect != CustomSpellEffectKind.None))
+                {
+                    Assert.That(director.HasCustomEffectLayerClipForTests(effect), Is.True, effect.ToString());
+                }
+                foreach (var eventKind in System.Enum.GetValues(typeof(CustomShapeEventKind)).Cast<CustomShapeEventKind>().Where(eventKind => eventKind != CustomShapeEventKind.None))
+                {
+                    Assert.That(director.HasCustomShapeEventLayerClipForTests(eventKind), Is.True, eventKind.ToString());
+                }
+
                 Assert.That(director.BgmClipCountForTests, Is.EqualTo(2));
+                director.PlayCustomShapeEvent(CustomShapeEventKind.SlashDamage);
+                director.PlayCustomSpellEffect(CustomSpellEffectKind.Ice, SpellFamily.Water);
                 director.PlayBgm(BgmCue.AmbientTower);
                 Assert.That(director.CurrentBgmForTests, Is.EqualTo(BgmCue.AmbientTower));
                 director.PlayBgm(BgmCue.None);
@@ -1088,6 +1110,53 @@ namespace MagicExamHall.Tests
             Assert.That(offTarget.distance, Is.GreaterThan(offTarget.radius));
             Assert.That(completed.kind, Is.EqualTo(GoalResolutionKind.Completed));
             Assert.That(completed.goal, Is.SameAs(goals[0]));
+        }
+
+        [Test]
+        public void AttributeBeamGoalRequiresCustomEventInsteadOfBaseCompletion()
+        {
+            var goal = WorldStateGoal.AttributeBeam(
+                "beam_fire",
+                "불꽃 빛줄기",
+                SpellFamily.Fire,
+                Vector2.zero,
+                Color.red,
+                "불꽃 빛줄기가 허수아비를 맞힙니다.");
+            var system = new FloorGoalSystem();
+
+            var baseCast = system.ResolveBase(new[] { goal }, SpellFamily.Fire, Vector2.zero, isCustomShape: true);
+
+            Assert.That(baseCast.kind, Is.EqualTo(GoalResolutionKind.CustomEffectRequired));
+            Assert.That(baseCast.targetGoal, Is.SameAs(goal));
+            Assert.That(baseCast.worldEffect, Is.EqualTo("custom_event_required"));
+            Assert.That(goal.RequiresBeamHit, Is.True);
+            Assert.That(goal.MatchesCustomEvent(SpellFamily.Fire, CustomShapeEventKind.AttributeLaser), Is.True);
+            Assert.That(goal.MatchesCustomEvent(SpellFamily.Water, CustomShapeEventKind.AttributeLaser), Is.False);
+            Assert.That(goal.MatchesCustomEvent(SpellFamily.Fire, CustomShapeEventKind.DirectionalProjectile), Is.False);
+        }
+
+        [Test]
+        public void AttributeBeamClonePreservesCustomEventAndTargetRequirement()
+        {
+            var goal = WorldStateGoal.AttributeBeam(
+                    "beam_water",
+                    "물결 빛줄기",
+                    SpellFamily.Water,
+                    Vector2.one,
+                    Color.blue,
+                    "물결 빛줄기가 허수아비를 맞힙니다.",
+                    "final_exam_scarecrow")
+                .WithReaction(WorldReactionKind.CombatHit);
+
+            var clone = goal.Clone();
+
+            Assert.That(clone, Is.Not.SameAs(goal));
+            Assert.That(clone.requiredCustomEventKind, Is.EqualTo(CustomShapeEventKind.AttributeLaser));
+            Assert.That(clone.requiredBeamHitTargetId, Is.EqualTo("final_exam_scarecrow"));
+            Assert.That(clone.requirementShapeTokens, Is.EquivalentTo(new[] { "arrow" }));
+            Assert.That(clone.RequiresBeamHit, Is.True);
+            Assert.That(clone.MatchesCustomEvent(SpellFamily.Water, CustomShapeEventKind.AttributeLaser), Is.True);
+            Assert.That(clone.reactionKind, Is.EqualTo(WorldReactionKind.CombatHit));
         }
 
         private static List<StrokeSample> MakeLine(float x1, float y1, float x2, float y2, float start)

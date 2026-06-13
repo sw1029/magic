@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
@@ -36,14 +37,24 @@ namespace MagicExamHall
         private RectTransform speechBody = null!;
         private Text speakerText = null!;
         private Text bodyText = null!;
+        private Button speechNextButton = null!;
+        private Text speechNextButtonText = null!;
         private MentorProfile profile;
         private Vector3 homePosition;
         private float reactionStartedAt = -1f;
+        private string[] speechPages = Array.Empty<string>();
+        private int speechPageIndex;
 
         public string CurrentMentorName => profile.name;
         public MentorMood CurrentMood { get; private set; }
         public string SpeechText => bodyText == null ? "" : bodyText.text;
+        public int SpeechPageCount => speechPages.Length;
+        public int SpeechPageIndex => speechPageIndex;
+        public bool IsSpeechNextButtonVisible => speechNextButton != null && speechNextButton.gameObject.activeInHierarchy;
         public bool IsVisible => spriteView != null && spriteView.gameObject.activeSelf && speechPanel != null && speechPanel.gameObject.activeSelf;
+        public Vector3 WorldPositionForTests => spriteView == null ? Vector3.zero : spriteView.transform.position;
+        public float WorldScaleForTests => spriteView == null ? 0f : spriteView.transform.localScale.x;
+        public PixelSpriteKind ProfileNeutralKindForTests => profile.neutralKind;
 
         public void Initialize(Canvas canvas, Font font)
         {
@@ -83,11 +94,26 @@ namespace MagicExamHall
                 return;
             }
 
-            speechPanel.gameObject.SetActive(!string.IsNullOrWhiteSpace(text));
-            bodyText.text = CompactSpeechText(text);
+            speechPages = BuildSpeechPages(text);
+            speechPageIndex = 0;
+            speechPanel.gameObject.SetActive(speechPages.Length > 0);
+            ApplySpeechPage();
             SetMood(mood);
-            UpdateSpeechTextLayout();
             UpdateSpeechPanelPosition();
+        }
+
+        public bool AdvanceSpeechPage()
+        {
+            if (speechPages.Length == 0 || speechPageIndex >= speechPages.Length - 1)
+            {
+                RefreshSpeechNextButton();
+                return false;
+            }
+
+            speechPageIndex++;
+            ApplySpeechPage();
+            UpdateSpeechPanelPosition();
+            return true;
         }
 
         public void HideSpeech()
@@ -98,6 +124,14 @@ namespace MagicExamHall
             }
 
             speechPanel.gameObject.SetActive(false);
+            speechPages = Array.Empty<string>();
+            speechPageIndex = 0;
+            if (bodyText != null)
+            {
+                bodyText.text = "";
+            }
+
+            RefreshSpeechNextButton();
         }
 
         public void Tick(float time)
@@ -165,12 +199,14 @@ namespace MagicExamHall
             ApplySpeechBubbleBody(speechBody, borderColor);
             speakerText = CreateText("Mentor Speaker", speechBody, profile.name, 12, FontStyle.Bold, new Vector2(14, -9), new Vector2(SpeechTextWidth, 18), Anchor.TopLeft, font);
             bodyText = CreateText("Mentor Speech Text", speechBody, "", 15, FontStyle.Normal, new Vector2(14, -SpeechTextTop), new Vector2(SpeechTextWidth, SpeechTextMinHeight), Anchor.TopLeft, font);
+            speechNextButton = CreateSpeechNextButton(speechBody, font);
             speakerText.color = new Color(0.15f, 0.22f, 0.24f);
             bodyText.color = new Color(0.10f, 0.12f, 0.13f);
             bodyText.lineSpacing = 1.0f;
             bodyText.resizeTextForBestFit = true;
             bodyText.resizeTextMinSize = 13;
             bodyText.resizeTextMaxSize = 15;
+            RefreshSpeechNextButton();
             speechPanel.gameObject.SetActive(false);
         }
 
@@ -235,52 +271,130 @@ namespace MagicExamHall
             speechPanel.anchoredPosition = desired;
         }
 
-        private static string CompactSpeechText(string text)
+        private void ApplySpeechPage()
+        {
+            if (bodyText == null)
+            {
+                return;
+            }
+
+            bodyText.text = speechPages.Length == 0 ? "" : speechPages[Mathf.Clamp(speechPageIndex, 0, speechPages.Length - 1)];
+            RefreshSpeechNextButton();
+            UpdateSpeechTextLayout();
+        }
+
+        private void RefreshSpeechNextButton()
+        {
+            if (speechNextButton == null)
+            {
+                return;
+            }
+
+            var visible = speechPanel != null &&
+                speechPanel.gameObject.activeSelf &&
+                speechPages.Length > 1 &&
+                speechPageIndex < speechPages.Length - 1;
+            speechNextButton.gameObject.SetActive(visible);
+            if (speechNextButtonText != null)
+            {
+                speechNextButtonText.text = ">";
+            }
+        }
+
+        private static string[] BuildSpeechPages(string text)
+        {
+            var visualLines = new List<string>();
+            foreach (var line in BuildSpeechLines(text))
+            {
+                visualLines.AddRange(WrapSpeechLine(line));
+            }
+
+            if (visualLines.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            var pages = new List<string>();
+            for (var index = 0; index < visualLines.Count; index += 2)
+            {
+                var secondLine = index + 1 < visualLines.Count ? $"\n{visualLines[index + 1]}" : "";
+                pages.Add($"{visualLines[index]}{secondLine}");
+            }
+
+            return pages.ToArray();
+        }
+
+        private static IEnumerable<string> BuildSpeechLines(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
-                return "";
+                yield break;
             }
 
             var contextual = BuildContextualSpeech(text);
             if (!string.IsNullOrWhiteSpace(contextual))
             {
-                return contextual;
-            }
-
-            var rawLines = text
-                .Replace("\r", "\n")
-                .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            if (rawLines.Length == 0)
-            {
-                return "";
-            }
-
-            var first = ShortenSpeechLine(CleanSpeechLine(rawLines[0]));
-            if (rawLines.Length == 1)
-            {
-                return first;
-            }
-
-            var secondIndex = 1;
-            for (var index = 1; index < rawLines.Length; index++)
-            {
-                var candidate = CleanSpeechLine(rawLines[index]);
-                if (ContainsActionHint(candidate))
+                foreach (var line in SplitSpeechLines(contextual))
                 {
-                    secondIndex = index;
-                    break;
+                    yield return line;
                 }
             }
 
-            var second = ShortenSpeechLine(CleanSpeechLine(rawLines[secondIndex]));
-            return string.IsNullOrWhiteSpace(second) ? first : $"{first}\n{second}";
+            foreach (var line in SplitSpeechLines(text))
+            {
+                yield return line;
+            }
+        }
+
+        private static IEnumerable<string> SplitSpeechLines(string text)
+        {
+            var rawLines = text
+                .Replace("\r", "\n")
+                .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var rawLine in rawLines)
+            {
+                var line = CleanSpeechLine(rawLine);
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    yield return line;
+                }
+            }
+        }
+
+        private static IEnumerable<string> WrapSpeechLine(string line)
+        {
+            var remaining = line.Trim();
+            while (remaining.Length > MaxSpeechLineLength)
+            {
+                var splitAt = FindSpeechLineBreak(remaining, MaxSpeechLineLength);
+                yield return remaining[..splitAt].Trim();
+                remaining = remaining[splitAt..].TrimStart();
+            }
+
+            if (!string.IsNullOrWhiteSpace(remaining))
+            {
+                yield return remaining;
+            }
+        }
+
+        private static int FindSpeechLineBreak(string text, int maxLength)
+        {
+            var splitAt = Mathf.Min(maxLength, text.Length);
+            for (var index = splitAt - 1; index >= 8; index--)
+            {
+                if (char.IsWhiteSpace(text[index]))
+                {
+                    return index + 1;
+                }
+            }
+
+            return splitAt;
         }
 
         private static string BuildContextualSpeech(string text)
         {
             var normalized = text.Replace("\r", "\n").Replace("\n", " ").Trim();
-            if (ContainsAny(normalized, "gold capture", "레퍼런스", "책장"))
+            if (ContainsAny(normalized, "gold capture", "레퍼런스", "커스텀 도형", "슬롯으로"))
             {
                 return "책장에 도형 샘플이 있어.\n보기 눌러 슬롯에 담아 봐.";
             }
@@ -290,17 +404,22 @@ namespace MagicExamHall
                 return "바닥에 그린 선이 문양이 돼.\n먼저 물만 따라 그려 봐.";
             }
 
+            if (ContainsAny(normalized, "보호막", "안정화"))
+            {
+                var baseFamilyLabel = ExtractBaseFamilyLabel(normalized);
+                return string.IsNullOrWhiteSpace(baseFamilyLabel)
+                    ? "빛나는 원을 그렸어.\n보호막으로 굳었어."
+                    : $"{baseFamilyLabel} 빛나는 원을 그렸어.\n보호막으로 굳었어.";
+            }
+
             if (ContainsAny(normalized, "빛나는 원", "기본 문양 위"))
             {
                 return "기본 문양을 먼저 만들고,\n그 안에 도형을 얹어 봐.";
             }
 
-            if (ContainsAny(normalized, "보호막", "안정화"))
+            if (ContainsAny(normalized, "성좌심의 빈 조각", "마지막 시험은 하나의 정답"))
             {
-                var baseFamilyLabel = ExtractBaseFamilyLabel(normalized);
-                return string.IsNullOrWhiteSpace(baseFamilyLabel)
-                    ? "기초 속성 마법진을 그렸어.\n보호막으로 굳었어."
-                    : $"{baseFamilyLabel} 기초 속성 마법진을 그렸어.\n보호막으로 굳었어.";
+                return "성좌심의 빈 조각을 봐.\n배운 문양으로 하나씩 채워 봐.";
             }
 
             return "";
@@ -362,6 +481,17 @@ namespace MagicExamHall
         private static string ShortenSpeechLine(string line)
         {
             var trimmed = line.Trim();
+            if (trimmed.Contains("의도는 보여", StringComparison.Ordinal) &&
+                trimmed.Contains("쪽도 섞였어", StringComparison.Ordinal))
+            {
+                return trimmed.Replace("음, ", "", StringComparison.Ordinal).Replace(" 다만 ", " ", StringComparison.Ordinal);
+            }
+
+            if (trimmed.Contains("끝점만 시작점", StringComparison.Ordinal))
+            {
+                return "끝점만 시작점 옆에 붙여 봐.";
+            }
+
             return trimmed.Length <= MaxSpeechLineLength
                 ? trimmed
                 : trimmed[..(MaxSpeechLineLength - 3)] + "...";
@@ -417,6 +547,26 @@ namespace MagicExamHall
             image.color = Color.white;
             image.material = PixelMaterialProvider.UiMaterial;
             image.raycastTarget = false;
+        }
+
+        private Button CreateSpeechNextButton(Transform parent, Font font)
+        {
+            var rect = CreateRect("Mentor Speech Next Button", parent, new Vector2(-14f, 12f), new Vector2(28f, 22f), Anchor.BottomRight);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.color = new Color(0.16f, 0.28f, 0.30f, 0.88f);
+            image.material = PixelMaterialProvider.UiMaterial;
+            image.raycastTarget = true;
+
+            var button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            button.onClick.AddListener(() => AdvanceSpeechPage());
+
+            speechNextButtonText = CreateText("Mentor Speech Next Button Text", rect, ">", 18, FontStyle.Bold, Vector2.zero, Vector2.zero, Anchor.Stretch, font);
+            speechNextButtonText.alignment = TextAnchor.MiddleCenter;
+            speechNextButtonText.color = new Color(0.97f, 0.99f, 0.98f, 1f);
+            speechNextButtonText.raycastTarget = false;
+
+            return button;
         }
 
         private static RectTransform CreatePanel(string name, Transform parent, Vector2 anchoredPosition, Vector2 size, Anchor anchor, Color color)
@@ -555,6 +705,11 @@ namespace MagicExamHall
 
         public static MentorProfile ForFloor(int floor)
         {
+            if (floor == 5)
+            {
+                return new MentorProfile("고깔모자 시험관", "Floor5_GrandWizard", new Color(0.96f, 0.86f, 0.74f), new Color(0.18f, 0.16f, 0.42f), PixelSpriteKind.MentorGrandWizardNeutral, PixelSpriteKind.MentorGrandWizardHappy, PixelSpriteKind.MentorGrandWizardFrown, new Vector3(0f, 3.36f, 0f), 1.02f);
+            }
+
             return floor switch
             {
                 1 => new MentorProfile("입문 조교", "Floor1_TutorialMentor", new Color(0.95f, 0.84f, 0.70f), new Color(0.52f, 0.32f, 0.86f), PixelSpriteKind.MentorNeutral, PixelSpriteKind.MentorHappy, PixelSpriteKind.MentorFrown, new Vector3(-7.05f, -3.72f, 0f), 0.88f),

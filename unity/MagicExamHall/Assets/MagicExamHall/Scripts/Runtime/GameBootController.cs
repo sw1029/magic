@@ -474,7 +474,9 @@ namespace MagicExamHall
             CreateButton("Codex Dialogue Tab", codexPanel, "대사", new Vector2(-300f, 164f), () => SetCodexTab(MagicNoteCategory.Dialogue));
             CreateButton("Codex Floor Tab", codexPanel, "층노트", new Vector2(-52f, 164f), () => SetCodexTab(MagicNoteCategory.FloorNote));
             CreateButton("Codex Discovery Tab", codexPanel, "발견", new Vector2(196f, 164f), () => SetCodexTab(MagicNoteCategory.Discovery));
-            codexText = CreateText("Codex Text", codexPanel, "", 15, FontStyle.Normal, new Vector2(0f, 12f), new Vector2(820, 380), Anchor.Center, TextAnchor.UpperLeft, new Color(0.93f, 0.96f, 1f));
+            // Sits below the tab row (y=164) and above the save/close buttons
+            // (y=-230); the old box started at y=202 and ran straight through the tabs.
+            codexText = CreateText("Codex Text", codexPanel, "", 15, FontStyle.Normal, new Vector2(0f, -42f), new Vector2(1000, 300), Anchor.Center, TextAnchor.UpperLeft, new Color(0.93f, 0.96f, 1f));
             CreateButton("Codex Manual Save", codexPanel, "수동 저장", new Vector2(82f, -230f), ManualSaveFromCodex);
             codexCloseButton = CreateButton("Codex Close", codexPanel, "닫기", new Vector2(330f, -230f), ResumeGameplay);
 

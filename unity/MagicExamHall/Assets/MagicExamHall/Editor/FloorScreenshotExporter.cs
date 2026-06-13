@@ -27,6 +27,113 @@ namespace MagicExamHall.Editor
         }
 
         /// <summary>
+        /// Captures every boot/menu screen (title, main menu, options, pause, codex,
+        /// discovery codex, ending report) for a full UI review pass.
+        /// </summary>
+        public static void ExportAllScreens()
+        {
+            var output = GetArgument("-floorScreenshotOutput");
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                output = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "..", "outputs", "unity-all-screens"));
+            }
+
+            Directory.CreateDirectory(output);
+            EditorSceneManager.OpenScene(ScenePath);
+
+            var controller = UnityEngine.Object.FindFirstObjectByType<ExamGameController>();
+            if (controller == null)
+            {
+                throw new InvalidOperationException("ExamGameController was not found in the scene.");
+            }
+
+            if (controller.ActiveGoalCount == 0)
+            {
+                InvokePrivate(controller, "Awake");
+            }
+
+            var boot = UnityEngine.Object.FindFirstObjectByType<GameBootController>();
+            if (boot == null)
+            {
+                throw new InvalidOperationException("GameBootController was not found in the scene.");
+            }
+
+            var camera = controller.mainCamera != null ? controller.mainCamera : Camera.main;
+            var canvas = controller.canvas;
+            if (camera == null || canvas == null)
+            {
+                throw new InvalidOperationException("No camera/canvas available for screen capture.");
+            }
+
+            var pixelPerfect = PixelRenderSetup.ConfigureCamera(camera, ExamGameController.GameplayCameraOrthographicSize, camera.backgroundColor);
+            var wasEnabled = pixelPerfect != null && pixelPerfect.enabled;
+            if (pixelPerfect != null)
+            {
+                pixelPerfect.enabled = false;
+            }
+
+            camera.transform.position = new Vector3(0f, 0f, -10f);
+            camera.orthographicSize = ExamGameController.GameplayCameraOrthographicSize;
+            var originalMode = canvas.renderMode;
+            var originalCamera = canvas.worldCamera;
+            var originalPlane = canvas.planeDistance;
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = camera;
+            canvas.planeDistance = 1f;
+
+            void Shot(string name)
+            {
+                Canvas.ForceUpdateCanvases();
+                Capture(camera, output, name);
+            }
+
+            try
+            {
+                InvokePrivate(boot, "ShowTitle");
+                Shot("screen_01_title.png");
+
+                boot.ShowMainMenuForTests();
+                Shot("screen_02_main_menu.png");
+
+                InvokePrivate(boot, "ShowOptions", GameBootState.MainMenu);
+                Shot("screen_03_options.png");
+
+                boot.StartNewGameForTests();
+                Shot("screen_04_gameplay_floor1.png");
+
+                boot.ShowPauseForTests();
+                Shot("screen_05_pause.png");
+
+                boot.ResumeGameplayForTests();
+                boot.ShowCodexForTests();
+                Shot("screen_06_codex.png");
+
+                boot.ShowDiscoveryCodexForTests();
+                Shot("screen_07_discovery_codex.png");
+
+                // Drive to the ending report: jump to the final floor, satisfy it, then
+                // advance (which shows the report immediately when already on the last floor).
+                boot.ResumeGameplayForTests();
+                controller.LoadFloorForTests(controller.FloorCount - 1);
+                controller.CompleteCurrentFloorForTests();
+                controller.AdvanceFloorForTests();
+                Shot("screen_08_ending_report.png");
+            }
+            finally
+            {
+                if (pixelPerfect != null)
+                {
+                    pixelPerfect.enabled = wasEnabled;
+                }
+                canvas.renderMode = originalMode;
+                canvas.worldCamera = originalCamera;
+                canvas.planeDistance = originalPlane;
+            }
+
+            Debug.Log($"All screens exported to {output}");
+        }
+
+        /// <summary>
         /// Captures the boot/title screen (no StartNewGame) so the first thing a
         /// player sees can be reviewed like the floor shots.
         /// </summary>

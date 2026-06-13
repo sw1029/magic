@@ -1130,8 +1130,14 @@ namespace MagicExamHall
             BuildQuestScrollUi();
             UpdateResultPanelLayout();
 
-            reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(760, 520), Anchor.Center, new Color(0.035f, 0.045f, 0.065f, 0.96f));
-            reportText = CreateText("Report Text", reportPanel, "", 17, FontStyle.Normal, new Vector2(28, -28), new Vector2(704, 464), Anchor.TopLeft);
+            // Full-screen opaque backdrop so the finished floor does not show around
+            // the report, with a framed card holding the summary text.
+            reportPanel = CreatePanel("Ending Report", canvas.transform, Vector2.zero, new Vector2(1280, 720), Anchor.Center, new Color(0.018f, 0.026f, 0.042f, 0.99f));
+            var reportCard = CreateImage("Ending Report Card", reportPanel, Vector2.zero, new Vector2(908, 600), Anchor.Center, new Color(0.05f, 0.065f, 0.098f, 1f));
+            reportCard.raycastTarget = false;
+            AddPanelBorder(reportCard.rectTransform, new Color(1f, 0.82f, 0.38f, 0.55f), 2f);
+            reportText = CreateText("Report Text", reportPanel, "", 18, FontStyle.Normal, new Vector2(0f, 0f), new Vector2(844, 540), Anchor.Center);
+            reportText.alignment = TextAnchor.UpperLeft;
             reportPanel.gameObject.SetActive(false);
 
             toastPanel = CreatePanel("Action Toast", canvas.transform, new Vector2(-20, -20), new Vector2(500, 54), Anchor.TopRight, new Color(0.018f, 0.024f, 0.038f, 0.94f));

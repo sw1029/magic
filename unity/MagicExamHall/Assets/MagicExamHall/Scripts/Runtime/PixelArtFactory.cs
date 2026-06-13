@@ -119,6 +119,9 @@ namespace MagicExamHall
                 case PixelSpriteKind.Pulse:
                     DrawPulse(texture, primary);
                     break;
+                case PixelSpriteKind.LightHalo:
+                    DrawLightHalo(texture, primary, secondary);
+                    break;
                 case PixelSpriteKind.FloorTile:
                     DrawFloorTile(texture, primary, secondary);
                     break;
@@ -690,6 +693,29 @@ namespace MagicExamHall
             Line(texture, 16, 3, 16, 29, new Color(glow.r, glow.g, glow.b, 0.42f));
             Line(texture, 3, 16, 29, 16, new Color(glow.r, glow.g, glow.b, 0.42f));
             Set(texture, 16, 16, Color.white);
+        }
+
+        private static void DrawLightHalo(Texture2D texture, Color primary, Color secondary)
+        {
+            var warmCore = Mix(primary, Color.white, 0.32f);
+            for (var y = 0; y < Size; y++)
+            {
+                for (var x = 0; x < Size; x++)
+                {
+                    var dx = (x + 0.5f - 16f) / 16f;
+                    var dy = (y + 0.5f - 16f) / 16f;
+                    var distance = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (distance > 1f)
+                    {
+                        continue;
+                    }
+
+                    var strength = Mathf.Pow(1f - distance, 1.55f);
+                    var color = Mix(secondary, warmCore, Mathf.Clamp01(strength * 1.25f));
+                    color.a = Mathf.Clamp01(primary.a * strength * 0.72f);
+                    Set(texture, x, y, color);
+                }
+            }
         }
 
         private static void DrawFloorTile(Texture2D texture, Color primary, Color secondary)
@@ -1447,6 +1473,7 @@ namespace MagicExamHall
         MentorWatcherFrown = 45,
         MentorArchivistNeutral = 46,
         MentorArchivistHappy = 47,
-        MentorArchivistFrown = 48
+        MentorArchivistFrown = 48,
+        LightHalo = 49
     }
 }

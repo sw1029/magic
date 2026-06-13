@@ -206,6 +206,7 @@ namespace MagicExamHall
         private string lastGoalProximityGuideGoalId = "";
         private bool gameplayInputEnabled = true;
         private float floorEnteredAt;
+        private float sessionStartedAt;
         private int castsOnCurrentFloor;
         private bool firstFloorGhostShown;
         private bool firstFloorLongSilenceShown;
@@ -282,6 +283,7 @@ namespace MagicExamHall
         public int ActiveShelfGuideArrowCountForTests => shelfGuideArrows.Count(arrow => arrow.IsActive);
         public bool IsFloorSkipButtonVisibleForTests => floorSkipButton != null && floorSkipButton.gameObject.activeInHierarchy;
         public string OutputDirectory => logger?.OutputDirectory ?? "";
+        public bool IsLogCollectionEnabledForTests => logger?.IsCollectionEnabled ?? false;
         public float PendingAdvanceSecondsForTests => pendingAdvanceAt < 0f ? -1f : pendingAdvanceAt - Time.time;
         public float LastSealLifetimeSecondsForTests => seals.Count == 0 ? 0f : seals[^1].seal.expiresAt - seals[^1].seal.createdAt;
         public IReadOnlyList<OverlayOperator> LastOverlayStack => seals.Count == 0 ? Array.Empty<OverlayOperator>() : seals[^1].seal.overlayStack;
@@ -304,6 +306,7 @@ namespace MagicExamHall
         public bool IsPlatformMotionActiveForTests => platformMotionActive;
         public Vector2 CurrentStageSafePositionForTests => safePosition;
         public Vector2 CustomReferenceShelfPositionForTests => CurrentCustomReferencePosition();
+        public Vector2 CustomReferenceInteractionPositionForTests => CurrentCustomReferenceInteractionPosition();
         public bool IsQuestScrollVisibleForTests => questScrollPanel != null && questScrollPanel.gameObject.activeInHierarchy;
         public bool IsQuestScrollCollapsedForTests => questScrollCollapsed;
         public bool IsQuestScrollBodyActiveForTests => questScrollBodyRoot != null && questScrollBodyRoot.gameObject.activeSelf;
@@ -413,6 +416,7 @@ namespace MagicExamHall
         {
             sessionId = $"unity-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
             logger = new ExamLogger(sessionId);
+            sessionStartedAt = Time.time;
             uiFont = LoadGameFont();
             floorController = new FloorController();
             magicNote = new MagicNote();
@@ -974,6 +978,7 @@ namespace MagicExamHall
             sessionId = $"unity-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
             logger = new ExamLogger(sessionId);
             endingReport = new EndingReport();
+            sessionStartedAt = Time.time;
             trialCounter = 0;
             castsOnCurrentFloor = 0;
             CurrentAssistLevel = 0;
@@ -1107,7 +1112,11 @@ namespace MagicExamHall
 
         private static void ConfigureMainCamera(Camera camera)
         {
-            PixelRenderSetup.ConfigureCamera(camera, GameplayCameraOrthographicSize, new Color(0.035f, 0.043f, 0.055f));
+            PixelRenderSetup.ConfigureCamera(camera, GameplayCameraOrthographicSize, new Color(0.055f, 0.066f, 0.084f));
+            PixelRenderSetup.ConfigureGlobalLight(
+                PixelRenderSetup.EnsureGlobalLight(),
+                new Color(1f, 0.96f, 0.88f),
+                PixelRenderSetup.DefaultGlobalLightIntensity);
         }
 
         private void BuildUi()
@@ -1272,6 +1281,11 @@ namespace MagicExamHall
             questProgressText = CreateText("Quest Progress Text", questScrollBodyRoot, "", 12, FontStyle.Bold, new Vector2(QuestScrollContentInset, -252f), new Vector2(QuestScrollContentWidth, 26f), Anchor.TopLeft);
             ApplyQuestScrollReadableText(questProgressText, new Color(0.16f, 0.070f, 0.025f, 1f), emphasized: false);
             questProgressText.alignment = TextAnchor.MiddleLeft;
+            questProgressText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            questProgressText.verticalOverflow = VerticalWrapMode.Truncate;
+            questProgressText.resizeTextForBestFit = true;
+            questProgressText.resizeTextMinSize = 10;
+            questProgressText.resizeTextMaxSize = 12;
             questProgressText.raycastTarget = false;
 
             ApplyQuestScrollAnimationState();
@@ -1421,6 +1435,11 @@ namespace MagicExamHall
         }
 
         private void CloseFirstFloorLetter()
+        {
+            HideFirstFloorLetter();
+        }
+
+        public void HideBlockingLetterOverlayForCodex()
         {
             HideFirstFloorLetter();
         }
@@ -2009,8 +2028,9 @@ namespace MagicExamHall
             }
 
             var shelfPosition = CurrentCustomReferencePosition();
+            var interactionPosition = CurrentCustomReferenceInteractionPosition();
             var hasReferences = CurrentCustomShapeReferences().Count > 0;
-            var closeToShelf = hasReferences && Vector2.Distance(player.position, shelfPosition) <= CustomReferenceShelfRadius;
+            var closeToShelf = hasReferences && Vector2.Distance(player.position, interactionPosition) <= CustomReferenceShelfRadius;
             var shouldShowBubble = closeToShelf &&
                                    !IsPlayerNearActiveGoalSymbol(CustomReferenceGoalSuppressRadius) &&
                                    !IsCustomReferencePanelOpenForTests &&
@@ -2022,6 +2042,13 @@ namespace MagicExamHall
                 return;
             }
 
+            mentor?.HideSpeech();
+            if (notePanel != null)
+            {
+                notePanel.gameObject.SetActive(false);
+            }
+
+            customReferenceBubble.SetAsLastSibling();
             customReferenceBubble.anchoredPosition = WorldToCanvasPosition(shelfPosition + CustomReferenceBubbleShelfOffset);
         }
 
@@ -2132,6 +2159,16 @@ namespace MagicExamHall
             return activeStageDefinition == null ? WestBookcasePosition : activeStageDefinition.customReferencePosition;
         }
 
+        private Vector2 CurrentCustomReferenceInteractionPosition()
+        {
+            if (activeStageDefinition == null)
+            {
+                return WestBookcasePosition;
+            }
+
+            return new Vector2(activeStageDefinition.customReferencePosition.x, activeStageDefinition.playerStart.y + 0.08f);
+        }
+
         private IReadOnlyList<CustomShapeReferenceDefinition> CurrentCustomShapeReferences()
         {
             return floorController?.Current.number switch
@@ -2159,6 +2196,12 @@ namespace MagicExamHall
             RebuildCustomReferenceCards();
             customReferencePanel.gameObject.SetActive(true);
             customReferencePanel.SetAsLastSibling();
+            mentor?.HideSpeech();
+            if (notePanel != null)
+            {
+                notePanel.gameObject.SetActive(false);
+            }
+
             questReferencePanelOpenedThisFloor = true;
             TickQuestChecklist(forceRefresh: true);
             if (customReferenceBubble != null)
@@ -2375,10 +2418,10 @@ namespace MagicExamHall
 
         private void ApplyFloorTheme(FloorDefinition floor)
         {
-            var baseBackground = new Color(0.035f, 0.043f, 0.055f);
+            var baseBackground = new Color(0.060f, 0.072f, 0.090f);
             if (mainCamera != null)
             {
-                mainCamera.backgroundColor = Color.Lerp(baseBackground, floor.accentColor, 0.10f);
+                mainCamera.backgroundColor = Color.Lerp(baseBackground, floor.accentColor, 0.12f);
             }
 
             if (hudPanel != null)
@@ -2409,13 +2452,13 @@ namespace MagicExamHall
         {
             var floorRoot = new GameObject($"Floor {floor.number} - {floor.title}");
             floorObjects.Add(floorRoot);
-            CreateWorldSprite("Exam Hall Backdrop", Vector2.zero, Vector3.one, new Color(0.045f, 0.052f, 0.067f), new Color(0.035f, 0.04f, 0.052f), PixelSpriteKind.FloorTile, -9, true, new Vector2(20.5f, 11.6f), floorRoot.transform);
-            CreateWorldSprite("Stone Tile Floor", Vector2.zero, Vector3.one, new Color(0.15f, 0.17f, 0.22f), new Color(0.09f, 0.11f, 0.15f), PixelSpriteKind.FloorTile, -7, true, new Vector2(16.4f, 10f), floorRoot.transform);
-            CreateWorldSprite("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, new Color(0.22f, 0.20f, 0.27f), floor.accentColor, PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 1.15f), floorRoot.transform);
-            CreateWorldSprite("South Carved Wall", new Vector2(0f, -4.95f), Vector3.one, new Color(0.18f, 0.17f, 0.22f), new Color(0.50f, 0.40f, 0.20f), PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 0.8f), floorRoot.transform);
+            CreateWorldSprite("Exam Hall Backdrop", Vector2.zero, Vector3.one, new Color(0.075f, 0.086f, 0.108f), new Color(0.052f, 0.062f, 0.080f), PixelSpriteKind.FloorTile, -9, true, new Vector2(20.5f, 11.6f), floorRoot.transform);
+            CreateWorldSprite("Stone Tile Floor", Vector2.zero, Vector3.one, new Color(0.215f, 0.238f, 0.295f), new Color(0.130f, 0.152f, 0.205f), PixelSpriteKind.FloorTile, -7, true, new Vector2(16.4f, 10f), floorRoot.transform);
+            CreateWorldSprite("North Carved Wall", new Vector2(0f, 4.95f), Vector3.one, new Color(0.305f, 0.285f, 0.350f), Color.Lerp(floor.accentColor, Color.white, 0.12f), PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 1.15f), floorRoot.transform);
+            CreateWorldSprite("South Carved Wall", new Vector2(0f, -4.95f), Vector3.one, new Color(0.260f, 0.245f, 0.305f), new Color(0.62f, 0.50f, 0.28f), PixelSpriteKind.WallTrim, -4, true, new Vector2(16.4f, 0.8f), floorRoot.transform);
             CreateWorldSprite("Center Runner", new Vector2(0f, 0.12f), Vector3.one, floor.rugColor, floor.accentColor, PixelSpriteKind.Rug, -5, true, new Vector2(2.2f, 7.6f), floorRoot.transform);
-            CreateWorldSprite("West Bookcase", WestBookcasePosition, Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
-            CreateWorldSprite("East Bookcase", new Vector2(7.25f, 1.1f), Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
+            CreateWorldSprite("West Bookcase", WestBookcasePosition, Vector3.one * 1.15f, new Color(0.50f, 0.30f, 0.17f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
+            CreateWorldSprite("East Bookcase", new Vector2(7.25f, 1.1f), Vector3.one * 1.15f, new Color(0.50f, 0.30f, 0.17f), floor.accentColor, PixelSpriteKind.Bookshelf, -1, false, Vector2.one, floorRoot.transform);
             if (floor.number == CustomReferenceFloorNumber)
             {
                 CreateBookcaseGuideArrow("West Bookcase Guide Arrow", WestBookcasePosition, floor.accentColor, emphasized: true, floorRoot.transform);
@@ -2423,6 +2466,8 @@ namespace MagicExamHall
             }
             var northwestCandle = CreateWorldSprite("Northwest Candle", new Vector2(-6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
             var northeastCandle = CreateWorldSprite("Northeast Candle", new Vector2(6.85f, 3.65f), Vector3.one * 0.85f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 2, false, Vector2.one, floorRoot.transform);
+            CreateTorchLightSpread("Northwest Candle", new Vector2(-6.85f, 3.65f), 3.1f, floorRoot.transform, 0.15f);
+            CreateTorchLightSpread("Northeast Candle", new Vector2(6.85f, 3.65f), 3.1f, floorRoot.transform, 1.04f);
             RegisterSpriteAccent(northwestCandle, SpriteAccentAnimationKind.CandleFlicker, 0.15f);
             RegisterSpriteAccent(northeastCandle, SpriteAccentAnimationKind.CandleFlicker, 1.04f);
 
@@ -2658,7 +2703,32 @@ namespace MagicExamHall
             CreateWorldSprite("Crossing Reference Bookcase", definition.customReferencePosition, Vector3.one * 1.15f, new Color(0.42f, 0.23f, 0.12f), floorController.Current.accentColor, PixelSpriteKind.Bookshelf, 2, false, Vector2.one, parent);
             CreateBookcaseGuideArrow("Crossing Reference Bookcase Guide Arrow", definition.customReferencePosition, floorController.Current.accentColor, emphasized: true, parent);
             var crossingTorch = CreateWorldSprite("Crossing West Torch", definition.customReferencePosition + new Vector2(1.6f, 1.1f), Vector3.one * 0.78f, new Color(0.63f, 0.57f, 0.44f), new Color(1f, 0.56f, 0.15f), PixelSpriteKind.Candle, 4, false, Vector2.one, parent);
+            CreateTorchLightSpread("Crossing West Torch", definition.customReferencePosition + new Vector2(1.6f, 1.1f), 3.45f, parent, 1.72f);
             RegisterSpriteAccent(crossingTorch, SpriteAccentAnimationKind.CandleFlicker, 1.72f);
+        }
+
+        private GameObject CreateTorchLightSpread(string name, Vector2 position, float radius, Transform parent, float phase)
+        {
+            var glow = CreateWorldSprite(
+                $"{name} Light Spread",
+                position + new Vector2(0f, -0.05f),
+                Vector3.one * radius,
+                new Color(1f, 0.60f, 0.18f, 0.62f),
+                new Color(0.58f, 0.24f, 0.08f, 0.18f),
+                PixelSpriteKind.LightHalo,
+                -3,
+                false,
+                Vector2.one,
+                parent);
+            var renderer = glow.GetComponent<SpriteRenderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = PixelMaterialProvider.AdditiveMaterial;
+                renderer.color = new Color(1f, 0.94f, 0.74f, 0.46f);
+            }
+
+            RegisterSpriteAccent(glow, SpriteAccentAnimationKind.TorchGlow, phase);
+            return glow;
         }
 
         private void CreateStageRouteBoundaryCues(FloorStageDefinition definition, Transform parent)
@@ -3521,24 +3591,23 @@ namespace MagicExamHall
 
         private string BuildBaseResultSpeech(BaseRecognitionResult result, string label, string resultSummary)
         {
-            var next = ConversationalNext(resultSummary);
             if (result.spell.status == RecognitionStatus.Recognized)
             {
                 var extra = result.spell.isCustomShape ? " 커스텀 도형도 제대로 잡혔고." : "";
-                return $"좋아, {label}은 됐어.{extra}\n{ShortLine(QualityCoachLine(result.spell.quality), 42)}\n{next}";
+                return $"좋아, {label}은 됐어.{extra}\n{ConversationalNext(resultSummary)}";
             }
 
             if (result.spell.status == RecognitionStatus.Incomplete)
             {
-                return $"{label} 쪽으로 보이긴 하는데 아직 덜 완성됐어.\n{ShortLine(result.spell.feedbackReason, 54)}\n{next}";
+                return $"{label} 쪽으로 보이긴 해. 아직 마무리가 덜 됐어.\n{BaseActionLine(result.spell)}";
             }
 
             if (result.spell.status == RecognitionStatus.Ambiguous)
             {
-                return $"음, {label}로 보기엔 조금 헷갈려.\n{ShortLine(result.spell.feedbackReason, 54)}\n{next}";
+                return $"{AmbiguousBaseLead(result.spell, label)}\n{BaseActionLine(result.spell)}";
             }
 
-            return $"이번 건 {label}로 보기엔 좀 어려워.\n{ShortLine(result.spell.feedbackReason, 54)}\n{next}";
+            return $"이번 건 {label}로 읽기엔 조금 어려워.\n{BaseActionLine(result.spell)}";
         }
 
         private string BuildOverlayResultSpeech(
@@ -3579,7 +3648,34 @@ namespace MagicExamHall
                 return "다음 동작은 바로 이어서 해도 돼.";
             }
 
-            return $"다음엔 {ShortLine(resultSummary, 64)}";
+            return $"다음엔 {ShortLine(resultSummary, 44)}";
+        }
+
+        private static string AmbiguousBaseLead(SpellResult spell, string label)
+        {
+            var target = SpellLabels.Korean(spell.targetFamily);
+            var competitor = spell.preIntentFamily.HasValue && spell.preIntentFamily.Value != spell.targetFamily
+                ? SpellLabels.Korean(spell.preIntentFamily.Value)
+                : "";
+            if (!string.IsNullOrWhiteSpace(competitor))
+            {
+                return $"음, {target} 의도는 보여. 다만 {competitor} 쪽도 섞였어.";
+            }
+
+            return $"음, {label}로 보이긴 하는데 아직 애매해.";
+        }
+
+        private static string BaseActionLine(SpellResult spell)
+        {
+            return spell.targetFamily switch
+            {
+                SpellFamily.Water => "한 번에 둥글게 돌리고 끝점만 시작점 옆에 붙여 봐.",
+                SpellFamily.Fire => "세 꼭짓점을 크게 잡고 마지막 선을 처음 점으로 닫아 봐.",
+                SpellFamily.Wind => "위, 가운데, 아래 세 줄을 짧고 평행하게 그어 봐.",
+                SpellFamily.Earth => "윗변은 좁게, 아랫변은 넓게 잡고 네 변을 닫아 봐.",
+                SpellFamily.Life => "작게 감아 돌면서 끝을 시작점 근처로 데려와 봐.",
+                _ => "큰 실루엣을 먼저 맞추고 다시 그려 봐."
+            };
         }
 
         private void UpdateResultPanelLayout()
@@ -5378,7 +5474,7 @@ namespace MagicExamHall
                 var goal = CurrentFirstFloorTutorialGoal() ?? activeGoals.FirstOrDefault(item => item.requiredBase.HasValue);
                 if (goal != null && goal.requiredBase.HasValue)
                 {
-                    ShowMagicNote("우클릭을 누른 채 표식 근처 바닥에 선을 그어 보세요. 흐릿한 선을 따라 첫 문양을 완성하면 됩니다.", MentorMood.Neutral);
+                    ShowMagicNote("우클릭 누르고\n흐릿한 선만 따라 그려 봐.", MentorMood.Neutral);
                     PlayGhostGesture(goal.requiredBase.Value, goal.position);
                 }
             }
@@ -5386,7 +5482,7 @@ namespace MagicExamHall
             if (!firstFloorLongSilenceShown && elapsed >= 300f)
             {
                 firstFloorLongSilenceShown = true;
-                ShowMagicNote("아직 시전하지 않았다면 목표 표식 바로 옆에서 시작하세요. 물은 닫힌 원, 바람은 평행한 세 줄입니다.", MentorMood.Neutral);
+                ShowMagicNote("표식 바로 옆에서 시작해 봐.\n물은 둥글게, 바람은 세 줄이야.", MentorMood.Neutral);
             }
         }
 
@@ -5622,7 +5718,7 @@ namespace MagicExamHall
             var duration = Mathf.Max(1.2f, seal.seal.expiresAt - Time.time);
             defaultBarriers.Add(new CharacterBarrierView(player, seal.seal.sealId, color, duration));
             pulses.Add(new ParticlePulse(player.position, color, weak: true, scaleMultiplier: 1.05f, durationSeconds: 0.8f, sortingOrder: 31));
-            ShowMagicNote($"{SpellLabels.Korean(seal.seal.baseFamily)} seal이 기본 보호막으로 안정화되었습니다.", MentorMood.Neutral);
+            ShowMagicNote($"{SpellLabels.Korean(seal.seal.baseFamily)} 기초 속성 마법진을 그렸어. 보호막으로 굳었어.", MentorMood.Neutral);
         }
 
         private void UpdateHud()
@@ -5692,7 +5788,10 @@ namespace MagicExamHall
                 return;
             }
 
-            notePanel.gameObject.SetActive(magicNote.Visible && (mentor == null || !mentor.IsVisible));
+            var referenceUiActive =
+                (customReferenceBubble != null && customReferenceBubble.gameObject.activeInHierarchy) ||
+                (customReferencePanel != null && customReferencePanel.gameObject.activeInHierarchy);
+            notePanel.gameObject.SetActive(magicNote.Visible && !referenceUiActive && (mentor == null || !mentor.IsVisible));
         }
 
         private void RefreshQuestLogText()
@@ -5842,6 +5941,19 @@ namespace MagicExamHall
                 comment = "auto ending report",
                 completedTrials = endingReport.DiscoveryCount,
                 totalAttempts = trialCounter
+            });
+            logger.WriteSessionResult(new SessionResultContextLog
+            {
+                sessionId = sessionId,
+                buildVersion = BuildVersion,
+                generatedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                floorCount = FloorCount,
+                floorTitles = floorController.FloorTitles,
+                totalElapsedMs = Mathf.RoundToInt((Time.time - sessionStartedAt) * 1000f),
+                trueEnding = finalTrueEnding,
+                completedFinalGoals = completedFinalGoals,
+                totalFinalGoals = activeGoals.Count,
+                discoveryCount = endingReport.DiscoveryCount
             });
             reportText.text = endingReport.BuildText(
                 trialCounter,
@@ -6921,6 +7033,7 @@ namespace MagicExamHall
             RuneIdle,
             RuneActive,
             CandleFlicker,
+            TorchGlow,
             WaterFlow,
             MistDrift,
             PortalShimmer,
@@ -6987,6 +7100,10 @@ namespace MagicExamHall
                     case SpriteAccentAnimationKind.CandleFlicker:
                         scale = baseScale * (1f + slow * 0.030f + fast * 0.018f);
                         alpha = 0.78f + (fast + 1f) * 0.10f + (slow + 1f) * 0.04f;
+                        break;
+                    case SpriteAccentAnimationKind.TorchGlow:
+                        scale = baseScale * (1f + slow * 0.026f + fast * 0.006f);
+                        alpha = 0.70f + (slow + 1f) * 0.08f + (fast + 1f) * 0.025f;
                         break;
                     case SpriteAccentAnimationKind.WaterFlow:
                         position = anchor + new Vector2(Mathf.Sin(time * 1.15f + phase) * 0.075f, Mathf.Sin(time * 2.3f + phase) * 0.018f);
@@ -8267,6 +8384,7 @@ namespace MagicExamHall
         public int CurrentFloorIndex { get; private set; }
         public int CurrentFloorNumber => CurrentFloorIndex + 1;
         public int FloorCount => floors.Count;
+        public string[] FloorTitles => floors.Select(floor => floor.title).ToArray();
         public FloorDefinition Current => floors[CurrentFloorIndex];
 
         public FloorController()

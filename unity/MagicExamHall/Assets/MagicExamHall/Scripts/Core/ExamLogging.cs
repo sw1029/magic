@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Text;
 using UnityEngine;
 
@@ -99,19 +102,174 @@ namespace MagicExamHall
         public string items = "";
     }
 
+    [Serializable]
+    public sealed class SessionResultContextLog
+    {
+        public string sessionId = "";
+        public string buildVersion = "";
+        public string conditionId = "";
+        public string generatedAtUtc = "";
+        public int floorCount;
+        public string[] floorTitles = Array.Empty<string>();
+        public int totalElapsedMs;
+        public bool trueEnding;
+        public int completedFinalGoals;
+        public int totalFinalGoals;
+        public int discoveryCount;
+    }
+
+    [Serializable]
+    public sealed class SessionResultLog
+    {
+        public string sessionId = "";
+        public string buildVersion = "";
+        public string conditionId = "";
+        public string generatedAtUtc = "";
+        public string metricModelVersion = "gqm-hci-v1";
+        public string gqmGoal = "Evaluate intuitive learning of symbolic magic words and rules through shape expression, hints, tutorials, and interactions.";
+        public string questionACoverage = "A: shape expression and word inference from recognition attempts, first success, confidence, and quality.";
+        public string questionBCoverage = "B: explanation burden and learning support from hints, assist, quest checklist, elapsed time, and redraw/failure pressure.";
+        public bool trueEnding;
+        public int floorCount;
+        public int floorsVisited;
+        public int floorsCompleted;
+        public int totalElapsedMs;
+        public int totalAttempts;
+        public int totalSuccess;
+        public int totalFailures;
+        public int totalBaseAttempts;
+        public int totalOverlayAttempts;
+        public int totalCustomAttempts;
+        public int totalCustomAcceptedAttempts;
+        public int totalHintShown;
+        public int totalAssistedSuccess;
+        public int maxAssistLevel;
+        public int completedFinalGoals;
+        public int totalFinalGoals;
+        public int totalQuestCompleted;
+        public int totalQuestTotal;
+        public int discoveryCount;
+        public float successRate;
+        public float firstAttemptSuccessRate;
+        public float hintRate;
+        public float assistedSuccessRate;
+        public float questCompletionRate;
+        public float averageConfidence;
+        public float averageQuality;
+        public float averageClosure;
+        public float averageSmoothness;
+        public float averageTempo;
+        public float averageStability;
+        public float averageRotationBias;
+        public float averageTimeToFirstSuccessMs;
+        public float gqmA1ShapeDifficultyScore;
+        public float gqmA2WordInferenceAccuracy;
+        public float gqmB1UnderstandingDeltaProxy;
+        public float gqmB2LearningBurdenScore;
+        public string coverageNotes = "";
+        public HciFloorResultLog[] floors = Array.Empty<HciFloorResultLog>();
+    }
+
+    [Serializable]
+    public sealed class HciFloorResultLog
+    {
+        public string sessionId = "";
+        public int floorId;
+        public string floorTitle = "";
+        public string exitReason = "";
+        public int elapsedMs;
+        public int firstAttemptElapsedMs;
+        public int timeToFirstSuccessMs;
+        public int totalGoals;
+        public int completedGoals;
+        public int questCompleted;
+        public int questTotal;
+        public int attempts;
+        public int successes;
+        public int failures;
+        public int baseAttempts;
+        public int overlayAttempts;
+        public int customAttempts;
+        public int customAcceptedAttempts;
+        public int hintShown;
+        public int assistedSuccess;
+        public int maxAssistLevel;
+        public int sameTargetFailureStreakMax;
+        public bool firstAttemptSuccess;
+        public float goalCompletionRate;
+        public float questCompletionRate;
+        public float successRate;
+        public float hintRate;
+        public float averageConfidence;
+        public float averageQuality;
+        public float averageClosure;
+        public float averageSmoothness;
+        public float averageTempo;
+        public float averageStability;
+        public float averageRotationBias;
+        public float gqmA1ShapeDifficultyScore;
+        public float gqmA2WordInferenceAccuracy;
+        public float gqmB1UnderstandingDeltaProxy;
+        public float gqmB2LearningBurdenScore;
+        public string firstAttemptTarget = "";
+        public string weakestQuality = "";
+        public string dominantPhase = "";
+        public string coverageNotes = "";
+    }
+
     public sealed class ExamLogger
     {
+        public const string DisabledOutputDirectory = "log collection disabled";
+
         public string OutputDirectory { get; }
+        public bool IsCollectionEnabled { get; }
+        public string SessionResultJsonPath => sessionResultJsonPath;
+        public string SessionResultCsvPath => sessionResultCsvPath;
+        public string FloorResultsCsvPath => floorResultsCsvPath;
         private readonly string attemptsJsonPath;
         private readonly string attemptsCsvPath;
         private readonly string surveyJsonPath;
         private readonly string surveyCsvPath;
         private readonly string questChecklistJsonPath;
         private readonly string questChecklistCsvPath;
+        private readonly string sessionResultJsonPath;
+        private readonly string sessionResultCsvPath;
+        private readonly string floorResultsCsvPath;
+        private readonly string globalSessionResultsCsvPath;
+        private readonly List<AttemptLog> attemptHistory = new();
+        private readonly List<SurveyLog> surveyHistory = new();
+        private readonly List<QuestChecklistLog> questChecklistHistory = new();
+        private bool sessionResultAppended;
 
         public ExamLogger(string sessionId)
+            : this(sessionId, "", null)
         {
-            OutputDirectory = Path.Combine(Application.persistentDataPath, "MagicExamHallLogs", sessionId);
+        }
+
+        public ExamLogger(string sessionId, string outputRoot, bool? enableCollection = null)
+        {
+            sessionId = string.IsNullOrWhiteSpace(sessionId) ? "session" : sessionId;
+            IsCollectionEnabled = enableCollection ?? !ShouldSuppressCollection(sessionId);
+            if (!IsCollectionEnabled)
+            {
+                OutputDirectory = DisabledOutputDirectory;
+                attemptsJsonPath = "";
+                attemptsCsvPath = "";
+                surveyJsonPath = "";
+                surveyCsvPath = "";
+                questChecklistJsonPath = "";
+                questChecklistCsvPath = "";
+                sessionResultJsonPath = "";
+                sessionResultCsvPath = "";
+                floorResultsCsvPath = "";
+                globalSessionResultsCsvPath = "";
+                return;
+            }
+
+            var root = string.IsNullOrWhiteSpace(outputRoot)
+                ? Path.Combine(Application.persistentDataPath, "MagicExamHallLogs")
+                : outputRoot;
+            OutputDirectory = Path.Combine(root, sessionId);
             Directory.CreateDirectory(OutputDirectory);
             attemptsJsonPath = Path.Combine(OutputDirectory, "attempts.jsonl");
             attemptsCsvPath = Path.Combine(OutputDirectory, "attempts.csv");
@@ -119,6 +277,10 @@ namespace MagicExamHall
             surveyCsvPath = Path.Combine(OutputDirectory, "survey.csv");
             questChecklistJsonPath = Path.Combine(OutputDirectory, "quest-checklist.jsonl");
             questChecklistCsvPath = Path.Combine(OutputDirectory, "quest-checklist.csv");
+            sessionResultJsonPath = Path.Combine(OutputDirectory, "session-result.json");
+            sessionResultCsvPath = Path.Combine(OutputDirectory, "session-result.csv");
+            floorResultsCsvPath = Path.Combine(OutputDirectory, "floor-results.csv");
+            globalSessionResultsCsvPath = Path.Combine(root, "session-results.csv");
             EnsureAttemptHeader();
             EnsureSurveyHeader();
             EnsureQuestChecklistHeader();
@@ -126,6 +288,12 @@ namespace MagicExamHall
 
         public void LogAttempt(AttemptLog log)
         {
+            if (!IsCollectionEnabled)
+            {
+                return;
+            }
+
+            attemptHistory.Add(log);
             File.AppendAllText(attemptsJsonPath, JsonUtility.ToJson(log) + Environment.NewLine, Encoding.UTF8);
             File.AppendAllText(attemptsCsvPath, string.Join(",",
                 Csv(log.sessionId),
@@ -191,6 +359,12 @@ namespace MagicExamHall
 
         public void LogSurvey(SurveyLog log)
         {
+            if (!IsCollectionEnabled)
+            {
+                return;
+            }
+
+            surveyHistory.Add(log);
             File.AppendAllText(surveyJsonPath, JsonUtility.ToJson(log) + Environment.NewLine, Encoding.UTF8);
             File.AppendAllText(surveyCsvPath, string.Join(",",
                 Csv(log.sessionId),
@@ -206,6 +380,12 @@ namespace MagicExamHall
 
         public void LogQuestChecklist(QuestChecklistLog log)
         {
+            if (!IsCollectionEnabled)
+            {
+                return;
+            }
+
+            questChecklistHistory.Add(log);
             File.AppendAllText(questChecklistJsonPath, JsonUtility.ToJson(log) + Environment.NewLine, Encoding.UTF8);
             File.AppendAllText(questChecklistCsvPath, string.Join(",",
                 Csv(log.sessionId),
@@ -218,6 +398,22 @@ namespace MagicExamHall
                 log.globalTotal,
                 log.elapsedMs,
                 Csv(log.items)) + Environment.NewLine, Encoding.UTF8);
+        }
+
+        public SessionResultLog WriteSessionResult(SessionResultContextLog context)
+        {
+            if (!IsCollectionEnabled)
+            {
+                return null;
+            }
+
+            context ??= new SessionResultContextLog();
+            var result = BuildSessionResult(context);
+            File.WriteAllText(sessionResultJsonPath, JsonUtility.ToJson(result, true), Encoding.UTF8);
+            WriteSessionResultCsv(result);
+            WriteFloorResultsCsv(result.floors);
+            AppendGlobalSessionResultCsv(result);
+            return result;
         }
 
         private void EnsureAttemptHeader()
@@ -244,6 +440,525 @@ namespace MagicExamHall
             if (!File.Exists(questChecklistCsvPath))
             {
                 File.WriteAllText(questChecklistCsvPath, "sessionId,floorId,floorTitle,reason,completed,total,globalCompleted,globalTotal,elapsedMs,items" + Environment.NewLine, Encoding.UTF8);
+            }
+        }
+
+        private SessionResultLog BuildSessionResult(SessionResultContextLog context)
+        {
+            var floorCount = Math.Max(context.floorCount, HighestObservedFloorId());
+            var floors = new List<HciFloorResultLog>();
+            for (var floorId = 1; floorId <= Math.Max(1, floorCount); floorId++)
+            {
+                floors.Add(BuildFloorResult(context, floorId));
+            }
+
+            var totalAttempts = floors.Sum(floor => floor.attempts);
+            var totalSuccess = floors.Sum(floor => floor.successes);
+            var totalHintShown = floors.Sum(floor => floor.hintShown);
+            var totalAssistedSuccess = floors.Sum(floor => floor.assistedSuccess);
+            var totalQuestCompleted = floors.Sum(floor => floor.questCompleted);
+            var totalQuestTotal = floors.Sum(floor => floor.questTotal);
+            var averageTimeToFirstSuccess = AveragePositive(floors.Select(floor => floor.timeToFirstSuccessMs));
+            var allAttempts = attemptHistory.ToArray();
+            var qualities = allAttempts.Where(HasQuality).ToArray();
+            var result = new SessionResultLog
+            {
+                sessionId = FirstNonEmpty(context.sessionId, attemptHistory.LastOrDefault()?.sessionId, surveyHistory.LastOrDefault()?.sessionId),
+                buildVersion = context.buildVersion ?? "",
+                conditionId = context.conditionId ?? "",
+                generatedAtUtc = string.IsNullOrWhiteSpace(context.generatedAtUtc)
+                    ? DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)
+                    : context.generatedAtUtc,
+                trueEnding = context.trueEnding,
+                floorCount = Math.Max(1, floorCount),
+                floorsVisited = floors.Count(floor => floor.attempts > 0 || floor.questTotal > 0 || floor.elapsedMs > 0),
+                floorsCompleted = floors.Count(floor => floor.totalGoals > 0 && floor.completedGoals >= floor.totalGoals),
+                totalElapsedMs = Math.Max(context.totalElapsedMs, floors.Sum(floor => Math.Max(0, floor.elapsedMs))),
+                totalAttempts = totalAttempts,
+                totalSuccess = totalSuccess,
+                totalFailures = floors.Sum(floor => floor.failures),
+                totalBaseAttempts = floors.Sum(floor => floor.baseAttempts),
+                totalOverlayAttempts = floors.Sum(floor => floor.overlayAttempts),
+                totalCustomAttempts = floors.Sum(floor => floor.customAttempts),
+                totalCustomAcceptedAttempts = floors.Sum(floor => floor.customAcceptedAttempts),
+                totalHintShown = totalHintShown,
+                totalAssistedSuccess = totalAssistedSuccess,
+                maxAssistLevel = floors.Count == 0 ? 0 : floors.Max(floor => floor.maxAssistLevel),
+                completedFinalGoals = Math.Max(0, context.completedFinalGoals),
+                totalFinalGoals = Math.Max(0, context.totalFinalGoals),
+                totalQuestCompleted = totalQuestCompleted,
+                totalQuestTotal = totalQuestTotal,
+                discoveryCount = Math.Max(context.discoveryCount, 0),
+                successRate = Ratio(totalSuccess, totalAttempts),
+                firstAttemptSuccessRate = Ratio(floors.Count(floor => floor.attempts > 0 && floor.firstAttemptSuccess), floors.Count(floor => floor.attempts > 0)),
+                hintRate = Ratio(totalHintShown, totalAttempts),
+                assistedSuccessRate = Ratio(totalAssistedSuccess, totalSuccess),
+                questCompletionRate = Ratio(totalQuestCompleted, totalQuestTotal),
+                averageConfidence = AverageOrZero(allAttempts.Select(attempt => attempt.confidence)),
+                averageQuality = AverageOrZero(qualities.Select(QualityAverage)),
+                averageClosure = AverageOrZero(qualities.Select(attempt => attempt.closure)),
+                averageSmoothness = AverageOrZero(qualities.Select(attempt => attempt.smoothness)),
+                averageTempo = AverageOrZero(qualities.Select(attempt => attempt.tempo)),
+                averageStability = AverageOrZero(qualities.Select(attempt => attempt.stability)),
+                averageRotationBias = AverageOrZero(qualities.Select(attempt => attempt.rotationBias)),
+                averageTimeToFirstSuccessMs = averageTimeToFirstSuccess,
+                gqmB1UnderstandingDeltaProxy = BuildUnderstandingDelta(allAttempts),
+                floors = floors.ToArray(),
+                coverageNotes = "raw_strokes=false; test_sessions_excluded=true; attempt+quest+survey+ending_summary=true; cancel/backtrack require future movement instrumentation"
+            };
+            result.gqmA1ShapeDifficultyScore = ShapeDifficultyScore(
+                result.successRate,
+                result.hintRate,
+                result.averageQuality,
+                totalAttempts,
+                Math.Max(1, floors.Sum(floor => Math.Max(floor.totalGoals, floor.questTotal))));
+            result.gqmA2WordInferenceAccuracy = result.successRate;
+            result.gqmB2LearningBurdenScore = BurdenScore(
+                result.successRate,
+                result.hintRate,
+                result.assistedSuccessRate,
+                result.averageTimeToFirstSuccessMs,
+                Math.Max(1, floors.Count(floor => floor.attempts > 0)));
+            return result;
+        }
+
+        private HciFloorResultLog BuildFloorResult(SessionResultContextLog context, int floorId)
+        {
+            var attempts = attemptHistory
+                .Where(attempt => TryParseFloorId(attempt.floorId) == floorId)
+                .OrderBy(attempt => attempt.attemptIndex)
+                .ThenBy(attempt => attempt.elapsedMs)
+                .ToArray();
+            var quest = questChecklistHistory
+                .Where(item => TryParseFloorId(item.floorId) == floorId)
+                .OrderBy(item => item.elapsedMs)
+                .LastOrDefault();
+            var qualities = attempts.Where(HasQuality).ToArray();
+            var successes = attempts.Count(attempt => attempt.success);
+            var firstAttempt = attempts.FirstOrDefault();
+            var firstSuccess = attempts.FirstOrDefault(attempt => attempt.success);
+            var totalGoals = quest?.total ?? 0;
+            var completedGoals = quest?.completed ?? 0;
+            var floorTitle = FirstNonEmpty(
+                quest?.floorTitle,
+                context.floorTitles != null && floorId - 1 >= 0 && floorId - 1 < context.floorTitles.Length ? context.floorTitles[floorId - 1] : "",
+                $"Floor {floorId}");
+            var successRate = Ratio(successes, attempts.Length);
+            var hintRate = Ratio(attempts.Count(attempt => attempt.hintShown), attempts.Length);
+            var averageQuality = AverageOrZero(qualities.Select(QualityAverage));
+            var result = new HciFloorResultLog
+            {
+                sessionId = FirstNonEmpty(context.sessionId, attempts.LastOrDefault()?.sessionId, quest?.sessionId),
+                floorId = floorId,
+                floorTitle = floorTitle,
+                exitReason = quest?.reason ?? "",
+                elapsedMs = Math.Max(quest?.elapsedMs ?? 0, attempts.Length == 0 ? 0 : attempts.Max(attempt => attempt.elapsedMs)),
+                firstAttemptElapsedMs = firstAttempt?.elapsedMs ?? 0,
+                timeToFirstSuccessMs = firstSuccess?.elapsedMs ?? 0,
+                totalGoals = totalGoals,
+                completedGoals = completedGoals,
+                questCompleted = quest?.completed ?? 0,
+                questTotal = quest?.total ?? 0,
+                attempts = attempts.Length,
+                successes = successes,
+                failures = attempts.Length - successes,
+                baseAttempts = attempts.Count(attempt => string.Equals(attempt.phase, "Base", StringComparison.OrdinalIgnoreCase)),
+                overlayAttempts = attempts.Count(attempt => string.Equals(attempt.phase, "Overlay", StringComparison.OrdinalIgnoreCase)),
+                customAttempts = attempts.Count(attempt => !string.IsNullOrWhiteSpace(attempt.customShapeId) || !string.IsNullOrWhiteSpace(attempt.customShapeToken)),
+                customAcceptedAttempts = attempts.Count(attempt => attempt.success && (!string.IsNullOrWhiteSpace(attempt.customShapeId) || !string.IsNullOrWhiteSpace(attempt.customShapeToken))),
+                hintShown = attempts.Count(attempt => attempt.hintShown),
+                assistedSuccess = attempts.Count(attempt => attempt.success && attempt.assisted),
+                maxAssistLevel = attempts.Length == 0 ? 0 : attempts.Max(attempt => attempt.assistLevel),
+                sameTargetFailureStreakMax = SameTargetFailureStreakMax(attempts),
+                firstAttemptSuccess = firstAttempt?.success ?? false,
+                goalCompletionRate = Ratio(completedGoals, totalGoals),
+                questCompletionRate = Ratio(quest?.completed ?? 0, quest?.total ?? 0),
+                successRate = successRate,
+                hintRate = hintRate,
+                averageConfidence = AverageOrZero(attempts.Select(attempt => attempt.confidence)),
+                averageQuality = averageQuality,
+                averageClosure = AverageOrZero(qualities.Select(attempt => attempt.closure)),
+                averageSmoothness = AverageOrZero(qualities.Select(attempt => attempt.smoothness)),
+                averageTempo = AverageOrZero(qualities.Select(attempt => attempt.tempo)),
+                averageStability = AverageOrZero(qualities.Select(attempt => attempt.stability)),
+                averageRotationBias = AverageOrZero(qualities.Select(attempt => attempt.rotationBias)),
+                gqmB1UnderstandingDeltaProxy = BuildUnderstandingDelta(attempts),
+                firstAttemptTarget = firstAttempt == null ? "" : AttemptTargetKey(firstAttempt),
+                weakestQuality = WeakestQualityName(qualities),
+                dominantPhase = DominantPhase(attempts),
+                coverageNotes = "derived_from_attempts_and_quest_checklist"
+            };
+            result.gqmA1ShapeDifficultyScore = ShapeDifficultyScore(
+                result.successRate,
+                result.hintRate,
+                result.averageQuality,
+                result.attempts,
+                Math.Max(1, Math.Max(result.totalGoals, result.questTotal)));
+            result.gqmA2WordInferenceAccuracy = result.successRate;
+            result.gqmB2LearningBurdenScore = BurdenScore(
+                result.successRate,
+                result.hintRate,
+                Ratio(result.assistedSuccess, result.successes),
+                result.timeToFirstSuccessMs,
+                1);
+            return result;
+        }
+
+        private void WriteSessionResultCsv(SessionResultLog result)
+        {
+            File.WriteAllText(
+                sessionResultCsvPath,
+                SessionResultCsvHeader() + Environment.NewLine + SessionResultCsvRow(result) + Environment.NewLine,
+                Encoding.UTF8);
+        }
+
+        private void WriteFloorResultsCsv(IReadOnlyList<HciFloorResultLog> floors)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine(FloorResultCsvHeader());
+            foreach (var floor in floors)
+            {
+                builder.AppendLine(FloorResultCsvRow(floor));
+            }
+
+            File.WriteAllText(floorResultsCsvPath, builder.ToString(), Encoding.UTF8);
+        }
+
+        private void AppendGlobalSessionResultCsv(SessionResultLog result)
+        {
+            if (sessionResultAppended)
+            {
+                return;
+            }
+
+            if (!File.Exists(globalSessionResultsCsvPath))
+            {
+                File.WriteAllText(globalSessionResultsCsvPath, SessionResultCsvHeader() + Environment.NewLine, Encoding.UTF8);
+            }
+
+            File.AppendAllText(globalSessionResultsCsvPath, SessionResultCsvRow(result) + Environment.NewLine, Encoding.UTF8);
+            sessionResultAppended = true;
+        }
+
+        private static string SessionResultCsvHeader()
+        {
+            return "sessionId,buildVersion,conditionId,generatedAtUtc,metricModelVersion,trueEnding,floorCount,floorsVisited,floorsCompleted,totalElapsedMs,totalAttempts,totalSuccess,totalFailures,totalBaseAttempts,totalOverlayAttempts,totalCustomAttempts,totalCustomAcceptedAttempts,totalHintShown,totalAssistedSuccess,maxAssistLevel,completedFinalGoals,totalFinalGoals,totalQuestCompleted,totalQuestTotal,discoveryCount,successRate,firstAttemptSuccessRate,hintRate,assistedSuccessRate,questCompletionRate,averageConfidence,averageQuality,averageClosure,averageSmoothness,averageTempo,averageStability,averageRotationBias,averageTimeToFirstSuccessMs,gqmA1ShapeDifficultyScore,gqmA2WordInferenceAccuracy,gqmB1UnderstandingDeltaProxy,gqmB2LearningBurdenScore,coverageNotes";
+        }
+
+        private static string SessionResultCsvRow(SessionResultLog result)
+        {
+            return string.Join(",",
+                Csv(result.sessionId),
+                Csv(result.buildVersion),
+                Csv(result.conditionId),
+                Csv(result.generatedAtUtc),
+                Csv(result.metricModelVersion),
+                Bool(result.trueEnding),
+                result.floorCount,
+                result.floorsVisited,
+                result.floorsCompleted,
+                result.totalElapsedMs,
+                result.totalAttempts,
+                result.totalSuccess,
+                result.totalFailures,
+                result.totalBaseAttempts,
+                result.totalOverlayAttempts,
+                result.totalCustomAttempts,
+                result.totalCustomAcceptedAttempts,
+                result.totalHintShown,
+                result.totalAssistedSuccess,
+                result.maxAssistLevel,
+                result.completedFinalGoals,
+                result.totalFinalGoals,
+                result.totalQuestCompleted,
+                result.totalQuestTotal,
+                result.discoveryCount,
+                Float(result.successRate),
+                Float(result.firstAttemptSuccessRate),
+                Float(result.hintRate),
+                Float(result.assistedSuccessRate),
+                Float(result.questCompletionRate),
+                Float(result.averageConfidence),
+                Float(result.averageQuality),
+                Float(result.averageClosure),
+                Float(result.averageSmoothness),
+                Float(result.averageTempo),
+                Float(result.averageStability),
+                Float(result.averageRotationBias),
+                Float(result.averageTimeToFirstSuccessMs),
+                Float(result.gqmA1ShapeDifficultyScore),
+                Float(result.gqmA2WordInferenceAccuracy),
+                Float(result.gqmB1UnderstandingDeltaProxy),
+                Float(result.gqmB2LearningBurdenScore),
+                Csv(result.coverageNotes));
+        }
+
+        private static string FloorResultCsvHeader()
+        {
+            return "sessionId,floorId,floorTitle,exitReason,elapsedMs,firstAttemptElapsedMs,timeToFirstSuccessMs,totalGoals,completedGoals,questCompleted,questTotal,attempts,successes,failures,baseAttempts,overlayAttempts,customAttempts,customAcceptedAttempts,hintShown,assistedSuccess,maxAssistLevel,sameTargetFailureStreakMax,firstAttemptSuccess,goalCompletionRate,questCompletionRate,successRate,hintRate,averageConfidence,averageQuality,averageClosure,averageSmoothness,averageTempo,averageStability,averageRotationBias,gqmA1ShapeDifficultyScore,gqmA2WordInferenceAccuracy,gqmB1UnderstandingDeltaProxy,gqmB2LearningBurdenScore,firstAttemptTarget,weakestQuality,dominantPhase,coverageNotes";
+        }
+
+        private static string FloorResultCsvRow(HciFloorResultLog floor)
+        {
+            return string.Join(",",
+                Csv(floor.sessionId),
+                floor.floorId,
+                Csv(floor.floorTitle),
+                Csv(floor.exitReason),
+                floor.elapsedMs,
+                floor.firstAttemptElapsedMs,
+                floor.timeToFirstSuccessMs,
+                floor.totalGoals,
+                floor.completedGoals,
+                floor.questCompleted,
+                floor.questTotal,
+                floor.attempts,
+                floor.successes,
+                floor.failures,
+                floor.baseAttempts,
+                floor.overlayAttempts,
+                floor.customAttempts,
+                floor.customAcceptedAttempts,
+                floor.hintShown,
+                floor.assistedSuccess,
+                floor.maxAssistLevel,
+                floor.sameTargetFailureStreakMax,
+                Bool(floor.firstAttemptSuccess),
+                Float(floor.goalCompletionRate),
+                Float(floor.questCompletionRate),
+                Float(floor.successRate),
+                Float(floor.hintRate),
+                Float(floor.averageConfidence),
+                Float(floor.averageQuality),
+                Float(floor.averageClosure),
+                Float(floor.averageSmoothness),
+                Float(floor.averageTempo),
+                Float(floor.averageStability),
+                Float(floor.averageRotationBias),
+                Float(floor.gqmA1ShapeDifficultyScore),
+                Float(floor.gqmA2WordInferenceAccuracy),
+                Float(floor.gqmB1UnderstandingDeltaProxy),
+                Float(floor.gqmB2LearningBurdenScore),
+                Csv(floor.firstAttemptTarget),
+                Csv(floor.weakestQuality),
+                Csv(floor.dominantPhase),
+                Csv(floor.coverageNotes));
+        }
+
+        private int HighestObservedFloorId()
+        {
+            var max = 0;
+            foreach (var attempt in attemptHistory)
+            {
+                max = Math.Max(max, TryParseFloorId(attempt.floorId));
+            }
+
+            foreach (var quest in questChecklistHistory)
+            {
+                max = Math.Max(max, TryParseFloorId(quest.floorId));
+            }
+
+            return max;
+        }
+
+        private static int TryParseFloorId(string floorId)
+        {
+            return int.TryParse(floorId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? Math.Max(0, parsed)
+                : 0;
+        }
+
+        private static bool HasQuality(AttemptLog attempt)
+        {
+            return attempt.closure > 0f ||
+                   attempt.smoothness > 0f ||
+                   attempt.tempo > 0f ||
+                   attempt.stability > 0f ||
+                   attempt.rotationBias > 0f;
+        }
+
+        private static float QualityAverage(AttemptLog attempt)
+        {
+            return (attempt.closure + attempt.smoothness + attempt.tempo + attempt.stability + Mathf.Clamp01(1f - attempt.rotationBias)) / 5f;
+        }
+
+        private static float BuildUnderstandingDelta(IReadOnlyList<AttemptLog> attempts)
+        {
+            if (attempts == null || attempts.Count < 2)
+            {
+                return 0f;
+            }
+
+            var midpoint = Mathf.Max(1, attempts.Count / 2);
+            var early = attempts.Take(midpoint).ToArray();
+            var late = attempts.Skip(midpoint).ToArray();
+            return Ratio(late.Count(attempt => attempt.success), late.Length) -
+                   Ratio(early.Count(attempt => attempt.success), early.Length);
+        }
+
+        private static int SameTargetFailureStreakMax(IReadOnlyList<AttemptLog> attempts)
+        {
+            var max = 0;
+            var current = 0;
+            var lastKey = "";
+            foreach (var attempt in attempts)
+            {
+                if (attempt.success)
+                {
+                    current = 0;
+                    lastKey = "";
+                    continue;
+                }
+
+                var key = AttemptTargetKey(attempt);
+                current = string.Equals(key, lastKey, StringComparison.Ordinal) ? current + 1 : 1;
+                lastKey = key;
+                max = Math.Max(max, current);
+            }
+
+            return max;
+        }
+
+        private static string AttemptTargetKey(AttemptLog attempt)
+        {
+            return FirstNonEmpty(
+                attempt.intentGoalId,
+                attempt.targetObject,
+                attempt.worldEffect,
+                attempt.targetFamily,
+                attempt.recognizedFamily,
+                attempt.phase);
+        }
+
+        private static string WeakestQualityName(IReadOnlyList<AttemptLog> attempts)
+        {
+            if (attempts == null || attempts.Count == 0)
+            {
+                return "";
+            }
+
+            var metrics = new[]
+            {
+                new KeyValuePair<string, float>("closure", AverageOrZero(attempts.Select(attempt => attempt.closure))),
+                new KeyValuePair<string, float>("smoothness", AverageOrZero(attempts.Select(attempt => attempt.smoothness))),
+                new KeyValuePair<string, float>("tempo", AverageOrZero(attempts.Select(attempt => attempt.tempo))),
+                new KeyValuePair<string, float>("stability", AverageOrZero(attempts.Select(attempt => attempt.stability))),
+                new KeyValuePair<string, float>("rotation_control", AverageOrZero(attempts.Select(attempt => Mathf.Clamp01(1f - attempt.rotationBias))))
+            };
+            return metrics.OrderBy(metric => metric.Value).First().Key;
+        }
+
+        private static string DominantPhase(IReadOnlyList<AttemptLog> attempts)
+        {
+            if (attempts == null || attempts.Count == 0)
+            {
+                return "";
+            }
+
+            return attempts
+                .GroupBy(attempt => string.IsNullOrWhiteSpace(attempt.phase) ? "unknown" : attempt.phase)
+                .OrderByDescending(group => group.Count())
+                .ThenBy(group => group.Key, StringComparer.Ordinal)
+                .First()
+                .Key;
+        }
+
+        private static float ShapeDifficultyScore(float successRate, float hintRate, float averageQuality, int attempts, int goals)
+        {
+            var attemptsPerGoalPressure = Mathf.Clamp01((attempts / Mathf.Max(1f, goals) - 1f) / 3f);
+            return Mathf.Clamp01((1f - successRate) * 0.42f + hintRate * 0.24f + (1f - averageQuality) * 0.22f + attemptsPerGoalPressure * 0.12f);
+        }
+
+        private static float BurdenScore(float successRate, float hintRate, float assistedSuccessRate, float timeToFirstSuccessMs, int floorDenominator)
+        {
+            var timePressure = Mathf.Clamp01(timeToFirstSuccessMs / Mathf.Max(1f, floorDenominator) / 90000f);
+            return Mathf.Clamp01((1f - successRate) * 0.32f + hintRate * 0.28f + assistedSuccessRate * 0.18f + timePressure * 0.22f);
+        }
+
+        private static float Ratio(int numerator, int denominator)
+        {
+            return denominator <= 0 ? 0f : Mathf.Clamp01(numerator / (float)denominator);
+        }
+
+        private static float AverageOrZero(IEnumerable<float> values)
+        {
+            var list = values?.Where(value => !float.IsNaN(value) && !float.IsInfinity(value)).ToArray() ?? Array.Empty<float>();
+            return list.Length == 0 ? 0f : list.Average();
+        }
+
+        private static float AveragePositive(IEnumerable<int> values)
+        {
+            var list = values?.Where(value => value > 0).ToArray() ?? Array.Empty<int>();
+            return list.Length == 0 ? 0f : (float)list.Average();
+        }
+
+        private static string FirstNonEmpty(params string[] values)
+        {
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return "";
+        }
+
+        private static bool ShouldSuppressCollection(string sessionId)
+        {
+            if (sessionId.StartsWith("test-", StringComparison.OrdinalIgnoreCase) ||
+                sessionId.StartsWith("test_", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var explicitDisable = Environment.GetEnvironmentVariable("MAGIC_EXAM_HALL_DISABLE_LOG_COLLECTION");
+            if (string.Equals(explicitDisable, "1", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(explicitDisable, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var args = Environment.GetCommandLineArgs();
+            foreach (var arg in args)
+            {
+                if (string.Equals(arg, "-runTests", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(arg, "-testResults", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            var stack = Environment.StackTrace;
+            if (stack.IndexOf("NUnit.Framework", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                stack.IndexOf("UnityEngine.TestTools", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                stack.IndexOf("UnityEditor.TestTools", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            return IsNUnitTestContextActive();
+        }
+
+        private static bool IsNUnitTestContextActive()
+        {
+            try
+            {
+                var contextType = Type.GetType("NUnit.Framework.TestContext, nunit.framework");
+                var currentContext = contextType?.GetProperty("CurrentContext", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+                var test = currentContext?.GetType().GetProperty("Test", BindingFlags.Public | BindingFlags.Instance)?.GetValue(currentContext);
+                var id = test?.GetType().GetProperty("ID", BindingFlags.Public | BindingFlags.Instance)?.GetValue(test)?.ToString();
+                var name = test?.GetType().GetProperty("Name", BindingFlags.Public | BindingFlags.Instance)?.GetValue(test)?.ToString();
+                var fullName = test?.GetType().GetProperty("FullName", BindingFlags.Public | BindingFlags.Instance)?.GetValue(test)?.ToString();
+                var hasMeaningfulName = !string.IsNullOrWhiteSpace(name) &&
+                    !string.Equals(name, "Unknown", StringComparison.OrdinalIgnoreCase);
+                return !string.IsNullOrWhiteSpace(id) &&
+                    (hasMeaningfulName || !string.IsNullOrWhiteSpace(fullName));
+            }
+            catch
+            {
+                return false;
             }
         }
 

@@ -12,7 +12,7 @@
 | Zelda-like tilesets and sprites (캐릭터 시트) | ArMM1998 | <https://opengameart.org/content/zelda-like-tilesets-and-sprites> | CC0 | 플레이어 4방향 idle/walk/cast 프레임, 멘토 NPC 15종 (`scripts/import-character-pack.py`로 슬라이스·리컬러) |
 | Procedural fallback sprite | 프로젝트 내부 제작 | `PixelArtFactory.cs` | 프로젝트 라이선스 | PNG 누락 시 fallback |
 | 고문서 UI fallback pack | 프로젝트 내부 제작 | `MagicExamUiTheme.cs` | 프로젝트 라이선스 | 타이틀 로고, 책/두루마리 패널, 버튼, 노트, 체크박스, 슬라이더 |
-| `TitleLogo.png` | 프로젝트 내부 제작 (OpenAI image generation) | `Resources/Sprites/UI/TitleLogo.png` | 프로젝트 라이선스 | 타이틀 화면 마법탑 룬 문장 |
+| `TitleLogo.png` | 프로젝트 내부 제작 | `Resources/Sprites/UI/TitleLogo.png` | 프로젝트 라이선스 | 타이틀 화면 마법탑 룬 문장 |
 
 ## 사운드
 

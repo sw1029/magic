@@ -484,21 +484,23 @@ namespace MagicExamHall
             var optionsBook = MagicExamUiFactory.CreateFramedPanel("Options Book", optionsPanel, Vector2.zero, new Vector2(940f, 580f), MagicExamUiAnchor.Center, MagicExamUiSpriteId.BookPanel, Color.white, MagicExamUiTheme.BorderBrown, 3f);
             var optionsTitle = CreateText("Options Title", optionsBook, "시험 환경 설정", 30, FontStyle.Bold, new Vector2(0f, 242f), new Vector2(800, 46), Anchor.Center, TextAnchor.MiddleLeft, MagicExamUiTheme.ParchmentInk);
             MagicExamUiFactory.StyleParchmentText(optionsTitle, emphasized: true);
-            bgmSlider = CreateSlider("BGM Slider", optionsBook, "BGM", new Vector2(-10f, 150f), MagicExamSettings.BgmVolume, value => MagicExamSettings.BgmVolume = value);
-            sfxSlider = CreateSlider("SFX Slider", optionsBook, "SFX", new Vector2(-10f, 88f), MagicExamSettings.SfxVolume, value => MagicExamSettings.SfxVolume = value);
-            mouseSensitivitySlider = CreateSlider("Mouse Sensitivity Slider", optionsBook, "감도", new Vector2(-10f, 26f), NormalizeSensitivity(MagicExamSettings.MouseSensitivity), value =>
+            bgmSlider = CreateSlider("BGM Slider", optionsBook, "BGM", new Vector2(0f, 150f), MagicExamSettings.BgmVolume, value => MagicExamSettings.BgmVolume = value, value => $"{Mathf.RoundToInt(value * 100f)}%");
+            sfxSlider = CreateSlider("SFX Slider", optionsBook, "SFX", new Vector2(0f, 88f), MagicExamSettings.SfxVolume, value => MagicExamSettings.SfxVolume = value, value => $"{Mathf.RoundToInt(value * 100f)}%");
+            mouseSensitivitySlider = CreateSlider("Mouse Sensitivity Slider", optionsBook, "감도", new Vector2(0f, 26f), NormalizeSensitivity(MagicExamSettings.MouseSensitivity), value =>
             {
                 MagicExamSettings.MouseSensitivity = Mathf.Lerp(0.55f, 1.75f, value);
                 UpdateOptionSummaries();
-            });
-            volumeSummaryText = CreateText("Volume Summary", optionsBook, "", 15, FontStyle.Normal, new Vector2(-10f, -22f), new Vector2(650, 30), Anchor.Center, TextAnchor.UpperLeft, MagicExamUiTheme.ParchmentInk);
+            }, value => $"{Mathf.Lerp(0.55f, 1.75f, value):0.00}x");
+            volumeSummaryText = CreateText("Volume Summary", optionsBook, "", 14, FontStyle.Normal, new Vector2(0f, -20f), new Vector2(720, 28), Anchor.Center, TextAnchor.MiddleCenter, MagicExamUiTheme.ParchmentMutedInk);
             MagicExamUiFactory.StyleParchmentText(volumeSummaryText);
-            CreateButton("Swap Mouse", optionsBook, "좌/우클릭", new Vector2(-265f, -88f), ToggleSwapMouse, MagicExamButtonStyle.Parchment);
-            CreateButton("Movement Preset", optionsBook, "이동 키", new Vector2(0f, -88f), CycleMovementPreset, MagicExamButtonStyle.Parchment);
-            CreateButton("Text Scale", optionsBook, "텍스트", new Vector2(265f, -88f), CycleTextScale, MagicExamButtonStyle.Parchment);
-            CreateButton("Color Assist", optionsBook, "색 보조", new Vector2(-265f, -150f), ToggleColorAssist, MagicExamButtonStyle.Parchment);
-            CreateButton("Observer Mode", optionsBook, "관찰 모드", new Vector2(0f, -150f), ToggleObserverMode, MagicExamButtonStyle.Parchment);
-            accessibilitySummaryText = CreateText("Accessibility Summary", optionsBook, "", 14, FontStyle.Normal, new Vector2(265f, -166f), new Vector2(230, 72), Anchor.Center, TextAnchor.UpperLeft, MagicExamUiTheme.ParchmentInk);
+            var optionsRule = CreateImage("Options Controls Rule", optionsBook, new Vector2(0f, -54f), new Vector2(800f, 2f), Anchor.Center, MagicExamUiTheme.BorderBrown);
+            optionsRule.raycastTarget = false;
+            CreateButton("Swap Mouse", optionsBook, "좌/우클릭", new Vector2(-265f, -98f), ToggleSwapMouse, MagicExamButtonStyle.Parchment);
+            CreateButton("Movement Preset", optionsBook, "이동 키", new Vector2(0f, -98f), CycleMovementPreset, MagicExamButtonStyle.Parchment);
+            CreateButton("Text Scale", optionsBook, "텍스트", new Vector2(265f, -98f), CycleTextScale, MagicExamButtonStyle.Parchment);
+            CreateButton("Color Assist", optionsBook, "색 보조", new Vector2(-265f, -160f), ToggleColorAssist, MagicExamButtonStyle.Parchment);
+            CreateButton("Observer Mode", optionsBook, "관찰 모드", new Vector2(0f, -160f), ToggleObserverMode, MagicExamButtonStyle.Parchment);
+            accessibilitySummaryText = CreateText("Accessibility Summary", optionsBook, "", 13, FontStyle.Normal, new Vector2(265f, -168f), new Vector2(230, 66), Anchor.Center, TextAnchor.UpperLeft, MagicExamUiTheme.ParchmentInk);
             accessibilitySummaryText.verticalOverflow = VerticalWrapMode.Truncate;
             MagicExamUiFactory.StyleParchmentText(accessibilitySummaryText);
             optionsBackButton = CreateButton("Options Back", optionsBook, "돌아가기", new Vector2(-330f, -235f), ReturnFromOptions, MagicExamButtonStyle.Primary);
@@ -1206,15 +1208,54 @@ namespace MagicExamHall
             return button;
         }
 
-        private Slider CreateSlider(string name, Transform parent, string label, Vector2 anchoredPosition, float value, UnityEngine.Events.UnityAction<float> action)
+        private Slider CreateSlider(
+            string name,
+            Transform parent,
+            string label,
+            Vector2 anchoredPosition,
+            float value,
+            UnityEngine.Events.UnityAction<float> action,
+            System.Func<float, string> valueFormatter)
         {
-            var sliderLabel = CreateText($"{name} Label", parent, label, 16, FontStyle.Bold, anchoredPosition + new Vector2(-220f, 0f), new Vector2(90, 28), Anchor.Center, TextAnchor.MiddleLeft, MagicExamUiTheme.ParchmentInk);
+            var sliderLabel = CreateText($"{name} Label", parent, label, 16, FontStyle.Bold, anchoredPosition + new Vector2(-350f, 0f), new Vector2(100, 30), Anchor.Center, TextAnchor.MiddleLeft, MagicExamUiTheme.ParchmentInk);
             MagicExamUiFactory.StyleParchmentText(sliderLabel, emphasized: true);
-            var root = CreatePanel(name, parent, anchoredPosition, new Vector2(390, 28), Anchor.Center, Color.white);
-            MagicExamUiFactory.ApplySprite(root.GetComponent<Image>(), MagicExamUiSpriteId.SliderTrack, sliced: true);
-            var fillArea = CreatePanel($"{name} Fill Area", root, Vector2.zero, new Vector2(366, 12), Anchor.Center, new Color(0f, 0f, 0f, 0f));
-            var fill = CreateImage($"{name} Fill", fillArea, Vector2.zero, new Vector2(366, 12), Anchor.TopLeft, new Color(0.28f, 0.66f, 0.82f, 0.86f));
-            var handle = CreateImage($"{name} Handle", root, Vector2.zero, new Vector2(20, 32), Anchor.Center, MagicExamUiTheme.Gold);
+            var valueText = CreateText($"{name} Value", parent, "", 15, FontStyle.Bold, anchoredPosition + new Vector2(350f, 0f), new Vector2(92, 30), Anchor.Center, TextAnchor.MiddleRight, MagicExamUiTheme.ParchmentMutedInk);
+            MagicExamUiFactory.StyleParchmentText(valueText, emphasized: true);
+
+            var root = CreatePanel(name, parent, anchoredPosition, new Vector2(500, 40), Anchor.Center, Color.clear);
+            root.GetComponent<Image>().raycastTarget = true;
+
+            var track = CreateImage($"{name} Track", root, Vector2.zero, new Vector2(470, 16), Anchor.Center, new Color(0.34f, 0.18f, 0.070f, 1f));
+            MagicExamUiFactory.AddPixelBorder(track.rectTransform, new Color(0.20f, 0.075f, 0.020f, 1f), 2f);
+            track.raycastTarget = false;
+            var trackWell = CreateImage($"{name} Track Well", root, Vector2.zero, new Vector2(442, 8), Anchor.Center, new Color(0.18f, 0.090f, 0.035f, 1f));
+            trackWell.raycastTarget = false;
+
+            var fillAreaObject = new GameObject($"{name} Fill Area");
+            fillAreaObject.transform.SetParent(root, false);
+            var fillArea = fillAreaObject.AddComponent<RectTransform>();
+            fillArea.anchorMin = fillArea.anchorMax = new Vector2(0.5f, 0.5f);
+            fillArea.pivot = new Vector2(0.5f, 0.5f);
+            fillArea.anchoredPosition = Vector2.zero;
+            fillArea.sizeDelta = new Vector2(438f, 8f);
+
+            var fill = CreateImage($"{name} Fill", fillArea, Vector2.zero, Vector2.zero, Anchor.Center, MagicExamUiTheme.GoldSoft);
+            fill.rectTransform.anchorMin = Vector2.zero;
+            fill.rectTransform.anchorMax = new Vector2(0f, 1f);
+            fill.rectTransform.pivot = new Vector2(0f, 0.5f);
+            fill.rectTransform.offsetMin = Vector2.zero;
+            fill.rectTransform.offsetMax = Vector2.zero;
+            fill.raycastTarget = false;
+
+            var handleAreaObject = new GameObject($"{name} Handle Slide Area");
+            handleAreaObject.transform.SetParent(root, false);
+            var handleArea = handleAreaObject.AddComponent<RectTransform>();
+            handleArea.anchorMin = handleArea.anchorMax = new Vector2(0.5f, 0.5f);
+            handleArea.pivot = new Vector2(0.5f, 0.5f);
+            handleArea.anchoredPosition = Vector2.zero;
+            handleArea.sizeDelta = new Vector2(438f, 40f);
+
+            var handle = CreateImage($"{name} Handle", handleArea, Vector2.zero, new Vector2(30, 30), Anchor.Center, Color.white);
             MagicExamUiFactory.ApplySprite(handle, MagicExamUiSpriteId.RuneCursor, sliced: false);
             var slider = root.gameObject.AddComponent<Slider>();
             slider.minValue = 0f;
@@ -1227,8 +1268,10 @@ namespace MagicExamHall
             slider.onValueChanged.AddListener(value =>
             {
                 action(value);
+                valueText.text = valueFormatter(value);
                 UpdateOptionSummaries();
             });
+            valueText.text = valueFormatter(slider.value);
             return slider;
         }
 

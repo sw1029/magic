@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using MagicExamHall;
 using NUnit.Framework;
@@ -45,7 +46,7 @@ namespace MagicExamHall.Tests
             {
                 var current = (int)HintAssistance.ResolveLevel(failures, success: false);
                 Assert.That(current - previous, Is.InRange(0, 1),
-                    $"failures={failures}에서 단계가 건너뛰었습니다: {previous} -> {current}");
+                    $"failures={failures}: escalator skipped a level ({previous} -> {current})");
                 previous = current;
             }
         }
@@ -59,6 +60,7 @@ namespace MagicExamHall.Tests
 
             var state = HintAssistance.ForAttempt(SpellFamily.Water, 2, success: true, null);
             Assert.That(state.assisted, Is.True);
+            Assert.That(state.currentLevel, Is.EqualTo(AssistLevel.Checklist));
             Assert.That(state.hintShown, Is.True);
         }
 
@@ -67,29 +69,34 @@ namespace MagicExamHall.Tests
         {
             foreach (var family in AllFamilies)
             {
-                var silent = HintAssistance.ForAttempt(family, 0, success: true, null);
-                Assert.That(silent.hintShown, Is.False, $"{family}: 무실패 성공에 hintShown이 켜졌습니다");
-
-                var escalated = HintAssistance.ForAttempt(family, 1, success: false, null);
-                Assert.That(escalated.hintShown, Is.True, $"{family}: 실패 후에도 hintShown이 꺼져 있습니다");
-                Assert.That(escalated.AssistLevelNumber, Is.EqualTo((int)escalated.currentLevel));
+                for (var failures = 0; failures <= 4; failures++)
+                {
+                    var preview = HintAssistance.PreviewFor(family, failures);
+                    Assert.That(preview.hintShown, Is.EqualTo(preview.currentLevel != AssistLevel.None),
+                        $"{family}: hintShown does not match level after {failures} failures");
+                    if (preview.currentLevel != AssistLevel.None)
+                    {
+                        Assert.That(preview.body, Is.Not.Empty);
+                    }
+                }
             }
         }
 
         [Test]
-        public void EveryFamilyHasThreeItemChecklist()
+        public void EveryFamilyHasThreeShortChecklistItems()
         {
             foreach (var family in AllFamilies)
             {
                 var checklist = HintAssistance.ChecklistFor(family);
-                Assert.That(checklist.Count, Is.EqualTo(3), $"{family} 체크리스트가 3항목이 아닙니다");
-                Assert.That(checklist.All(item => !string.IsNullOrWhiteSpace(item)), Is.True,
-                    $"{family} 체크리스트에 빈 항목이 있습니다");
+                Assert.That(checklist.Count, Is.EqualTo(3), $"{family} checklist must have three items");
+                Assert.That(checklist.All(item => !string.IsNullOrWhiteSpace(item)), Is.True);
+                Assert.That(checklist.All(item => item.Trim().Length <= 30), Is.True,
+                    $"{family} checklist lines should stay concise");
             }
         }
 
         [Test]
-        public void HintBodiesAreDistinctPerLevelAndNeverRevealOnFirstFailure()
+        public void HintBodiesAreDistinctPerLevel()
         {
             foreach (var family in AllFamilies)
             {
@@ -100,8 +107,20 @@ namespace MagicExamHall.Tests
                 Assert.That(reason, Is.Not.Empty);
                 Assert.That(checklist, Is.Not.Empty);
                 Assert.That(ghost, Is.Not.Empty);
-                Assert.That(reason, Is.Not.EqualTo(checklist), $"{family}: 1단계와 2단계 힌트가 동일합니다");
-                Assert.That(checklist, Is.Not.EqualTo(ghost), $"{family}: 2단계와 3단계 힌트가 동일합니다");
+                Assert.That(reason, Is.Not.EqualTo(checklist));
+                Assert.That(checklist, Is.Not.EqualTo(ghost));
+            }
+        }
+
+        [Test]
+        public void ChecklistLevelBodyJoinsTheFamilyChecklist()
+        {
+            var state = HintAssistance.PreviewFor(SpellFamily.Earth, priorFailures: 2);
+
+            Assert.That(state.currentLevel, Is.EqualTo(AssistLevel.Checklist));
+            foreach (var item in HintAssistance.ChecklistFor(SpellFamily.Earth))
+            {
+                Assert.That(state.body, Does.Contain(item));
             }
         }
 
@@ -123,6 +142,37 @@ namespace MagicExamHall.Tests
                 var preview = HintAssistance.PreviewFor(SpellFamily.Earth, failures);
                 Assert.That((int)preview.currentLevel, Is.EqualTo(Math.Min(failures, 3)));
                 Assert.That(preview.failureCount, Is.EqualTo(failures));
+            }
+        }
+
+        [Test]
+        public void MentorProfilesAreDistinctPerFloorAndFallBackToFloorOne()
+        {
+            var names = new HashSet<string>();
+            for (var floor = 1; floor <= 5; floor++)
+            {
+                var profile = MentorProfile.ForFloor(floor);
+                Assert.That(profile.name, Is.Not.Empty);
+                Assert.That(names.Add(profile.name), Is.True, $"floor {floor} mentor name must be unique");
+            }
+
+            Assert.That(MentorProfile.ForFloor(99).name, Is.EqualTo(MentorProfile.ForFloor(1).name));
+            Assert.That(MentorProfile.ForFloor(-1).name, Is.EqualTo(MentorProfile.ForFloor(1).name));
+        }
+
+        [Test]
+        public void MentorProfileMapsEveryMoodToASprite()
+        {
+            for (var floor = 1; floor <= 5; floor++)
+            {
+                var profile = MentorProfile.ForFloor(floor);
+                foreach (MentorMood mood in Enum.GetValues(typeof(MentorMood)))
+                {
+                    Assert.That((int)profile.KindFor(mood), Is.GreaterThanOrEqualTo(0));
+                }
+
+                Assert.That(profile.KindFor(MentorMood.Happy), Is.Not.EqualTo(profile.KindFor(MentorMood.Frown)),
+                    $"floor {floor} mentor needs distinct happy/frown sprites");
             }
         }
     }

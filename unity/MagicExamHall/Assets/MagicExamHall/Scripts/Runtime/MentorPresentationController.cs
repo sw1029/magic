@@ -447,6 +447,7 @@ namespace MagicExamHall
             ApplyAnchor(rect, Anchor.Stretch);
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
+            borderObject.AddComponent<CanvasRenderer>();
             var border = borderObject.AddComponent<CustomShapeRectBorder>();
             border.color = color;
             border.thickness = thickness;
